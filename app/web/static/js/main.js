@@ -134,6 +134,7 @@ async function boot() {
       const v = (x) => tg.isVersionAtLeast && tg.isVersionAtLeast(x);
       try { if (v('6.1')) { tg.setHeaderColor('secondary_bg_color'); tg.setBackgroundColor('secondary_bg_color'); } } catch (e) { /* old client */ }
       try { if (v('7.7')) tg.disableVerticalSwipes(); } catch (e) { /* old client */ }
+      try { if (v('8.0') && !tg.isFullscreen) tg.requestFullscreen(); } catch (e) { /* старый клиент или десктоп */ }
     }
   } catch (e) { console.warn(e); }
   document.documentElement.classList.toggle('in-tg', inTelegram);
