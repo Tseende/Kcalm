@@ -1,0 +1,8 @@
+# Бэкап раз в сутки: ~/.config/systemd/user/healthbot-backup.timer
+[Unit]
+Description=Daily backup of health bot DB
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/healthbot
+ExecStart=/opt/healthbot/.venv/bin/python -m app.backup

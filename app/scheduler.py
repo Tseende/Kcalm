@@ -1,0 +1,215 @@
+"""Напоминания по локальному времени пользователя.
+
+Один минутный job читает таблицу reminders. Поэтому новый пользователь и изменения
+настроек начинают работать сразу, а не только после перезапуска процесса.
+"""
+from __future__ import annotations
+
+import asyncio
+import logging
+import sqlite3
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+
+from app.config import get_config
+from app import rich
+from app.routers.commands import week_report_doc
+from app.services import coach, report
+from app.storage import repo
+from app.timeutils import minutes_before
+
+log = logging.getLogger(__name__)
+
+
+def build_scheduler(db: sqlite3.Connection, bot) -> AsyncIOScheduler:
+    sched = AsyncIOScheduler(timezone=timezone.utc)
+    sched.add_job(
+        dispatch_due_reminders,
+        CronTrigger(second=0, timezone=timezone.utc),
+        args=(db, bot),
+        id="reminder-dispatcher",
+        name="reminder-dispatcher",
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=50,
+    )
+    cfg_ = get_config()
+    if cfg_.backup_in_process and not cfg_.turso_database_url:   # в облаке данные уже в Turso
+        sched.add_job(
+            run_daily_backup,
+            CronTrigger(hour=3, minute=30, timezone=timezone.utc),
+            args=(),
+            id="daily-backup",
+            name="daily-backup",
+            coalesce=True,
+            max_instances=1,
+            misfire_grace_time=3600,
+        )
+    return sched
+
+
+async def run_daily_backup() -> None:
+    """Ежедневная копия БД и фото; блокирующая работа уходит в поток, чтобы не стопорить бота."""
+    from app.backup import run_backup
+    try:
+        path, ok, photos = await asyncio.to_thread(run_backup)
+        log.info("бэкап %s проверка=%s новых фото=%s", path, "ok" if ok else "FAIL", photos)
+    except Exception:  # noqa: BLE001
+        log.exception("ежедневный бэкап не удался")
+
+
+async def dispatch_due_reminders(db: sqlite3.Connection, bot,
+                                 now_utc: datetime | None = None) -> None:
+    """Отправить активные напоминания, наступившие в текущую локальную минуту.
+
+    Пользователи обрабатываются параллельно: один долгий вызов LLM не задерживает остальных.
+    """
+    now_utc = now_utc or datetime.now(timezone.utc)
+    if now_utc.tzinfo is None:
+        now_utc = now_utc.replace(tzinfo=timezone.utc)
+
+    users = db.execute("SELECT * FROM users WHERE onboarded=1").fetchall()
+    await asyncio.gather(*(_dispatch_user(db, bot, user, now_utc) for user in users))
+    await dispatch_craving_followups(db, bot)
+
+
+async def _dispatch_user(db: sqlite3.Connection, bot, user, now_utc: datetime) -> None:
+    try:
+        now = now_utc.astimezone(ZoneInfo(user["tz"] or "Europe/Minsk"))
+    except Exception:  # некорректные старые данные не должны останавливать всех
+        log.error("некорректный timezone пользователя id=%s: %r", user["id"], user["tz"])
+        return
+    reminders = db.execute(
+        "SELECT * FROM reminders WHERE user_id=? AND enabled=1", (user["id"],)
+    ).fetchall()
+    for reminder in reminders:
+        reminder_time = (minutes_before(user["eating_cutoff"], 15)
+                         if reminder["kind"] == "kitchen_close" else reminder["local_time"])
+        if not _is_due(reminder["kind"], reminder_time, now, reminder["days"]):
+            continue
+        marker = now.strftime("%Y-%m-%d %H:%M")
+        if reminder["last_sent_at"] == marker:
+            continue
+        try:
+            await _send_reminder(db, bot, user, reminder["kind"], now)
+        except Exception:  # noqa: BLE001 - логируем, не блокируя других пользователей
+            log.exception("не отправлено напоминание user=%s kind=%s",
+                          user["id"], reminder["kind"])
+            continue
+        db.execute("UPDATE reminders SET last_sent_at=? WHERE id=?", (marker, reminder["id"]))
+        db.commit()
+    await _dispatch_rules(db, bot, user, now)
+
+
+async def _dispatch_rules(db: sqlite3.Connection, bot, user, now: datetime) -> None:
+    """Правила «если-то» с временем напоминания: «в 21:00 поужинал(а) → почищу зубы…»."""
+    from app.services import plan as plansvc
+    today = now.strftime("%Y-%m-%d")
+    for rule in repo.due_rules(db, user["id"], now.strftime("%H:%M"), today):
+        try:
+            await bot.send_message(user["tg_id"], "🧭 Твоё правило на этот час:\n" +
+                                   plansvc.format_rule(rule))
+        except Exception:  # noqa: BLE001
+            log.exception("не отправлено правило id=%s", rule["id"])
+            continue
+        repo.mark_rule_sent(db, rule["id"], today)
+
+
+def _store_in_app_chat(db: sqlite3.Connection, user_id: int, text: str) -> None:
+    """Проверка через 15 минут видна и в истории чата Mini App (best effort)."""
+    try:
+        import html
+        from app.web import queries
+        queries.add_chat_message(db, user_id, "assistant", html.unescape(text))
+    except Exception:  # noqa: BLE001 — история приложения не должна ломать отправку в Telegram
+        log.warning("не записано в чат приложения", exc_info=True)
+
+
+async def dispatch_craving_followups(db: sqlite3.Connection, bot) -> None:
+    """Через 15 минут после «подожду» спросить, как дела; старые открытые эпизоды закрыть."""
+    from app.services import craving
+    repo.dismiss_stale_cravings(db)
+    for event in repo.due_craving_followups(db):
+        try:
+            user = repo.get_user_by_tg(db, event["tg_id"])
+            text = (await craving.followup_message(db, user, event) if user
+                    else craving.followup_text(event))
+            if user:
+                _store_in_app_chat(db, user["id"], text)
+            await bot.send_message(event["tg_id"], text,
+                                   reply_markup=craving.outcome_keyboard(event, event["id"],
+                                                                        with_wait=False))
+        except Exception:  # noqa: BLE001
+            log.exception("не отправлено продолжение эпизода id=%s", event["id"])
+        repo.update_craving(db, event["id"], followup_sent=1)
+
+
+def _is_due(kind: str, local_time: str, now: datetime, days: str | None = None) -> bool:
+    if local_time != now.strftime("%H:%M"):
+        return False
+    if days and str(now.weekday()) not in days:       # напоминание только в выбранные дни
+        return False
+    return kind != "weekly" or now.weekday() == 6
+
+
+async def _send_reminder(db: sqlite3.Connection, bot, user, kind: str,
+                         now: datetime) -> None:
+    uid, tg_id = user["id"], user["tg_id"]
+    local_day = now.date()
+    if kind == "morning":
+        # Весы синхронизируем до сводки, но их сбой не должен её ломать.
+        from app.config import get_config
+        from app.services import scale
+        if (get_config().picooc_user and get_config().picooc_password
+                and scale.is_picooc_owner(user)):
+            try:
+                await scale.sync_picooc(db, user, days=3)
+            except Exception:  # noqa: BLE001
+                log.warning("утренний синк Picooc не удался", exc_info=True)
+        await bot.send_message(tg_id, await coach.morning_summary(db, user, today=local_day))
+    elif kind == "midday":
+        from app.storage import repo
+        day = repo.day_totals(db, uid, local_day.isoformat())
+        if day["meals"] == 0:
+            await bot.send_message(tg_id, "🍽 Пока пусто в дневнике. Запиши завтрак/обед — "
+                                             "хотя бы текстом, это 10 секунд.")
+    elif kind == "kitchen_close":
+        await bot.send_message(
+            tg_id,
+            f"🍽 Кухня закрывается через 15 минут ({user['eating_cutoff']}). "
+            "Если голодно — план Б: кефир/творог/овощи на 150–200 ккал. "
+            "А если вечером потянет переесть, напиши /craving, я помогу разобраться.",
+        )
+    elif kind == "evening":
+        doc = await coach.evening_doc(db, user, today=local_day)
+        await rich.send(bot, tg_id, doc, reply_markup=report.actions_kb("today"))
+        await bot.send_message(tg_id, "🖥 Пришли скриншот сна из Mi Fitness — "
+                                      "завтра учту его в связке с едой.")
+    elif kind == "weigh":
+        from app.storage import repo
+        if user["care_mode"]:
+            return                                    # осторожный режим: без напоминаний о весе
+        if repo.weight_series(db, uid, local_day.isoformat(), local_day.isoformat()):
+            return                                    # уже взвесился сегодня
+        await bot.send_message(
+            tg_id,
+            "⚖️ Утреннее взвешивание: после туалета, до еды и воды, в одно и то же время. "
+            "Пришли скриншот весов. Одна цифра ничего не значит, смотрим на тренд.")
+    elif kind == "water":
+        from app.services import water as watersvc
+        from app.storage import repo
+        total = repo.day_water_ml(db, uid, local_day.isoformat())
+        goal = watersvc.goal_for(db, user)
+        if total < goal // 2:
+            await bot.send_message(
+                tg_id, f"💧 Воды сегодня пока {total} мл из ориентира {goal}. "
+                       "Выпей стакан и напиши «выпил стакан воды».")
+    elif kind == "weekly":
+        chart = await report.week_chart_bytes(db, user, local_day)
+        await rich.send(bot, tg_id, week_report_doc(db, user, local_day, chart=chart),
+                        reply_markup=report.actions_kb("week"))
+    else:
+        log.warning("неизвестный тип напоминания: %s", kind)

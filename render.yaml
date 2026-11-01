@@ -1,0 +1,32 @@
+# Render Blueprint: бесплатный web service. Секреты (sync: false) вводятся в панели Render.
+services:
+  - type: web
+    name: health-diary-bot
+    runtime: python
+    plan: free
+    region: frankfurt            # ближе к Turso (выбери регион БД в Европе)
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.bot
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: WEB_ENABLED
+        value: "true"
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: ALLOWED_TG_IDS
+        sync: false
+      - key: WEBHOOK_BASE_URL     # https://<имя-сервиса>.onrender.com, заполнить после первого деплоя
+        sync: false
+      - key: WEBAPP_URL           # https://<имя-сервиса>.onrender.com/app/
+        sync: false
+      - key: TZ
+        value: Europe/Minsk

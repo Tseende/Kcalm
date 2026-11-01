@@ -1,0 +1,17 @@
+# systemd user unit: ~/.config/systemd/user/healthbot.service
+# systemctl --user daemon-reload && systemctl --user enable --now healthbot
+[Unit]
+Description=Health diary Telegram bot
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/healthbot
+ExecStart=/opt/healthbot/.venv/bin/python -m app.bot
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+# лог-ротация journald: SystemMaxUse=50M в journald.conf
+
+[Install]
+WantedBy=default.target
