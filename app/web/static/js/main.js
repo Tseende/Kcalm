@@ -139,6 +139,10 @@ async function boot() {
     }
   } catch (e) { console.warn(e); }
   document.documentElement.classList.toggle('in-tg', inTelegram);
+  // Полноэкранный режим: заголовок экрана переезжает в полосу системных кнопок Telegram.
+  const syncFs = () => document.documentElement.classList.toggle('fs', !!(tg && tg.isFullscreen));
+  syncFs();
+  try { if (tg && tg.onEvent) tg.onEvent('fullscreenChanged', syncFs); } catch (e) { /* старый клиент */ }
   const applyScheme = () => { if (inTelegram && tg && tg.colorScheme) { document.documentElement.classList.toggle('scheme-dark', tg.colorScheme === 'dark'); document.documentElement.classList.toggle('scheme-light', tg.colorScheme !== 'dark'); } };
   applyScheme();
   try { if (tg && tg.onEvent) tg.onEvent('themeChanged', applyScheme); } catch (e) { /* old client */ }

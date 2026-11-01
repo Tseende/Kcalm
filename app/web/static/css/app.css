@@ -520,3 +520,11 @@ input, textarea, select { scroll-margin-top: calc(var(--safe-t) + 70px); scroll-
 body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: var(--safe-t); background: var(--c-bg); z-index: 11; pointer-events: none; }
 body[data-route="chat"]::before { background: var(--wall-b); }
 body.scrolled .page-head { background: color-mix(in srgb, var(--c-bg) 96%, transparent); }
+
+/* полноэкранный режим Telegram: заголовок в полосе между «Закрыть» и кнопками справа */
+html.fs .page-head:not(.chat-head) { position: fixed; top: var(--tg-safe-area-inset-top, 0px); left: 112px; right: 112px; height: var(--tg-content-safe-area-inset-top, 44px); min-height: 0; margin: 0; padding: 0; z-index: 12; background: none !important; border-bottom-color: transparent !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+html.fs .page-head:not(.chat-head) h1 { line-height: var(--tg-content-safe-area-inset-top, 44px); font-size: 16px; max-width: none; }
+html.fs .page-head:not(.chat-head) .back-btn, html.fs .page-head:not(.chat-head) .date-sub { display: none; }
+html.fs .page-head:not(.chat-head) .date-label { line-height: 1.1; }
+html.fs .screen { padding-top: 8px; }
+html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
