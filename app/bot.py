@@ -13,7 +13,6 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from app import rich
 from app.config import get_config
 from app.db import connect_from_config, migrate
-from app.storage import photos
 from app.middleware import AccessMiddleware
 from app.routers import (commands, craving, dishes, intake, menu, onboarding, products, reports,
                          support, tracking)
@@ -82,9 +81,8 @@ async def main() -> None:
     db = connect_from_config(cfg)
     version = migrate(db)
     logging.info("БД готова (%s), schema v%s", "Turso" if cfg.turso_database_url else "локальный SQLite", version)
-    if cfg.turso_database_url:             # диск Render временный: фото живут и в БД
-        photos.enable(db)
-        logging.info("восстановлено фото с БД на диск: %s", photos.restore(db))
+    # Фото в БД не копируем: база хранит только данные. На временном диске Render файлы живут
+    # до рестарта (хватает, чтобы разобрать и показать приём), потом карточка идёт без картинки.
 
     bot = Bot(cfg.telegram_bot_token,
               default=DefaultBotProperties(parse_mode=ParseMode.HTML))

@@ -100,7 +100,7 @@ async def test_webhook_route_checks_secret(tmp_path, monkeypatch):
     db.close()
 
 
-def test_dbimport_copies_rows_and_photos(tmp_path, monkeypatch):
+def test_dbimport_copies_rows_without_photos(tmp_path, monkeypatch):
     from app import dbimport
 
     monkeypatch.chdir(tmp_path)
@@ -115,8 +115,8 @@ def test_dbimport_copies_rows_and_photos(tmp_path, monkeypatch):
     dst = dbmod.LibsqlConnection(libsql.connect(str(tmp_path / "dst.db")))
     dbmod.migrate(dst)
     counts = dbimport.import_all(str(tmp_path / "src.db"), dst)
-    assert counts["users"] == 1 and counts["meals"] == 1 and counts["photo_blobs"] == 1
-    assert dst.execute("SELECT data FROM photo_blobs WHERE path='p.jpg'").fetchone()[0] == b"img"
+    assert counts["users"] == 1 and counts["meals"] == 1 and "photo_blobs" not in counts
+    assert dst.execute("SELECT COUNT(*) FROM photo_blobs").fetchone()[0] == 0
     with pytest.raises(SystemExit):
         dbimport.import_all(str(tmp_path / "src.db"), dst)       # повторно поверх данных нельзя
     dst.close()

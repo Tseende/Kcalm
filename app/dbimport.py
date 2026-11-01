@@ -1,7 +1,7 @@
 """Разовый перенос локальной БД и фото в Turso: python -m app.dbimport [data/health.db]
 
 Нужны TURSO_DATABASE_URL и TURSO_AUTH_TOKEN в .env. Скрипт создаёт схему в облаке (миграции),
-копирует строки всех таблиц и кладёт фото в photo_blobs. В облаке не должно быть пользователей:
+копирует строки всех таблиц (фото не переносятся: в БД картинки не храним). В облаке не должно быть пользователей:
 иначе скрипт остановится и ничего не перезапишет (справочники из миграций заменяются копией).
 """
 from __future__ import annotations
@@ -14,7 +14,6 @@ from app.config import get_config
 from app.db import connect, migrate
 
 SKIP = {"_schema_version", "photo_blobs"}
-PHOTO_COLUMNS = (("meals", "photo_path"), ("meal_photos", "path"), ("dishes", "photo_path"))
 
 
 def import_all(src_path: str, dst) -> dict[str, int]:
@@ -46,22 +45,6 @@ def import_all(src_path: str, dst) -> dict[str, int]:
             with dst:
                 dst.executemany(f'INSERT OR REPLACE INTO "{t}" ({names}) VALUES ({marks})', rows)
         counts[t] = len(rows)
-    photos = 0
-    seen: set[str] = set()
-    for table, col in PHOTO_COLUMNS:
-        try:
-            paths = [r[0] for r in src.execute(f'SELECT DISTINCT "{col}" FROM "{table}" WHERE "{col}" IS NOT NULL AND "{col}" != ""')]
-        except sqlite3.Error:
-            continue
-        for p in paths:
-            f = Path(p)
-            if p in seen or not f.is_file():
-                continue
-            seen.add(p)
-            with dst:
-                dst.execute("INSERT OR REPLACE INTO photo_blobs(path, data) VALUES (?, ?)", (p, f.read_bytes()))
-            photos += 1
-    counts["photo_blobs"] = photos
     src.close()
     return counts
 
