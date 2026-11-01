@@ -1,7 +1,7 @@
 # Render Blueprint: бесплатный web service. Секреты (sync: false) вводятся в панели Render.
 services:
   - type: web
-    name: health-diary-bot
+    name: kcalm
     runtime: python
     plan: free
     region: frankfurt            # ближе к Turso (выбери регион БД в Европе)
