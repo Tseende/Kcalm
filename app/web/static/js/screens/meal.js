@@ -64,7 +64,16 @@ export default async function render(root, ctx) {
     async function commit(v) {
       try { onMeal(await api.patch('/items/' + it.id, { grams: v })); haptic('light'); } catch (e) { toast(e.message, 'error'); input.value = it.grams; }
     }
-    function schedule(v) { clearTimeout(timer); timer = setTimeout(() => commit(v), 600); }
+    let pending = null;
+    function schedule(v) { clearTimeout(timer); pending = v; timer = setTimeout(flush, 600); }
+    // Правка не должна пропадать, если ушли с экрана или свернули приложение раньше, чем сработал таймер.
+    function flush() {
+      clearTimeout(timer);
+      if (pending === null) return;
+      const v = pending;
+      pending = null;
+      commit(v);
+    }
     function step(d) {
       const cur = numVal(input) ?? it.grams;
       const v = Math.max(1, Math.round((cur + d) * 10) / 10);
@@ -72,6 +81,7 @@ export default async function render(root, ctx) {
       schedule(v);
     }
     input.addEventListener('input', () => { const v = numVal(input); if (v !== null && v >= 1) schedule(v); });
+    input.addEventListener('blur', flush);
     async function saveProduct() {
       try { await api.post('/items/' + it.id + '/save_product', {}); haptic('success'); toast('Сохранено в «Мои продукты»', 'ok'); } catch (e) { toast(e.message, 'error'); }
     }
@@ -93,6 +103,7 @@ export default async function render(root, ctx) {
     paint();
     return {
       el,
+      flush,
       update(n) { it = n; paint(); if (document.activeElement !== input) input.value = n.grams; },
     };
   }
@@ -174,4 +185,8 @@ export default async function render(root, ctx) {
   }
 
   draw();
+  const flushAll = () => comps.forEach((c) => c.flush());
+  document.addEventListener('visibilitychange', flushAll);
+  window.addEventListener('pagehide', flushAll);
+  return () => { document.removeEventListener('visibilitychange', flushAll); window.removeEventListener('pagehide', flushAll); flushAll(); };
 }

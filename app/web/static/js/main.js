@@ -1,5 +1,6 @@
 // Router + tab bar + Telegram bootstrap.
 import { api, isMock, onMockEnabled, tg, inTelegram } from './api.js';
+import { initKeyboard } from './keyboard.js';
 import { h, $, icon, tile, sheet, nav, mainButton, backButton, emptyState, errorState, haptic } from './ui.js';
 
 const R = (re, load, opts = {}) => ({ re: new RegExp('^' + re + '$'), load, ...opts });
@@ -145,6 +146,7 @@ async function boot() {
   window.addEventListener('scroll', onScroll, { passive: true });
   onMockEnabled(mockBadge);
   buildTabbar();
+  initKeyboard();
   nav._init();
   try {
     await api.me();

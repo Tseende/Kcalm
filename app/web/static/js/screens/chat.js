@@ -1,7 +1,7 @@
 // Screen 4: Chat
 import { api } from '../api.js';
 import { PATHS } from '../icons.js';
-import { h, icon, tile, toast, haptic, nav, rich, errorState, emptyState, mealType, fmtKcal, fmtN, isDark, isoDate, dateLabel } from '../ui.js';
+import { h, icon, tile, toast, haptic, nav, rich, draft, errorState, emptyState, mealType, fmtKcal, fmtN, isDark, isoDate, dateLabel } from '../ui.js';
 
 // Faint food/health pattern drawn from Tabler icons (inline SVG data URI, no network).
 function wallpaper(dark) {
@@ -116,9 +116,12 @@ export default async function render(root, ctx) {
     try { const m = await api.get('/meals/' + wantMeal); if (ctx.alive()) { setMealChip(m); ta.focus(); } } catch (e) { /* чип необязателен */ }
   }
 
+  const clearDraft = draft('chat', ta);
   function autosize() { ta.style.height = 'auto'; ta.style.height = Math.min(120, ta.scrollHeight) + 'px'; }
   const toggleSend = () => { sendBtn.hidden = !ta.value.trim(); };
   ta.addEventListener('input', () => { autosize(); toggleSend(); });
+  autosize();
+  toggleSend();
   ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });
 
   // Общий разбор ответа /chat и /chat/action: пузыри, карточка приёма, быстрые кнопки.
@@ -162,10 +165,12 @@ export default async function render(root, ctx) {
     addDay(null);
     list.append(mine);
     ta.value = '';
+    clearDraft();
     autosize();
     toggleSend();
     await exchange('/chat', mealId ? { text, meal_id: mealId } : { text }, mine, () => {
       ta.value = text;
+      ta.dispatchEvent(new Event('input'));
       mine.remove();
       autosize();
       toggleSend();

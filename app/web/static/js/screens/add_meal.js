@@ -1,7 +1,7 @@
 // Add meal: photos (+ dish per photo) or text description
 import { api } from '../api.js';
 import {
-  h, icon, tile, toast, haptic, nav, mainButton, pageHead, segmented, field, nowHHMM, todayISO, compressImage, busyOverlay, dishKind,
+  h, icon, tile, toast, haptic, nav, mainButton, draft, pageHead, segmented, field, nowHHMM, todayISO, compressImage, busyOverlay, dishKind,
 } from '../ui.js';
 import { dishInfo } from './dishes.js';
 
@@ -24,6 +24,7 @@ export default async function render(root, ctx) {
   const timeInput = h('input', { type: 'time', value: nowHHMM(), 'aria-label': 'Время приёма' });
   const commentTa = h('textarea', { rows: 3, placeholder: 'Что внутри, масло, соус…', oninput: sync });
   const textTa = h('textarea', { rows: 6, placeholder: 'Например: овсянка на молоке 250 г, банан и чёрный кофе без сахара', oninput: sync });
+  const clearDrafts = [draft('meal-comment', commentTa), draft('meal-text', textTa)];
   const photoList = h('div', { class: 'stack-sm' });
   const photoBox = h('div', { class: 'stack' });
   const textBox = h('div', { class: 'stack', hidden: true });
@@ -98,6 +99,7 @@ export default async function render(root, ctx) {
       const meal = await api.post('/meals', fd, { timeout: 150000 });
       haptic('success');
       stop();
+      clearDrafts.forEach((c) => c());
       mainButton.hide();
       nav.replace('/meal/' + meal.id);
     } catch (e) {

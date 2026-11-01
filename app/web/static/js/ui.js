@@ -147,7 +147,18 @@ export function haptic(type = 'success') {
 
 let mbCb = null;
 let mbEl = null;
+let mbSuspended = false;
 export const mainButton = {
+  // Пока открыта клавиатура, кнопка не должна занимать место над ней: прячем и потом возвращаем как была.
+  suspend() {
+    if (mbSuspended || !mbCb) return;
+    if (inTelegram && tg.MainButton && tg.MainButton.isVisible) { mbSuspended = true; tg.MainButton.hide(); }
+  },
+  resume() {
+    if (!mbSuspended) return;
+    mbSuspended = false;
+    if (mbCb && inTelegram && tg.MainButton) tg.MainButton.show();
+  },
   show(text, cb, { disabled = false } = {}) {
     this.hide();
     mbCb = cb;
@@ -184,6 +195,7 @@ export const mainButton = {
     }
     mbCb = null;
     mbEl = null;
+    mbSuspended = false;
     const bar = $('#mainbar');
     if (bar) {
       bar.hidden = true;
@@ -394,4 +406,27 @@ export function busyOverlay(text, sub) {
     h('div', { class: 'busy-box' }, h('div', { class: 'spinner' }), h('div', { class: 'busy-title' }, text), sub ? h('div', { class: 'muted' }, sub) : null, timer));
   $('#overlay').append(el);
   return () => { clearInterval(iv); el.remove(); };
+}
+
+// ------------------------------------------------------------------ drafts
+// Черновики текстовых полей: если Telegram выгрузит мини-приложение или пользователь свернёт его,
+// набранное возвращается. Хранится локально, не дольше суток; ошибки хранилища не мешают работе.
+const DRAFT_TTL = 24 * 3600 * 1000;
+export function draft(key, el) {
+  const k = 'kcalm:draft:' + key;
+  try {
+    const raw = localStorage.getItem(k);
+    if (raw) {
+      const d = JSON.parse(raw);
+      if (d && Date.now() - d.t < DRAFT_TTL && !el.value) el.value = d.v;
+      else localStorage.removeItem(k);
+    }
+  } catch (e) { /* хранилище недоступно */ }
+  el.addEventListener('input', () => {
+    try {
+      if (el.value) localStorage.setItem(k, JSON.stringify({ v: el.value, t: Date.now() }));
+      else localStorage.removeItem(k);
+    } catch (e) { /* хранилище недоступно */ }
+  });
+  return () => { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } };
 }
