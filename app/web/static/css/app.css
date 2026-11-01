@@ -515,3 +515,8 @@ body.kb-open .sheet-wrap { padding-bottom: var(--kb-h); }
 body.kb-open .sheet { max-height: calc(88vh - var(--kb-h)); }
 /* поля не должны уезжать под липкую шапку и нижние панели при прокрутке к ним */
 input, textarea, select { scroll-margin-top: calc(var(--safe-t) + 70px); scroll-margin-bottom: 90px; }
+
+/* верхняя зона под системной шапкой Telegram (полноэкранный режим): сплошной фон, чтобы контент не просвечивал */
+body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: var(--safe-t); background: var(--c-bg); z-index: 11; pointer-events: none; }
+body[data-route="chat"]::before { background: var(--wall-b); }
+body.scrolled .page-head { background: color-mix(in srgb, var(--c-bg) 96%, transparent); }
