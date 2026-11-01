@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 from app.config import get_config
-from app.db import connect_from_config, migrate
+from app.db import connect, migrate
 
 SKIP = {"_schema_version", "photo_blobs"}
 PHOTO_COLUMNS = (("meals", "photo_path"), ("meal_photos", "path"), ("dishes", "photo_path"))
@@ -24,8 +24,14 @@ def import_all(src_path: str, dst) -> dict[str, int]:
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY rowid")
         if r[0] not in SKIP]
     existing = {r[0] for r in dst.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-    if "users" in existing and dst.execute("SELECT 1 FROM users LIMIT 1").fetchone():
-        raise SystemExit("В облачной БД уже есть пользователи, перенос остановлен.")
+    if "users" in existing and dst.execute("SELECT 1 FROM users LIMIT 1").fetchone() \
+            and "--resume" not in sys.argv:
+        raise SystemExit("В облачной БД уже есть пользователи, перенос остановлен "
+                         "(повторить прерванный перенос: --resume).")
+    try:                                   # порядок таблиц не обязан совпадать с порядком связей
+        dst.execute("PRAGMA foreign_keys=OFF")
+    except Exception:  # noqa: BLE001
+        pass
     counts: dict[str, int] = {}
     for t in tables:
         if t not in existing:
@@ -65,11 +71,16 @@ def main() -> int:
     if not cfg.turso_database_url:
         print("Задай TURSO_DATABASE_URL и TURSO_AUTH_TOKEN в .env.")
         return 1
-    src = sys.argv[1] if len(sys.argv) > 1 else cfg.db_path
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    src = args[0] if args else cfg.db_path
     if not Path(src).is_file():
         print(f"Нет файла {src}")
         return 1
-    dst = connect_from_config(cfg)
+    # Реплика назначения — отдельный файл: рабочую локальную БД libsql трогать не должен
+    replica = Path(cfg.db_path).with_name("turso_replica.db")
+    for suffix in ("", "-info", "-wal", "-shm"):
+        Path(str(replica) + suffix).unlink(missing_ok=True)
+    dst = connect(replica, url=cfg.turso_database_url, token=cfg.turso_auth_token)
     migrate(dst)
     for table, n in import_all(src, dst).items():
         print(f"{table}: {n}")
