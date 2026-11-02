@@ -446,13 +446,9 @@ async def test_add_dish_phrase_right_after_photo_is_not_a_caption(db, monkeypatc
 
 @pytest.mark.asyncio
 async def test_dishes_in_menu_and_commands(db):
-    from app.bot import BOT_COMMANDS
-    from app.routers import menu
-    assert "dishes" in [c.command for c in BOT_COMMANDS]
-    assert "m:dishes" in {b.callback_data for row in menu.more_kb().inline_keyboard for b in row}
     bot, dp, session = build(db)
     await onboard(dp, bot)
-    await _press(dp, bot, "m:dishes")
+    await send(dp, bot, "/dishes")
     assert any("Посуды пока нет" in t for t in session.texts)
 
 

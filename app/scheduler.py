@@ -16,9 +16,6 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from app.config import get_config
-from app import rich
-from app.routers.commands import week_report_doc
-from app.services import coach, report
 from app.storage import repo
 from app.timeutils import minutes_before
 
@@ -147,18 +144,8 @@ async def _dispatch_rules(db: sqlite3.Connection, bot, user, now: datetime) -> N
         repo.mark_rule_sent(db, rule["id"], today)
 
 
-def _store_in_app_chat(db: sqlite3.Connection, user_id: int, text: str) -> None:
-    """Проверка через 15 минут видна и в истории чата Mini App (best effort)."""
-    try:
-        import html
-        from app.web import queries
-        queries.add_chat_message(db, user_id, "assistant", html.unescape(text))
-    except Exception:  # noqa: BLE001 — история приложения не должна ломать отправку в Telegram
-        log.warning("не записано в чат приложения", exc_info=True)
-
-
 async def dispatch_craving_followups(db: sqlite3.Connection, bot) -> None:
-    """Через 15 минут после «подожду» спросить, как дела; старые открытые эпизоды закрыть."""
+    """Через несколько минут после реплики бота спросить, как дела; старые открытые эпизоды закрыть."""
     from app.services import craving
     repo.dismiss_stale_cravings(db)
     for event in repo.due_craving_followups(db):
@@ -166,11 +153,7 @@ async def dispatch_craving_followups(db: sqlite3.Connection, bot) -> None:
             user = repo.get_user_by_tg(db, event["tg_id"])
             text = (await craving.followup_message(db, user, event) if user
                     else craving.followup_text(event))
-            if user:
-                _store_in_app_chat(db, user["id"], text)
-            await bot.send_message(event["tg_id"], text,
-                                   reply_markup=craving.outcome_keyboard(event, event["id"],
-                                                                        with_wait=False))
+            await bot.send_message(event["tg_id"], text)
         except Exception:  # noqa: BLE001
             log.exception("не отправлено продолжение эпизода id=%s", event["id"])
         repo.update_craving(db, event["id"], followup_sent=1)
@@ -182,6 +165,12 @@ def _is_due(kind: str, local_time: str, now: datetime, days: str | None = None) 
     if days and str(now.weekday()) not in days:       # напоминание только в выбранные дни
         return False
     return kind != "weekly" or now.weekday() == 6
+
+
+async def _app_pointer(bot, tg_id: int, text: str) -> None:
+    """Короткий пуш без цифр: сами отчёты читаются в Mini App."""
+    from app.routers import menu
+    await bot.send_message(tg_id, text, reply_markup=menu.main_kb())
 
 
 async def _send_reminder(db: sqlite3.Connection, bot, user, kind: str,
@@ -198,7 +187,7 @@ async def _send_reminder(db: sqlite3.Connection, bot, user, kind: str,
                 await scale.sync_picooc(db, user, days=3)
             except Exception:  # noqa: BLE001
                 log.warning("утренний синк Picooc не удался", exc_info=True)
-        await bot.send_message(tg_id, await coach.morning_summary(db, user, today=local_day))
+        # сводка утра переехала в приложение («Анализ»); в чат пишем только то, что требует ответа
     elif kind == "midday":
         from app.storage import repo
         day = repo.day_totals(db, uid, local_day.isoformat())
@@ -210,13 +199,10 @@ async def _send_reminder(db: sqlite3.Connection, bot, user, kind: str,
             tg_id,
             f"🍽 Кухня закрывается через 15 минут ({user['eating_cutoff']}). "
             "Если голодно — план Б: кефир/творог/овощи на 150–200 ккал. "
-            "А если вечером потянет переесть, напиши /craving, я помогу разобраться.",
+            "А если вечером потянет переесть, просто напиши мне, поговорим.",
         )
     elif kind == "evening":
-        doc = await coach.evening_doc(db, user, today=local_day)
-        await rich.send(bot, tg_id, doc, reply_markup=report.actions_kb("today"))
-        await bot.send_message(tg_id, "🖥 Пришли скриншот сна из Mi Fitness — "
-                                      "завтра учту его в связке с едой.")
+        await _app_pointer(bot, tg_id, "🌙 Итог дня готов: что получилось и что поправить завтра.")
     elif kind == "weigh":
         from app.storage import repo
         if user["care_mode"]:
@@ -237,8 +223,6 @@ async def _send_reminder(db: sqlite3.Connection, bot, user, kind: str,
                 tg_id, f"💧 Воды сегодня пока {total} мл из ориентира {goal}. "
                        "Выпей стакан и напиши «выпил стакан воды».")
     elif kind == "weekly":
-        chart = await report.week_chart_bytes(db, user, local_day)
-        await rich.send(bot, tg_id, week_report_doc(db, user, local_day, chart=chart),
-                        reply_markup=report.actions_kb("week"))
+        await _app_pointer(bot, tg_id, "📅 Неделя закончилась: разбор готов в приложении.")
     else:
         log.warning("неизвестный тип напоминания: %s", kind)

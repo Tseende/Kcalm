@@ -12,12 +12,16 @@ from aiogram.filters.command import CommandObject
 from aiogram.types import Message
 
 from app.domain import intents
-from app.routers import commands, dishes, products, support, tracking
+from app.routers import commands, dishes, menu, products, support, tracking
 from app.services import assistant
 from app.services import food as foodsvc
 from app.textutil import esc
 
 log = logging.getLogger(__name__)
+
+
+APP_INTENTS = {"today", "week", "weight", "sleep", "target", "body", "foods", "dishes", "products",
+               "water_status", "plan_list"}
 
 
 def _args(command: str, arg: str = "") -> CommandObject:
@@ -26,38 +30,18 @@ def _args(command: str, arg: str = "") -> CommandObject:
 
 async def run_intent(msg: Message, db: sqlite3.Connection, intent: intents.Intent) -> None:
     name, arg = intent.name, intent.arg
-    if name == "today":
-        await commands.cmd_today(msg, db)
-    elif name == "week":
-        await commands.cmd_week(msg, db)
-    elif name == "weight":
-        await commands.cmd_weight(msg, db)
-    elif name == "sleep":
-        await commands.cmd_sleep(msg, db)
-    elif name == "target":
-        await commands.cmd_target(msg, db)
-    elif name == "body":
-        await commands.cmd_body(msg, db)
+    if name in APP_INTENTS:                      # отчёты и списки читаются в Mini App
+        await menu.send_app(msg)
     elif name == "undo":
         await commands.cmd_undo(msg, db)
-    elif name == "foods":
-        await commands.cmd_foods(msg, db)
     elif name == "dish_add":
         await dishes.add_from_text(msg, db, arg)
-    elif name == "dishes":
-        await dishes.cmd_dishes(msg, db)
     elif name == "product_add":
         await products.add_from_text(msg, db, arg)
-    elif name == "products":
-        await products.cmd_products(msg, db)
     elif name in ("sleep_log", "steps_log", "workout_log"):
         await tracking.log_from_text(msg, db, arg)
-    elif name == "water_status":
-        await commands.cmd_water(msg, _args("water"), db)
     elif name == "weighin":
         await commands.cmd_weighin(msg, _args("weighin", arg), db)
-    elif name == "plan_list":
-        await support.cmd_plan(msg, _args("plan"), db)
     elif name == "plan_add":
         await support.cmd_plan(msg, _args("plan", arg), db)
     elif name == "care_on":

@@ -20,25 +20,9 @@ from app.scheduler import build_scheduler
 from app.web.server import WEBHOOK_PATH, start_web
 
 BOT_COMMANDS = [
-    BotCommand(command="menu", description="Меню с кнопками"),
-    BotCommand(command="today", description="Итоги дня"),
-    BotCommand(command="week", description="Итоги недели"),
-    BotCommand(command="weight", description="Вес и тренд"),
-    BotCommand(command="body", description="Состав тела с весов"),
-    BotCommand(command="water", description="Вода: /water 300"),
-    BotCommand(command="craving", description="Тянет переесть: поддержка"),
-    BotCommand(command="talk", description="Поговорить о еде, срывах, настроении"),
-    BotCommand(command="plan", description="Правила «если — то»"),
-    BotCommand(command="weighin", description="Напоминание о взвешивании"),
-    BotCommand(command="sleep", description="Сон"),
-    BotCommand(command="target", description="Цель на день"),
+    BotCommand(command="app", description="Приложение: отчёты и настройки"),
+    BotCommand(command="talk", description="Поговорить, если тянет переесть"),
     BotCommand(command="undo", description="Отменить последнюю запись"),
-    BotCommand(command="foods", description="Мои частые продукты"),
-    BotCommand(command="dishes", description="Моя посуда для оценки порций"),
-    BotCommand(command="products", description="Мои продукты с КБЖУ"),
-    BotCommand(command="care", description="Осторожный режим"),
-    BotCommand(command="export", description="Выгрузить данные"),
-    BotCommand(command="settings", description="Настройки"),
 ]
 
 ROUTERS = (onboarding.router, menu.router, reports.router, commands.router, support.router, craving.router, dishes.router, products.router, tracking.router, intake.router)

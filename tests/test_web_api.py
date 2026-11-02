@@ -657,85 +657,26 @@ async def test_stats_days_on_target(client, db, user_id):
     assert summary["avg_kcal"] == 1400
 
 
-# ------------------------------------------------------------------ чат
+# ------------------------------------------------------------------ анализ дня
 
-async def test_chat_food_is_logged(client, fake_food):
-    resp = await client.post("/api/chat", json={"text": "съел гречку 150 г"}, headers=H)
-    assert resp.status == 200
-    body = await resp.json()
-    assert [m["role"] for m in body["messages"]] == ["user", "assistant"]
-    assert body["messages"][0]["text"] == "съел гречку 150 г"
-    assert "Записал" in body["messages"][1]["text"] and "ккал" in body["messages"][1]["text"]
-    meal = body["logged_meal"]
-    assert meal["source"] == "text" and meal["kcal"] > 0
-    day = await (await client.get("/api/day", headers=H)).json()
-    assert [m["id"] for m in day["meals"]] == [meal["id"]]
-    hist = await (await client.get("/api/chat?limit=50", headers=H)).json()
-    assert [m["role"] for m in hist["messages"]] == ["user", "assistant"]
-    assert set(hist["messages"][0]) == {"id", "role", "text", "created_at"}
-    assert hist["messages"][0]["created_at"].endswith("Z")
+async def test_analysis_empty_day_asks_to_log(client):
+    data = await (await client.get(f"/api/analysis?date={TODAY}", headers=H)).json()
+    assert data["date"] == TODAY and data["headline"]
+    assert {r["label"] for r in data["rows"]} >= {"Белок", "Вода", "Шаги", "Сон"}
+    assert all(r["status"] in ("good", "ok", "bad", "none") for r in data["rows"])
 
 
-async def test_chat_question_goes_to_assistant(client, monkeypatch):
-    seen = []
-
-    async def fake_answer(db, user, question, focus=None):  # noqa: ANN001
-        seen.append(question)
-        return "Ты в норме &amp; всё хорошо"
-
-    monkeypatch.setattr(assistant, "answer", fake_answer)
-    body = await (await client.post("/api/chat", json={"text": "почему вес стоит?"},
-                                    headers=H)).json()
-    assert seen == ["почему вес стоит?"]
-    assert body["messages"][1]["text"] == "Ты в норме & всё хорошо"
-    assert body["logged_meal"] is None
+async def test_analysis_reflects_logged_day(client, db, user_id, fake_food):
+    await post_meal(client, jpeg())
+    repo.save_activity(db, user_id, TODAY, {"steps": 12000}, "screenshot", 0.9)
+    data = await (await client.get(f"/api/analysis?date={TODAY}", headers=H)).json()
+    assert any("12" in g and "шаг" in g.lower() for g in data["good"]), data
+    assert data["tips"] == [] or all({"icon", "title", "text"} <= set(t) for t in data["tips"])
 
 
-async def test_chat_non_food_text_and_llm_down(client, monkeypatch):
-    async def fake_answer(db, user, question, focus=None):  # noqa: ANN001
-        return "ответ"
-
-    monkeypatch.setattr(assistant, "answer", fake_answer)
-
-    async def nothing(text, user_id, conn):  # noqa: ANN001
-        return foodsvc.understanding_from_json({"items": [], "overall_confidence": 0.9})
-
-    monkeypatch.setattr(foodsvc, "parse_text", nothing)
-    body = await (await client.post("/api/chat", json={"text": "сегодня тяжёлый день"},
-                                    headers=H)).json()
-    assert body["messages"][1]["text"] == "ответ" and body["logged_meal"] is None
-
-    monkeypatch.undo()          # parse_text снова ходит в «сеть»: она отключена в тестах
-    body = await (await client.post("/api/chat", json={"text": "сегодня гречка"},
-                                    headers=H)).json()
-    assert "нет связи" in body["messages"][1]["text"] and body["logged_meal"] is None
-
-
-async def test_chat_water_and_undo_and_help(client, fake_food):
-    body = await (await client.post("/api/chat", json={"text": "выпил 2 стакана воды"},
-                                    headers=H)).json()
-    assert "500 мл" in body["messages"][1]["text"] and body["logged_meal"] is None
-    day = await (await client.get("/api/day", headers=H)).json()
-    assert day["water_ml"] == 500
-    await client.post("/api/chat", json={"text": "съел гречку"}, headers=H)
-    undo = await (await client.post("/api/chat", json={"text": "отмени последнее"},
-                                    headers=H)).json()
-    assert "Отменил" in undo["messages"][1]["text"]
-    assert (await (await client.get("/api/day", headers=H)).json())["meals"] == []
-    helped = await (await client.post("/api/chat", json={"text": "что ты умеешь"},
-                                      headers=H)).json()
-    assert "дневник" in helped["messages"][1]["text"]
-
-
-async def test_chat_validation_and_isolation(client, db):
-    add_user(db, 1002)
-    for payload in ({"text": ""}, {"text": "   "}, {}, {"text": "я" * 2001}):
-        assert (await client.post("/api/chat", json=payload, headers=H)).status == 400
-    ok_len = await client.post("/api/chat", json={"text": "привет"}, headers=H)
-    assert ok_len.status == 200
-    assert (await (await client.get("/api/chat", headers=auth(1002))).json()) == {"messages": []}
-    limited = await (await client.get("/api/chat?limit=1", headers=H)).json()
-    assert len(limited["messages"]) == 1 and limited["messages"][0]["role"] == "assistant"
+async def test_analysis_bad_date_and_auth(client):
+    assert (await client.get("/api/analysis?date=вчера", headers=H)).status == 400
+    assert (await client.get("/api/analysis")).status == 401
 
 
 # ------------------------------------------------------------------ выгрузка CSV

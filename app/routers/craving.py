@@ -43,17 +43,9 @@ async def _typing(msg: Message) -> None:
         pass
 
 
-def _after_reply_kb(db: sqlite3.Connection, user, event_id: int) -> InlineKeyboardMarkup | None:
-    """После реплики: эпизод закрылся по словам человека — предложить разбор; режим «просто
-    поговорить» — без кнопок; иначе быстрые кнопки итога."""
-    event = repo.get_craving(db, user["id"], event_id)
-    if event is None:
-        return None
-    if event["outcome"] != "open":
-        return svc.debrief_keyboard(event_id) if event["outcome"] in svc.OUTCOMES else None
-    if event["mode"] == "talk":
-        return None
-    return svc.outcome_keyboard(user, event_id)
+def _after_reply_kb(db: sqlite3.Connection, user, event_id: int) -> None:
+    """Разговор без кнопок: бот сам понимает по словам, чем всё закончилось."""
+    return None
 
 
 async def maybe_handle(msg: Message, db: sqlite3.Connection, user, text: str,
@@ -101,8 +93,7 @@ async def cmd_craving(msg: Message, command: CommandObject, db: sqlite3.Connecti
         await msg.answer(reply, reply_markup=_after_reply_kb(db, user, open_event["id"]))
         return
     if open_event:
-        await msg.answer("Я здесь. Выбери, что ближе, или просто напиши, что происходит.",
-                         reply_markup=svc.triage_keyboard(open_event["id"], user))
+        await msg.answer("Я здесь. Напиши, что происходит.")
         return
     _, reply, kb = await svc.open_episode(db, user, text or None)
     await msg.answer(reply[:4000], reply_markup=kb)

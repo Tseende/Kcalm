@@ -94,7 +94,7 @@ def _user(db, tg=1):
 def test_start_episode_has_triage_and_facts(db):
     uid, user = _user(db)
     event_id, text, kb = svc.start_episode(db, user, "хочу есть")
-    assert "Я рядом" in text and kb is not None
+    assert "Я рядом" in text and kb is None             # разговор без кнопок
     event = repo.get_craving(db, uid, event_id)
     assert event["outcome"] == "open" and event["trigger_text"] == "хочу есть"
 
@@ -257,5 +257,6 @@ async def test_commands_pass_through_open_episode(db):
     session.texts.clear()
     session.rich.clear()
     await send(dp, bot, "что по статистике")
-    assert session.rich and "Сегодня" in session.rich[-1]            # итоги дня таблицей
+    assert any("риложени" in t for t in session.texts)                # команда словами, не диалог
+    assert not session.rich
     assert repo.open_craving(db, uid, dom.EPISODE_WINDOW_MIN)["id"] == event_id   # эпизод жив

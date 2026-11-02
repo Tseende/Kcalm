@@ -84,7 +84,7 @@ async def test_body_command_and_care_mode(db):
     _measure(db, uid, "2026-10-29", weight_kg=114.2, body_fat_pct=37.5)
     _measure(db, uid, "2026-10-30")
     session.texts.clear()
-    await send(dp, bot, "мои показатели")                      # словами, без слэша
+    await send(dp, bot, "/body")
     text = " ".join(session.texts)
     assert "Состав тела" in text and "112.6" in text and "Δ" in text
     assert "не натощак" in text                                # fasting=0 пояснён

@@ -28,7 +28,7 @@ from app.textutil import esc
 
 log = logging.getLogger(__name__)
 
-FOLLOWUP_MIN = 15
+FOLLOWUP_MIN = 10          # сервис на бесплатном хостинге засыпает через ~15 минут простоя
 ACTION_NUMBERS = [5, 10, 15, 20, 30, 60]       # минуты в советах — не «статистика»
 OUTCOMES = ("resisted", "ate_planned", "overate")
 
@@ -156,16 +156,8 @@ def _risk_text(risk: str) -> str:
 
 
 def _opening_fallback(facts: dom.Facts) -> str:
-    lines = ["🌙 Я рядом. Тяга к еде — это нормально, а не провал и не слабость. "
-             "Давай спокойно разберёмся за пару минут."]
-    notes = dom.insights(facts)
-    if notes:
-        lines += ["", "📊 Что вижу по твоему дню:"] + [f"• {esc(n)}" for n in notes[:3]]
-    budget = dom.budget_line(facts)
-    if budget:
-        lines += ["", esc(budget)]
-    lines += ["", "Что ближе всего к тому, что происходит сейчас?"]
-    return "\n".join(lines)
+    return ("🌙 Я рядом. Тяга к еде — это нормально, а не провал и не слабость. "
+            "Расскажи, что сейчас происходит: голодно, накатили эмоции или просто привычка?")
 
 
 def start_episode(db: sqlite3.Connection, user, trigger_text: str | None
@@ -177,7 +169,7 @@ def start_episode(db: sqlite3.Connection, user, trigger_text: str | None
         return event_id, _risk_text(risk), None
     text = _opening_fallback(facts)
     repo.add_craving_message(db, event_id, "assistant", text)
-    return event_id, text, triage_keyboard(event_id, user)
+    return event_id, text, None
 
 
 async def open_episode(db: sqlite3.Connection, user, trigger_text: str | None,
@@ -188,7 +180,7 @@ async def open_episode(db: sqlite3.Connection, user, trigger_text: str | None,
     if risk != "none":
         return event_id, _risk_text(risk), None
     event = repo.get_craving(db, user["id"], event_id)
-    kb = triage_keyboard(event_id, user) if mode == "craving" else None
+    kb = None                                # без кнопок: обычный разговор
     data = await _ask_model(db, user, event, trigger_text or "", "opening")
     if data:
         repo.add_craving_message(db, event_id, "assistant", data["reply"])
@@ -387,14 +379,16 @@ async def _ask_model(db: sqlite3.Connection, user, event: sqlite3.Row, user_text
         "risk": bool(data.get("risk")),
         "food_eaten": str(data.get("food_eaten") or "").strip()[:300],
         "outcome": outcome if outcome in OUTCOMES else "none",
+        "category": str(data.get("category") or "") if str(data.get("category") or "") in dom.CATEGORIES else "",
+        "check_in_min": data.get("check_in_min") if isinstance(data.get("check_in_min"), int) else None,
         "summary": summary,
     }
 
 
 def _fallback_reply(user) -> str:
     return ("Я тебя слышу. Давай по шагам: стакан воды, пара минут вне кухни. "
-            "Скажи, что ближе: настоящий голод, эмоции или привычка? Нажми кнопку ниже "
-            "или просто напиши, что происходит.")
+            "Скажи, что ближе: настоящий голод, эмоции или привычка? Просто напиши, "
+            "что происходит.")
 
 
 async def log_food_from_dialog(db: sqlite3.Connection, user, event_id: int,
@@ -428,6 +422,8 @@ async def _apply_turn(db: sqlite3.Connection, user, event_id: int, data: dict,
     extra = ""
     if data["summary"]:
         repo.update_craving(db, event_id, summary=data["summary"])
+    if data.get("category"):
+        repo.update_craving(db, event_id, category=data["category"])
     if data["food_eaten"]:
         logged = await log_food_from_dialog(db, user, event_id, data["food_eaten"])
         if logged:
@@ -437,6 +433,11 @@ async def _apply_turn(db: sqlite3.Connection, user, event_id: int, data: dict,
         extra += "\n\n" + esc(dom.REPEAT_NOTE)
     if allow_outcome and data["outcome"] != "none":
         repo.close_craving(db, event_id, data["outcome"])
+    else:
+        # кнопки «подожду» больше нет: проверка «как ты?» ставится сама, пока эпизод открыт
+        minutes = data.get("check_in_min")
+        schedule_followup(db, event_id, minutes if isinstance(minutes, int) and 5 <= minutes <= 30
+                          else FOLLOWUP_MIN)
     return extra
 
 
@@ -500,7 +501,7 @@ def schedule_followup(db: sqlite3.Connection, event_id: int, minutes: int = FOLL
 
 def followup_text(user) -> str:
     return (f"⏱ Прошло {FOLLOWUP_MIN} минут. Как ты сейчас? Тяга обычно приходит волной и "
-            "спадает. Выбери, что ближе всего, или просто напиши мне.")
+            "спадает. Напиши, что происходит.")
 
 
 async def followup_message(db: sqlite3.Connection, user, event: sqlite3.Row) -> str:

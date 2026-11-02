@@ -60,7 +60,7 @@ async def test_open_episode_uses_model_and_short_keyboard(db, monkeypatch):
     monkeypatch.setattr(svc.llm, "chat_json", fake)
     event_id, text, kb = await svc.open_episode(db, user, "хочу есть")
     assert "Я рядом" in text and "📊" not in text           # без стены цифр
-    assert kb is not None and len(kb.inline_keyboard) == 2
+    assert kb is None                                        # никаких кнопок: просто разговор
     ctx = fake.last_context()
     assert ctx["stage"] == "opening" and ctx["sex"] == "male" and ctx["mode"] == "craving"
     msgs = repo.craving_messages(db, event_id)
@@ -71,7 +71,7 @@ async def test_open_episode_uses_model_and_short_keyboard(db, monkeypatch):
 async def test_open_episode_falls_back_offline(db):
     uid, user = _user(db)
     _, text, kb = await svc.open_episode(db, user, "хочу есть")
-    assert "Я рядом" in text and kb is not None
+    assert "Я рядом" in text and kb is None
 
 
 @pytest.mark.asyncio
@@ -209,10 +209,7 @@ def test_female_forms_in_buttons_and_texts(db):
     repo.update_user(db, uid, sex="female")
     user = repo.get_user_by_tg(db, 1)
     event_id, _, kb = svc.start_episode(db, user, "хочу есть")
-    labels = [b.text for row in kb.inline_keyboard for b in row]
-    assert "😔 Уже переела" in labels and not any("(а)" in l for l in labels)
-    out = [b.text for row in svc.outcome_keyboard(user, event_id).inline_keyboard for b in row]
-    assert "✅ Справилась" in out and not any("(а)" in l for l in out)
+    assert kb is None
     text = svc.finish_episode(db, user, repo.get_craving(db, uid, event_id), "ate_planned")
     assert "поела" in text and "(а)" not in text
 
@@ -255,3 +252,32 @@ async def test_food_in_first_message_is_logged(db, monkeypatch):
     assert db.execute("SELECT COUNT(*) FROM meals WHERE user_id=?", (uid,)).fetchone()[0] == 1
     event = repo.get_craving(db, uid, event_id)
     assert event["outcome"] == "open" and event["category"] == "overate"   # разговор продолжается
+
+
+@pytest.mark.asyncio
+async def test_dialog_without_buttons_sets_category_and_checkin(db, monkeypatch):
+    """Кнопок нет: причину и срок проверки «как ты?» определяет модель, эпизод остаётся открытым."""
+    uid, user = _user(db)
+    fake = FakeModel(_reply("Я рядом. Что сейчас происходит?"),
+                     _reply("Понимаю, день был тяжёлый.", category="emotion", check_in_min=20))
+    monkeypatch.setattr(svc.llm, "chat_json", fake)
+    event_id, _, kb = await svc.open_episode(db, user, "хочу есть")
+    assert kb is None
+    event = repo.get_craving(db, uid, event_id)
+    assert event["followup_at_utc"] is not None           # проверка поставлена сама, без «подожду»
+    await svc.dialog_reply(db, user, event, "устал, поругался с начальником")
+    event = repo.get_craving(db, uid, event_id)
+    assert event["category"] == "emotion" and event["outcome"] == "open"
+    when = datetime.strptime(event["followup_at_utc"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    left = (when - datetime.now(timezone.utc)).total_seconds() / 60
+    assert 18 <= left <= 20.5                              # check_in_min=20 из ответа модели
+
+
+@pytest.mark.asyncio
+async def test_overate_closes_without_followup(db, monkeypatch):
+    uid, user = _user(db)
+    fake = FakeModel(_reply("Я рядом."), _reply("Бывает. Вода и сон.", outcome="overate"))
+    monkeypatch.setattr(svc.llm, "chat_json", fake)
+    event_id, _, _ = await svc.open_episode(db, user, "хочу есть")
+    await svc.dialog_reply(db, user, repo.get_craving(db, uid, event_id), "переел пельменей")
+    assert repo.get_craving(db, uid, event_id)["outcome"] == "overate"

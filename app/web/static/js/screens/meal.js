@@ -179,7 +179,6 @@ export default async function render(root, ctx) {
       sectionTitle('Позиции'),
       itemsBox,
       h('div', { class: 'stack-sm actions' },
-        h('button', { class: 'btn btn-secondary btn-block', type: 'button', onclick: () => nav.go('/chat?meal=' + meal.id) }, icon('message-circle', 18), 'Обсудить'),
         h('button', { class: 'btn btn-secondary btn-block', type: 'button', onclick: refine }, icon('pencil', 18), 'Уточнить'),
         h('button', { class: 'btn btn-danger-ghost btn-block', type: 'button', onclick: removeMeal }, icon('trash', 18), 'Удалить приём'))].filter(Boolean));
   }

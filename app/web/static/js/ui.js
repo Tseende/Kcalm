@@ -37,7 +37,7 @@ function appendKids(el, kids) {
 export const $ = (sel, root = document) => root.querySelector(sel);
 
 const ALIAS = {
-  today: 'calendar', stats: 'chart-bar', add: 'circle-plus', chat: 'message-circle', menu: 'menu-2', back: 'chevron-left',
+  today: 'calendar', stats: 'chart-bar', add: 'circle-plus', analysis: 'sparkles', menu: 'menu-2', back: 'chevron-left',
   next: 'chevron-right', image: 'photo', close: 'x', undo: 'arrow-back-up', edit: 'pencil', save: 'bookmark',
 };
 

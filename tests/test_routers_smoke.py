@@ -342,26 +342,18 @@ async def _press(dp, bot, data: str, uid: int = 1) -> None:
     await dp.feed_update(bot, Update(update_id=next(_ids), callback_query=cb))
 
 
-async def test_menu_opens_and_every_button_works(db):
+async def test_menu_points_to_app_and_old_buttons_still_answer(db):
     from app.routers import menu
 
     bot, dp, session = build(db)
     await onboard(dp, bot)
     await send(dp, bot, "/menu")
-    await send(dp, bot, menu.MENU_BUTTON)
-    assert any("Меню" in t for t in session.texts)
-
-    # каждая кнопка каждого экрана должна вести в живой обработчик
-    actions = {b.callback_data for kb in (menu.main_kb(), menu.water_kb(), menu.more_kb())
-               for row in kb.inline_keyboard for b in row}
-    assert len(actions) >= 15
-    for data in sorted(actions):
+    await send(dp, bot, "/app")
+    await send(dp, bot, menu.MENU_BUTTON)                 # старая кнопка под полем ввода
+    assert any("риложени" in t for t in session.texts)
+    # кнопки старых меню не падают и ведут в приложение
+    for data in ("m:today", "m:week", "m:w:300", "m:craving", "m:more"):
+        session.texts.clear()
         await _press(dp, bot, data)
-
-
-async def test_menu_water_button_logs(db):
-    bot, dp, _ = build(db)
-    await onboard(dp, bot)
-    await _press(dp, bot, "m:w:300")
-    n = db.execute("SELECT COUNT(*) c FROM water_log").fetchone()["c"]
-    assert n == 1
+        assert any("риложени" in t for t in session.texts), data
+    assert db.execute("SELECT COUNT(*) c FROM water_log").fetchone()["c"] == 0   # вода из меню не пишется

@@ -86,7 +86,6 @@ const water = new Map(); // date -> [{id, ml}]
 const body = new Map(); // date -> {weight, sleep_min, score, steps, active_kcal}
 let products = [];
 let dishes = [];
-let chat = [];
 
 function makeMeal(date, type, tplIdx, withPhotos, time) {
   const tpl = TEMPLATES[type][tplIdx % TEMPLATES[type].length];
@@ -148,13 +147,6 @@ function init() {
     { id: 1, name: 'Тарелка 26 см', kind: 'plate', diameter_cm: 26, depth_cm: 2, volume_ml: null, photo_url: null, is_default: false },
     { id: 2, name: 'Глубокая тарелка', kind: 'deep_plate', diameter_cm: 20, depth_cm: 5, volume_ml: 500, photo_url: PHOTOS[4], is_default: true },
     { id: 3, name: 'Любимая кружка', kind: 'mug', diameter_cm: 8.5, depth_cm: 9.5, volume_ml: 300, photo_url: null, is_default: false },
-  ];
-  const now = Date.now();
-  chat = [
-    { id: 1, role: 'user', text: 'Сколько мне ещё можно съесть сегодня?', created_at: new Date(now - 3600e3 * 5).toISOString() },
-    { id: 2, role: 'assistant', text: 'Сегодня норма **1650 ккал**. Пока съедено около 900, значит остаётся примерно **750 ккал**.\nДля ужина хорошо подойдёт рыба с овощами: белка достаточно, а жиров немного.', created_at: new Date(now - 3600e3 * 5 + 6e3).toISOString() },
-    { id: 3, role: 'user', text: 'Как идёт вес за неделю?', created_at: new Date(now - 3600e3 * 4).toISOString() },
-    { id: 4, role: 'assistant', text: 'Тренд веса за 7 дней: **−0,4 кг**. Это спокойный темп, держите нынешний дефицит.', created_at: new Date(now - 3600e3 * 4 + 5e3).toISOString() },
   ];
   void T;
 }
@@ -338,55 +330,24 @@ const routes = [
     return { ok: true };
   }],
   ['POST', /^\/activity$/, (m, q, b) => { const bd = body.get(b.date || todayISO()); if (bd) { if (b.steps) bd.steps = b.steps; if (b.active_kcal) bd.active_kcal = b.active_kcal; } return { ok: true }; }],
-  ['GET', /^\/chat$/, () => ({ messages: chat })],
-  ['POST', /^\/chat$/, async (m, q, b) => {
-    await sleep(1300);
-    const text = (b.text || '').trim();
-    const now = () => new Date().toISOString();
-    const msgs = text ? [{ id: nid(), role: 'user', text, created_at: now() }] : [];
-    let logged = null;
-    let reply;
-    let actions = [];
-    if (b.mode === 'talk' || /тянет|срываюсь|переел|хочу (есть|сладкого)/i.test(text)) {
-      // как в боте: эпизод тяги → вопрос и кнопки причины (talk — без кнопок)
-      if (b.mode === 'talk') reply = 'Я здесь 🤍 Рассказывай, что на душе: про еду, про день, про что угодно.';
-      else {
-        reply = '🌙 Я рядом. Тяга к еде — это нормально, а не провал и не слабость. Что ближе всего к тому, что происходит сейчас?';
-        actions = [['🥣 Голод', 'hunger'], ['😩 Эмоции', 'emotion'], ['🔁 Привычка', 'habit'], ['😴 Устала', 'tired'], ['😔 Уже переела', 'overate']]
-          .map(([label, c]) => ({ id: `cr:cat:1:${c}`, label })).concat([{ id: 'cr:wait:1', label: '⏱ 15 мин' }]);
-      }
-    } else if (b.meal_id) {
-      reply = 'В этом приёме неплохо с белком. Если хочется сытнее, добавьте овощей или стакан воды: без строгостей.';
-    } else if (/съел|ела|ел |выпил|на (обед|ужин|завтрак)|\d+\s?г\b/i.test(text)) {
-      logged = makeMeal(todayISO(), guessType(nowHHMM()), Math.floor(rnd() * 3), false, nowHHMM());
-      logged.source = 'text';
-      reply = `Записал приём: **${logged.kcal} ккал**, Б ${logged.protein} / Ж ${logged.fat} / У ${logged.carbs}.\nПоправить граммы можно в карточке.`;
-    } else if (/спал|шагов/i.test(text)) reply = '😴 Записал сон: 7 ч 00 мин. Среднее за 7 дней: 6 ч 45 мин (5 ноч.)';
-    else if (/вес|похуд/i.test(text)) reply = 'Тренд веса: **82,9 → 82,4 кг** за неделю. Идёте ровно, резких скачков нет.';
-    else reply = 'Могу посчитать остаток калорий, разобрать неделю или записать еду. Напишите, например: «съел два яйца и тост».\n\n<b>HTML</b> здесь показывается как обычный текст.';
-    msgs.push({ id: nid(), role: 'assistant', text: reply, created_at: now() });
-    chat.push(...msgs);
-    return { messages: msgs, logged_meal: logged, actions };
-  }],
-  ['POST', /^\/chat\/action$/, async (m, q, b) => {
-    await sleep(700);
-    const [, kind, ev, arg] = String(b.id || '').split(':');
-    const texts = {
-      cat: 'Тогда это, скорее всего, настоящий голод, и с ним не нужно воевать. Поешь спокойно, на тарелку и сидя, лучше с белком.',
-      wait: '⏳ Договорились: 15 минут. Пока: стакан воды, выйди из кухни, займи руки. Я напишу через это время.',
-      out: '💪 Ты справилась. Без борьбы на износ: ты просто прошла этот отрезок.',
-      deb: 'Давай коротко, без вины. Что поможет тебе в следующий раз в такой ситуации?',
-      less: '📝 Записал: «Не буду пропускать обед». Один эпизод не отменяет всего, что ты уже сделала.',
-    };
-    let actions = [];
-    if (kind === 'cat') actions = [{ id: `cr:out:${ev}:resisted`, label: '✅ Справилась' }, { id: `cr:out:${ev}:ate_planned`, label: '🍽 Поела спокойно' }, { id: `cr:out:${ev}:overate`, label: '😔 Переела' }, { id: `cr:wait:${ev}`, label: '⏱ +15 мин' }];
-    else if (kind === 'out') actions = [{ id: `cr:deb:${ev}`, label: '📝 Короткий разбор (1 минута)' }];
-    else if (kind === 'deb') actions = [{ id: `cr:less:${ev}:0`, label: 'Не буду пропускать обед' }, { id: `cr:less:${ev}:own`, label: '✍️ Напишу своё' }];
-    void arg;
-    const a = { id: nid(), role: 'assistant', text: texts[kind] || 'Хорошо.', created_at: new Date().toISOString() };
-    chat.push(a);
-    return { messages: [a], logged_meal: null, actions };
-  }],
+  ['GET', /^\/analysis$/, (m, q) => ({
+    date: q.date || todayISO(),
+    closed: true,
+    headline: 'В целом неплохо',
+    incomplete: false,
+    rows: [
+      { label: 'Калории', value: '1 580 ккал', goal: '1 650', status: 'good' },
+      { label: 'Белок', value: '92 г', goal: '120 г', status: 'ok' },
+      { label: 'Вода', value: '900 мл', goal: '2 000 мл', status: 'bad' },
+      { label: 'Шаги', value: '9 400', goal: '8 000', status: 'good' },
+      { label: 'Сон', value: '6 ч 40 мин', goal: '7+ ч', status: 'ok' },
+    ],
+    good: ['Калории в цели', 'Шаги в плане (9 400)'],
+    tips: [
+      { icon: '💧', title: 'Вода', text: 'Воды мало: 900 из 2 000 мл. Поставьте стакан на виду и пейте по паре глотков каждый час. Часто «голод» вечером оказывается жаждой и усталостью.' },
+      { icon: '🥩', title: 'Белок', text: 'Белок держит сытость и бережёт мышцы. Сегодня 92 из 120 г: добавьте ещё около 28 г, например 150 г творога.' },
+    ],
+  })],
 ];
 
 export async function mockRequest(method, path, query, body) {

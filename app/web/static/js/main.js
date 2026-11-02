@@ -7,7 +7,7 @@ const R = (re, load, opts = {}) => ({ re: new RegExp('^' + re + '$'), load, ...o
 const routes = [
   R('/today', () => import('./screens/today.js'), { tab: 'today' }),
   R('/stats', () => import('./screens/stats.js'), { tab: 'stats' }),
-  R('/chat', () => import('./screens/chat.js'), { tab: 'chat' }),
+  R('/analysis', () => import('./screens/analysis.js'), { tab: 'analysis' }),
   R('/menu', () => import('./screens/menu.js'), { tab: 'menu' }),
   R('/meal/(\\d+)', () => import('./screens/meal.js'), { keys: ['id'], parent: '/today' }),
   R('/add/meal', () => import('./screens/add_meal.js'), { parent: '/today' }),
@@ -25,7 +25,7 @@ const TABS = [
   ['today', 'Сегодня', 'today', '/today'],
   ['stats', 'Статистика', 'stats', '/stats'],
   ['add', 'Добавить', 'plus', null],
-  ['chat', 'Чат', 'chat', '/chat'],
+  ['analysis', 'Анализ', 'analysis', '/analysis'],
   ['menu', 'Меню', 'menu', '/menu'],
 ];
 

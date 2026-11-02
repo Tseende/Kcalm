@@ -79,7 +79,7 @@ async def test_craving_followup_sent_once(db):
     bot = FakeBot()
     await scheduler.dispatch_craving_followups(db, bot)
     await scheduler.dispatch_craving_followups(db, bot)
-    assert len(bot.sent) == 1 and "15 минут" in bot.sent[0][1]
+    assert len(bot.sent) == 1 and "10 минут" in bot.sent[0][1]
 
 
 @pytest.mark.asyncio

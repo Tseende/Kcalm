@@ -30,7 +30,7 @@ from app.services import screens as screens_svc
 from app.services import water as watersvc
 from app.storage import photos, repo
 from app.timeutils import validate_hhmm
-from app.web import chat as chatmod
+from app.web import analysis
 from app.web import queries as q
 from app.web.auth import InitDataError, validate_init_data
 from app.web.serializers import dish_json, meal_json, product_json, targets_json
@@ -400,7 +400,7 @@ async def api_meal_create(request: web.Request) -> web.Response:
         raise bad(f"Не больше {MAX_PHOTOS} фото в одном приёме.", "too_many_photos")
     if not photos and not text:
         raise bad("Нужно фото или текстовое описание.", "empty_meal")
-    if text and len(text) > chatmod.MAX_TEXT:
+    if text and len(text) > MAX_TEXT:
         raise bad("Слишком длинное описание.", "text_too_long")
     require_images(photos)
     local_dt = parse_when(user, form.value("date"), form.value("time"))
@@ -474,7 +474,7 @@ async def api_meal_refine(request: web.Request) -> web.Response:
     comment = str((await read_json(request)).get("comment") or "").strip()
     if not comment:
         raise bad("Напишите, что уточнить.", "empty_comment")
-    if len(comment) > chatmod.MAX_TEXT:
+    if len(comment) > MAX_TEXT:
         raise bad("Слишком длинное уточнение.", "text_too_long")
     old = [dict(r) for r in repo.get_meal_items(db, meal["id"])]
     try:
@@ -833,60 +833,14 @@ async def api_activity(request: web.Request) -> web.Response:
     return ok({"ok": True})
 
 
-# ------------------------------------------------------------------ чат и выгрузка
+# ------------------------------------------------------------------ анализ дня и выгрузка
 
-@routes.get("/api/chat")
-async def api_chat_history(request: web.Request) -> web.Response:
+@routes.get("/api/analysis")
+async def api_analysis(request: web.Request) -> web.Response:
     db, user, _ = ctx(request)
-    raw = request.query.get("limit", "50")
-    limit = int(raw) if raw.isdigit() else 50
-    return ok({"messages": q.chat_history(db, user["id"], max(1, min(limit, 200)))})
-
-
-def _chat_payload(db, user, messages: list[dict], reply: chatmod.Reply) -> web.Response:
-    meal = q.live_meal(db, user["id"], reply.meal_id) if reply.meal_id else None
-    return ok({"messages": messages, "logged_meal": meal_json(db, meal) if meal else None,
-               "actions": reply.actions})
-
-
-@routes.post("/api/chat")
-async def api_chat_post(request: web.Request) -> web.Response:
-    db, user, _ = ctx(request)
-    data = await read_json(request)
-    text = str(data.get("text") or "").strip()
-    mode = data.get("mode")
-    if mode is not None and mode not in chatmod.TALK_MODES:
-        raise bad("mode: talk или craving.", "bad_mode")
-    if not text and not mode:
-        raise bad("Пустое сообщение.", "empty_text")
-    if len(text) > chatmod.MAX_TEXT:
-        raise bad(f"Не длиннее {chatmod.MAX_TEXT} символов.", "text_too_long")
-    meal_id = data.get("meal_id")
-    if meal_id is not None:
-        if isinstance(meal_id, bool) or not isinstance(meal_id, int):
-            raise bad("meal_id: целое число.", "bad_meal_id")
-        if q.live_meal(db, user["id"], meal_id) is None:
-            raise ApiError(404, "not_found", "Приём не найден.")
-    history = q.chat_recent(db, user["id"], 10)       # до добавления текущего сообщения
-    reply = await chatmod.handle(db, user, text, meal_id=meal_id, history=history, mode=mode)
-    messages = [q.add_chat_message(db, user["id"], "user", text)] if text else []
-    messages.append(q.add_chat_message(db, user["id"], "assistant", reply.text, reply.meal_id))
-    return _chat_payload(db, user, messages, reply)
-
-
-@routes.post("/api/chat/action")
-async def api_chat_action(request: web.Request) -> web.Response:
-    """Нажатие быстрой кнопки из `actions` (то же, что callback у кнопки в боте)."""
-    db, user, _ = ctx(request)
-    action_id = str((await read_json(request)).get("id") or "").strip()
-    if not action_id:
-        raise bad("Нужен id действия.", "bad_action")
-    try:
-        reply = await chatmod.perform_action(db, user, action_id)
-    except chatmod.ChatActionError as e:
-        raise ApiError(e.status, e.code, str(e)) from None
-    return _chat_payload(db, user, [q.add_chat_message(db, user["id"], "assistant", reply.text)],
-                         reply)
+    now = now_local(user)
+    raw = request.query.get("date")
+    return ok(analysis.build(db, user, parse_date(raw) if raw else now.date(), now))
 
 
 @routes.get("/api/export.csv")
@@ -929,6 +883,7 @@ async def app_file(request: web.Request) -> web.StreamResponse:
 
 # ------------------------------------------------------------------ сборка и запуск
 
+MAX_TEXT = 2000                                    # длина текста и комментария к приёму
 WEBHOOK_PATH = "/tg/webhook"
 
 

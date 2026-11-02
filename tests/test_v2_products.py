@@ -520,8 +520,8 @@ async def test_products_command_lists_and_deletes(db):
     await send(dp, bot, "/products")
     text = session.texts[-1]
     assert "Творог 5%" in text and "Йогурт" in text and "121 ккал" in text
-    await send(dp, bot, "мои продукты")                                 # то же словами
-    assert "Творог 5%" in session.texts[-1]
+    await send(dp, bot, "мои продукты")                                 # словами: список в приложении
+    assert "риложени" in session.texts[-1]
     await _press(dp, bot, f"prod_del:{a}")
     assert [r["id"] for r in repo.list_products(db, uid)] == [b]
     await _press(dp, bot, f"prod_del:{a}")                              # повтор безопасен
@@ -530,13 +530,8 @@ async def test_products_command_lists_and_deletes(db):
 
 @pytest.mark.asyncio
 async def test_products_in_menu_commands_and_help(db):
-    from app.bot import BOT_COMMANDS
-    from app.routers import menu
     from app.services import assistant
-    assert "products" in [c.command for c in BOT_COMMANDS]
-    data = [b.callback_data for row in menu.more_kb().inline_keyboard for b in row]
-    assert any(d and "products" in d for d in data)
-    assert "/products" in assistant.HELP_TEXT
+    assert "/app" in assistant.HELP_TEXT
 
 
 @pytest.mark.asyncio

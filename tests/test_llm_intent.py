@@ -81,7 +81,7 @@ async def test_week_by_model_intent(db, monkeypatch):
     bot, dp, session, uid = await _bot(db, monkeypatch, _fake_parse("week"))
     session.texts.clear()
     await send(dp, bot, "ну чё там по итогам семи дней")
-    assert any("Неделя" in t or "недел" in t.lower() for t in session.texts), session.texts
+    assert any("риложени" in t for t in session.texts), session.texts      # отчёт теперь в Mini App
     assert db.execute("SELECT COUNT(*) c FROM meals WHERE user_id=?", (uid,)).fetchone()["c"] == 0
 
 

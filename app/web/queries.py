@@ -1,7 +1,6 @@
-"""SQL веб-API: чтение для экранов «День» и «Статистика», выгрузка CSV, история чата.
+"""SQL веб-API: чтение для экранов «День» и «Статистика», выгрузка CSV.
 
-Всё, что уже есть в repo, берём оттуда; здесь только то, чего там нет. Единственная запись —
-таблица chat_messages (миграция 018).
+Всё, что уже есть в repo, берём оттуда; здесь только то, чего там нет.
 """
 from __future__ import annotations
 
@@ -209,31 +208,3 @@ def export_csv(db: sqlite3.Connection, user_id: int, kind: str) -> str:
         raise ValueError(kind)
     return buf.getvalue()
 
-
-# ------------------------------------------------------------------ чат
-
-def add_chat_message(db: sqlite3.Connection, user_id: int, role: str, text: str,
-                     meal_id: int | None = None) -> dict:
-    cur = db.execute("INSERT INTO chat_messages (user_id, role, text, meal_id) VALUES (?,?,?,?)",
-                     (user_id, role, text, meal_id))
-    db.commit()
-    row = db.execute("SELECT * FROM chat_messages WHERE id=?", (cur.lastrowid,)).fetchone()
-    return chat_json(row)
-
-
-def chat_history(db: sqlite3.Connection, user_id: int, limit: int) -> list[dict]:
-    rows = db.execute("SELECT * FROM chat_messages WHERE user_id=? ORDER BY id DESC LIMIT ?",
-                      (user_id, limit)).fetchall()
-    return [chat_json(r) for r in reversed(rows)]
-
-
-def chat_recent(db: sqlite3.Connection, user_id: int, limit: int = 10) -> list[dict]:
-    """Последние реплики для памяти ассистента: [{role, text}], от старых к новым."""
-    rows = db.execute("SELECT role, text FROM chat_messages WHERE user_id=? ORDER BY id DESC LIMIT ?",
-                      (user_id, limit)).fetchall()
-    return [{"role": r["role"], "text": r["text"]} for r in reversed(rows)]
-
-
-def chat_json(row: sqlite3.Row) -> dict:
-    return {"id": row["id"], "role": row["role"], "text": row["text"],
-            "created_at": row["created_at"].replace(" ", "T") + "Z"}

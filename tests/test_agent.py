@@ -105,7 +105,7 @@ async def test_commands_work_without_slash(db, monkeypatch):
 
     session.texts.clear()
     await send(dp, bot, "что я сегодня ел?")
-    assert any("Сегодня" in t and "ккал" in t for t in session.texts + session.rich)
+    assert any("риложени" in t for t in session.texts)               # отчёты теперь в Mini App
 
     await send(dp, bot, "напомни взвеситься в 6:45")
     assert repo.due_reminders(db, uid, "weigh")["local_time"] == "06:45"
@@ -225,7 +225,7 @@ def test_command_menu_is_valid():
     for c in BOT_COMMANDS:
         assert c.command == c.command.lower() and 1 <= len(c.command) <= 32
         assert 3 <= len(c.description) <= 256
-    for must in ("today", "week", "weight", "water", "craving", "plan", "weighin", "care", "undo"):
+    for must in ("app", "talk", "undo"):
         assert must in names
 
 

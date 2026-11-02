@@ -31,7 +31,7 @@ def _buttons(kb):
 
 def test_menu_has_no_webapp_button_without_url(restore_config):
     config_mod.set_config(_cfg())
-    assert all(b.web_app is None for b in _buttons(menu.main_kb()))
+    assert menu.main_kb() is None
 
 
 def test_menu_has_webapp_button_with_url(restore_config):
@@ -39,7 +39,7 @@ def test_menu_has_webapp_button_with_url(restore_config):
     web = [b for b in _buttons(menu.main_kb()) if b.web_app is not None]
     assert len(web) == 1
     assert web[0].web_app.url == "https://example.org/app/"
-    assert web[0].text == "📱 Приложение"
+    assert web[0].text == "📱 Открыть приложение"
 
 
 @pytest.mark.asyncio

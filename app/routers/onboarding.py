@@ -131,7 +131,7 @@ async def start(msg: Message, state: FSMContext, db: sqlite3.Connection) -> None
         await state.clear()
         await msg.answer(
             "Профиль уже заполнен. Кидай еду текстом/фото/голосом, скриншоты "
-            "Mi Fitness и PICOOC — сделаю остальное.\nВсе функции: /menu",
+            "Mi Fitness и PICOOC — сделаю остальное.\nОтчёты и настройки в приложении: /app",
             reply_markup=menu.bottom_kb(),
         )
         return
@@ -167,7 +167,7 @@ async def onboard_answer(msg: Message, state: FSMContext, db: sqlite3.Connection
                 "• еда — просто текстом («съел две котлеты и гречку»), фото или голосовым;\n"
                 "• скриншоты Mi Fitness и PICOOC — кидай как есть, распознаю;\n"
                 "• вечером пришлю итог дня, по воскресеньям — недельный разбор.\n\n"
-                "• всё остальное — кнопка «📋 Меню» внизу (или /menu).\n\n"
+                "• отчёты, графики и настройки — в приложении: /app.\n\n"
                 f"Помни: это не медицинский сервис, оценки приблизительные. {HEALTH_NOTE} {CARE_NOTE}",
                 reply_markup=menu.bottom_kb(),
             )
