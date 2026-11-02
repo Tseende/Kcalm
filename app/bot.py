@@ -22,6 +22,7 @@ from app.web.server import WEBHOOK_PATH, start_web
 BOT_COMMANDS = [
     BotCommand(command="app", description="Приложение: отчёты и настройки"),
     BotCommand(command="talk", description="Поговорить, если тянет переесть"),
+    BotCommand(command="often", description="Частые блюда: записать в один клик"),
     BotCommand(command="undo", description="Отменить последнюю запись"),
 ]
 

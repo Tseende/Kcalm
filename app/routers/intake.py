@@ -39,8 +39,9 @@ router = Router(name="intake")
 log = logging.getLogger(__name__)
 
 
-def _meal_kb(meal_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[
+def _meal_kb(meal_id: int, extra: list | None = None) -> InlineKeyboardMarkup:
+    """extra — быстрые ответы на вопрос бота (строки кнопок), идут над основными кнопками."""
+    return InlineKeyboardMarkup(inline_keyboard=(extra or []) + [[
         InlineKeyboardButton(text="✅ Верно", callback_data=f"meal_ok:{meal_id}"),
         InlineKeyboardButton(text="✏️ Изменить", callback_data=f"meal_edit:{meal_id}"),
         InlineKeyboardButton(text="↩️ Отменить", callback_data=f"meal_undo:{meal_id}"),
@@ -58,6 +59,48 @@ _HIDDEN_FAT_WORDS = ("салат", "жарен", "котлет", "плов", "п
                      "омлет", "яичниц", "суп", "борщ", "запеканк", "сырник", "блин", "оладь",
                      "шашлык", "рагу", "тушен", "пицц", "бургер", "шаурм", "ролл", "bowl",
                      "бутерброд", "заправк", "соус", "fried")
+
+
+# быстрые ответы про скрытый жир: текст уходит в уточнение записи, как если бы его написали руками
+FAT_ANSWERS = (
+    ("🫗 Масло 1 ст. л.", "готовили на масле, примерно 1 столовая ложка (около 10 г)"),
+    ("🥄 Соус 2 ст. л.", "сверху соус или майонез, примерно 2 столовые ложки"),
+    ("🚫 Без масла и соуса", None),
+)
+OPTIONS_WAIT_MIN = 180        # сколько живут кнопки-ответы под карточкой
+
+PHOTO_TIP = ("<i>📸 Для точности: снимайте сверху под углом около 45°, чтобы вся тарелка и "
+             "её края были в кадре. Если есть вилка или ладонь, пусть попадут рядом: это масштаб.</i>")
+
+
+def _quick_rows(db: sqlite3.Connection, uid: int, meal_id: int, u) -> list:
+    """Кнопки под карточкой: варианты ответа на вопрос модели или быстрые ответы про скрытый жир."""
+    if u is None:
+        return []
+    if u.clarification_question:
+        opts = list(u.clarification_options)[:3]
+        if not opts:
+            return []
+        repo.save_pending_input(db, uid, "meal_options", {
+            "meal_id": meal_id, "question": u.clarification_question, "options": opts})
+        return [[InlineKeyboardButton(text=o, callback_data=f"meal_ans:{meal_id}:{i}")]
+                for i, o in enumerate(opts)]
+    if _may_hide_fat(u):
+        btns = [InlineKeyboardButton(text=label, callback_data=f"meal_fat:{meal_id}:{k}")
+                for k, (label, _t) in enumerate(FAT_ANSWERS)]
+        return [btns[:2], btns[2:]]
+    return []
+
+
+def _wants_photo_tip(db: sqlite3.Connection, uid: int, u, source: str) -> bool:
+    """Подсказка про ракурс: на самое первое фото и когда модель не уверена."""
+    if source not in ("photo", "combo"):
+        return False
+    if u.overall_confidence < 0.6:
+        return True
+    n = db.execute("SELECT COUNT(*) FROM meals WHERE user_id=? AND source IN ('photo','combo')",
+                   (uid,)).fetchone()[0]
+    return n <= 1
 
 
 def _may_hide_fat(u) -> bool:
@@ -867,7 +910,9 @@ async def _save_and_reply(msg: Message, db: sqlite3.Connection, user,
     meal_id = saved.meal_id
     card = _build_card(db, user, saved.local_date, saved.local_time, saved.meal_type,
                        saved.calc, u, meal_id=meal_id)
-    await rich.edit(status, card, reply_markup=_meal_kb(meal_id))
+    if _wants_photo_tip(db, user["id"], u, source):
+        card.text(PHOTO_TIP)
+    await rich.edit(status, card, reply_markup=_meal_kb(meal_id, _quick_rows(db, user["id"], meal_id, u)))
     if source in ("text", "voice"):          # фото сообщает разговору о тяге само, после карточки
         await _food_logged_hook(msg, db, user, meal_id)
     return meal_id
@@ -1045,6 +1090,97 @@ async def cb_ok(cb: CallbackQuery, db: sqlite3.Connection) -> None:
             repo.add_alias(db, user["id"], it["food_ref_id"], matching.normalize(it["name_ru"]))
     await cb.message.edit_reply_markup(reply_markup=None)
     await cb.answer("Записал 👍")
+
+
+def _options_for(db: sqlite3.Connection, uid: int, meal_id: int) -> dict | None:
+    for row in db.execute(
+            """SELECT payload_json FROM pending_inputs WHERE user_id=? AND kind='meal_options'
+               AND created_at >= datetime('now', ?) ORDER BY id DESC LIMIT 20""",
+            (uid, f"-{OPTIONS_WAIT_MIN} minutes")):
+        payload = json.loads(row["payload_json"])
+        if payload.get("meal_id") == meal_id:
+            return payload
+    return None
+
+
+async def _quick_refine(cb: CallbackQuery, db: sqlite3.Connection, user, meal_id: int,
+                        comment: str) -> None:
+    await cb.answer("Учитываю…")
+    await _refine_meal(cb.message, db, user, meal_id, comment,
+                       cb.message.chat.id, cb.message.message_id)
+
+
+@router.callback_query(F.data.startswith("meal_ans:"))
+async def cb_meal_answer(cb: CallbackQuery, db: sqlite3.Connection) -> None:
+    """Кнопка-ответ на уточняющий вопрос модели: правим запись так, будто ответ написали руками."""
+    _, mid, idx = cb.data.split(":")
+    meal_id = int(mid)
+    user = _callback_user(cb, db)
+    meal = repo.get_meal(db, user["id"], meal_id) if user else None
+    if not meal or meal["deleted_at"]:
+        await cb.answer("Эта запись вам недоступна", show_alert=True)
+        return
+    payload = _options_for(db, user["id"], meal_id)
+    opts = payload["options"] if payload else []
+    if not payload or int(idx) >= len(opts):
+        await cb.answer("Варианты устарели, нажмите «Уточнить»", show_alert=True)
+        return
+    await _quick_refine(cb, db, user, meal_id, f"{payload['question']} Ответ: {opts[int(idx)]}.")
+
+
+@router.callback_query(F.data.startswith("meal_fat:"))
+async def cb_meal_fat(cb: CallbackQuery, db: sqlite3.Connection) -> None:
+    """Быстрый ответ про масло и соус под карточкой."""
+    _, mid, k = cb.data.split(":")
+    meal_id = int(mid)
+    user = _callback_user(cb, db)
+    meal = repo.get_meal(db, user["id"], meal_id) if user else None
+    if not meal or meal["deleted_at"] or int(k) >= len(FAT_ANSWERS):
+        await cb.answer("Эта запись вам недоступна", show_alert=True)
+        return
+    text = FAT_ANSWERS[int(k)][1]
+    if text is None:
+        await cb.message.edit_reply_markup(reply_markup=_meal_kb(meal_id))
+        await cb.answer("Ок, оставляю как есть")
+        return
+    await _quick_refine(cb, db, user, meal_id, text)
+
+
+@router.message(Command("often"))
+async def cmd_often(msg: Message, db: sqlite3.Connection) -> None:
+    """Частые блюда одной кнопкой: записать «как обычно» без фото и текста."""
+    user = _user_or_ask(msg, db)
+    if not user:
+        await msg.answer("Сначала настрой профиль: /start")
+        return
+    often = repo.frequent_meals(db, user["id"],
+                                today=foodsvc.local_now(user["tz"]).strftime("%Y-%m-%d"))
+    if not often:
+        await msg.answer("Пока нечего предложить: частые блюда появятся, когда вы запишете "
+                         "несколько приёмов пищи.")
+        return
+    rows = []
+    for o in often:
+        label = ", ".join(o["names"])
+        label = (label[:34] + "…") if len(label) > 35 else label
+        tail = f" · {o['kcal']} ккал" + (f" ×{o['count']}" if o["count"] > 1 else "")
+        rows.append([InlineKeyboardButton(text=label + tail, callback_data=f"often:{o['meal_id']}")])
+    await msg.answer("🔁 Ваши частые блюда. Нажмите, чтобы записать так же, как раньше, на сейчас.",
+                     reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+
+
+@router.callback_query(F.data.startswith("often:"))
+async def cb_often(cb: CallbackQuery, db: sqlite3.Connection) -> None:
+    user = _callback_user(cb, db)
+    if not user:
+        await cb.answer("Нет профиля", show_alert=True)
+        return
+    meal_id = meals_svc.repeat_meal(db, user, int(cb.data.split(":")[1]))
+    if not meal_id:
+        await cb.answer("Такой записи уже нет", show_alert=True)
+        return
+    await cb.answer("Записал 👍")
+    await rich.answer(cb.message, _render_card(db, user, meal_id), reply_markup=_meal_kb(meal_id))
 
 
 @router.callback_query(F.data.startswith("meal_undo:"))

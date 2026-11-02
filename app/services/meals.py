@@ -76,7 +76,9 @@ def merge_understandings(parts: list):
     for u in parts[1:]:
         merged.items += u.items[:max(0, foodsvc.MAX_ITEMS - len(merged.items))]
         merged.assumptions += [a for a in u.assumptions if a not in merged.assumptions]
-        merged.clarification_question = merged.clarification_question or u.clarification_question
+        if not merged.clarification_question and u.clarification_question:
+            merged.clarification_question = u.clarification_question
+            merged.clarification_options = list(u.clarification_options)
     merged.overall_confidence = min(u.overall_confidence for u in parts)
     return merged
 
@@ -164,6 +166,15 @@ async def save_understanding(db: sqlite3.Connection, user, u, *, text: str | Non
     )
     touch_foods(db, uid, u, calc)
     return SavedMeal(meal_id, calc, local_date, local_time, meal_type)
+
+
+def repeat_meal(db: sqlite3.Connection, user, meal_id: int) -> int | None:
+    """«Как обычно»: повторить частое блюдо на текущее время. None — образца нет."""
+    now_local = foodsvc.local_now(user["tz"])
+    local_date, local_time = now_local.strftime("%Y-%m-%d"), now_local.strftime("%H:%M")
+    return repo.repeat_meal(
+        db, user["id"], meal_id, utc_of(user["tz"], local_date, local_time), local_date,
+        local_time, foodsvc.guess_meal_type(None, local_time, None))
 
 
 def touch_foods(db: sqlite3.Connection, uid: int, u, calc) -> None:

@@ -123,7 +123,20 @@ def understanding_from_json(data: dict, dish_photos: set[int] | None = None) -> 
         confidence=conf_lit,
         overall_confidence=max(0.0, min(1.0, overall)),
         clarification_question=nc.get("question") if isinstance(nc, dict) else None,
+        clarification_options=_clarify_options(nc),
     )
+
+
+def _clarify_options(nc) -> list[str]:
+    """Варианты ответа на уточняющий вопрос: до трёх коротких непустых строк (под кнопки)."""
+    if not isinstance(nc, dict) or not nc.get("question"):
+        return []
+    out: list[str] = []
+    for o in nc.get("options") or []:
+        o = str(o).strip()
+        if o and len(o) <= 40 and o not in out:
+            out.append(o)
+    return out[:3]
 
 
 _TEXT_CACHE: "OrderedDict[str, dict]" = OrderedDict()

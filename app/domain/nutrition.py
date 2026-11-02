@@ -47,6 +47,7 @@ class MealUnderstanding(BaseModel):
     confidence: Confidence = "medium"
     overall_confidence: float = Field(0.5, ge=0, le=1)
     clarification_question: str | None = None
+    clarification_options: list[str] = Field(default_factory=list, max_length=3)
     # что хочет человек: food или имя команды (определяет та же модель, что разбирает еду)
     intent: str = "food"
     intent_arg: str = ""

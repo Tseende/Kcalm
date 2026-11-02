@@ -295,6 +295,58 @@ def save_meal(conn: sqlite3.Connection, user_id: int, eaten_utc: str, local_date
     return meal_id
 
 
+def frequent_meals(conn: sqlite3.Connection, user_id: int, limit: int = 6,
+                   days: int = 60, today: str | None = None) -> list[dict]:
+    """Блюда, которые человек ест чаще всего: записи с одним составом считаются одним блюдом.
+
+    Возвращает от частого к редкому (при равенстве — свежее первым):
+    {meal_id (последняя запись), count, kcal, names}. Напитки без калорий не в счёт."""
+    rows = conn.execute(
+        """SELECT id, kcal_total FROM meals WHERE user_id=? AND deleted_at IS NULL
+           AND kcal_total>=50 AND local_date >= date(COALESCE(?, 'now'), ?)
+           ORDER BY id DESC LIMIT 150""",
+        (user_id, today, f"-{int(days)} days")).fetchall()
+    groups: dict[str, dict] = {}
+    for r in rows:
+        names = [i["name_ru"].strip() for i in get_meal_items(conn, r["id"])]
+        if not names:
+            continue
+        sig = "|".join(sorted(n.lower() for n in names))
+        g = groups.get(sig)
+        if g is None:
+            groups[sig] = {"meal_id": r["id"], "count": 1, "kcal": r["kcal_total"],
+                           "names": names, "order": len(groups)}
+        else:
+            g["count"] += 1
+    ranked = sorted(groups.values(), key=lambda g: (-g["count"], g["order"]))
+    return [{k: v for k, v in g.items() if k != "order"} for g in ranked[:limit]]
+
+
+def repeat_meal(conn: sqlite3.Connection, user_id: int, meal_id: int, eaten_utc: str,
+                local_date: str, local_time: str, meal_type: str) -> int | None:
+    """Записать ещё раз такой же приём пищи (состав и граммы как в образце) на новое время."""
+    src = get_meal(conn, user_id, meal_id)
+    if not src or src["deleted_at"]:
+        return None
+    cur = conn.execute(
+        """INSERT INTO meals (user_id, eaten_at_utc, local_date, local_time, meal_type,
+           source, transcript, kcal_total, protein_g, fat_g, carbs_g,
+           kcal_low, kcal_high, confidence, method)
+           VALUES (?,?,?,?,?,'manual','повтор частого блюда',?,?,?,?,?,?,?,?)""",
+        (user_id, eaten_utc, local_date, local_time, meal_type, src["kcal_total"],
+         src["protein_g"], src["fat_g"], src["carbs_g"], src["kcal_low"], src["kcal_high"],
+         src["confidence"], src["method"]))
+    new_id = cur.lastrowid
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(meal_items)")
+            if r[1] not in ("id", "meal_id")]
+    names = ", ".join(cols)
+    conn.execute(f"INSERT INTO meal_items (meal_id, {names}) SELECT ?, {names} "
+                 "FROM meal_items WHERE meal_id=?", (new_id, meal_id))
+    sync_meal_water(conn, new_id)
+    conn.commit()
+    return new_id
+
+
 def add_meal_photos(conn: sqlite3.Connection, meal_id: int, paths: list[str],
                     dish_ids: list[int | None] | None = None, commit: bool = True) -> int:
     """Дописать фото приёма (порядок сохраняется). Уже записанные пути пропускаются,

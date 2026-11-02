@@ -230,3 +230,54 @@ async def test_tea_and_coffee_count_as_water_and_follow_meal(db):
 
     repo.soft_delete_meal(db, uid, meal_id)
     assert repo.day_water_ml(db, uid, "2026-05-19") == 0, "отмена записи не убрала воду"
+
+
+async def test_option_button_answers_clarification(db, monkeypatch):
+    bot, dp, session = build(db)
+    uid = await onboard(dp, bot)
+
+    async def fake_photo(b64, caption, user_id, conn, **kw):  # noqa: ANN001
+        u = _food("суп", 300)
+        u.clarification_question = "Какая порция?"
+        u.clarification_options = ["Маленькая", "Большая"]
+        return u
+
+    monkeypatch.setattr(foodsvc, "parse_photo", fake_photo)
+    await _feed(dp, bot, _photo(bot, "p1"))
+    meal = db.execute("SELECT * FROM meals").fetchone()
+    seen = {}
+
+    async def fake_refine(items, comment, user_id, conn):  # noqa: ANN001
+        seen["comment"] = comment
+        return _items(("суп", 450)), []
+
+    monkeypatch.setattr(foodsvc, "refine_meal", fake_refine)
+    await _press(dp, bot, f"meal_ans:{meal['id']}:1")
+    assert "Какая порция?" in seen["comment"] and "Большая" in seen["comment"]
+    assert db.execute("SELECT grams FROM meal_items WHERE meal_id=?",
+                      (meal["id"],)).fetchone()["grams"] == 450
+    await _press(dp, bot, f"meal_ans:{meal['id']}:7")          # такого варианта нет
+    await _drain()
+
+
+async def test_fat_quick_answer_and_often_repeat(db, monkeypatch):
+    bot, dp, session = build(db)
+    uid = await onboard(dp, bot)
+    meal = await _photo_meal(db, dp, bot, monkeypatch, name="жареная картошка")
+    seen = {}
+
+    async def fake_refine(items, comment, user_id, conn):  # noqa: ANN001
+        seen["comment"] = comment
+        return _items(("жареная картошка", 200), ("масло подсолнечное", 10)), []
+
+    monkeypatch.setattr(foodsvc, "refine_meal", fake_refine)
+    await _press(dp, bot, f"meal_fat:{meal['id']}:0")
+    assert "1 столовая ложка" in seen["comment"]
+    kcal = repo.get_meal(db, uid, meal["id"])["kcal_total"]
+
+    await send(dp, bot, "/often")
+    assert any("частые блюда" in t for t in session.texts), session.texts
+    await _press(dp, bot, f"often:{meal['id']}")
+    assert db.execute("SELECT COUNT(*) FROM meals").fetchone()[0] == 2
+    assert db.execute("SELECT kcal_total FROM meals ORDER BY id DESC").fetchone()[0] == kcal
+    await _drain()
