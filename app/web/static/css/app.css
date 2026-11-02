@@ -196,6 +196,19 @@ input::placeholder, textarea::placeholder { color: var(--c-hint); opacity: .8; }
 .toast.error { background: #c62d2d; }
 .toast.ok { background: #1f8a4c; }
 .toast.out { opacity: 0; transition: opacity .35s; }
+.toast.has-action { display: flex; align-items: center; gap: 14px; padding-right: 8px; pointer-events: auto; }
+.toast.has-action > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast.has-action { width: min(100%, 420px); }
+.toast-action { flex: none; min-height: 36px; padding: 0 12px; border-radius: 9px; border: 0; background: rgba(255, 255, 255, .16); color: #fff; font-weight: 600; }
+
+/* частые блюда */
+.often { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: -4px -16px -6px; padding: 4px 16px 10px; scroll-padding-inline: 16px; scroll-snap-type: x proximity; }
+.often::-webkit-scrollbar { display: none; }
+.often-chip { flex: none; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; min-height: 52px; max-width: 190px; padding: 6px 14px; border-radius: 14px; border: 1px solid var(--card-edge, var(--c-sep)); background: var(--c-card); box-shadow: var(--shadow-card); text-align: left; scroll-snap-align: start; transition: transform .12s; }
+.often-chip:active { transform: scale(.97); }
+.often-chip[disabled] { opacity: .5; }
+.often-name { font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.often-kcal { font-size: 12px; color: var(--c-hint); }
 @keyframes pop { from { transform: translateY(-10px); opacity: 0; } }
 .busy { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; background: rgba(0, 0, 0, .5); padding: 24px; }
 .busy-box { background: var(--c-card); border-radius: 16px; padding: 24px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; max-width: 320px; }
@@ -489,8 +502,8 @@ html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
 .an-row:last-child { border-bottom: 0; }
 .an-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c-hint); align-self: center; }
 .an-dot.good { background: #34a853; } .an-dot.ok { background: #f2b01e; } .an-dot.bad { background: #e5534b; }
-.an-val { font-weight: 600; }
-.an-goal { min-width: 64px; text-align: right; }
+.an-val { font-weight: 600; white-space: nowrap; }
+.an-goal { min-width: 64px; text-align: right; white-space: nowrap; }
 .an-list { padding: 6px 16px; }
 .an-item { display: flex; align-items: flex-start; gap: 10px; padding: 9px 0; }
 .an-mark { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; }
@@ -512,6 +525,14 @@ html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
 .wg-card.achieved { border: 1px solid color-mix(in srgb, #34a853 45%, transparent); }
 .wg-opt { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 8px 12px; border-radius: 14px; border: 1px solid var(--c-sep); background: var(--c-card); text-align: left; }
 .wg-sub { display: block; }
+.wg-strip { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 14px; text-align: left; }
+.wg-strip-main { display: grid; gap: 7px; min-width: 0; }
+.wg-strip .wg-dots { gap: 4px; }
+.wg-strip .wg-dot { height: 6px; }
+.wg-strip.achieved { border: 1px solid color-mix(in srgb, #34a853 45%, transparent); }
+.celebrate { animation: wg-pop .6s cubic-bezier(.2, 1.4, .4, 1); }
+@keyframes wg-pop { 0% { transform: scale(1); } 40% { transform: scale(1.035); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .celebrate { animation: none; } }
 .btn-link { justify-self: start; padding: 6px 0; min-height: 32px; color: var(--c-accent); background: none; border: 0; }
 
 /* напитки */

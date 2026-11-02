@@ -21,13 +21,18 @@ APP_TEXT = ("📱 Отчёты, графики и настройки тепер�
 NO_APP_TEXT = "Приложение пока не подключено."
 
 
-def main_kb() -> InlineKeyboardMarkup | None:
-    """Одна кнопка «Приложение». Без WEBAPP_URL кнопки нет."""
+def main_kb(screen: str | None = None,
+            text: str = "📱 Открыть приложение") -> InlineKeyboardMarkup | None:
+    """Одна кнопка «Приложение». Без WEBAPP_URL кнопки нет. `screen` открывает сразу нужный
+    экран (?screen=analysis): хеш адреса Telegram занимает своими данными запуска."""
     url = get_config().webapp_url
     if not url:
         return None
+    if screen:
+        base, sep, frag = url.partition("#")
+        url = base + ("&" if "?" in base else "?") + "screen=" + screen + sep + frag
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📱 Открыть приложение", web_app=WebAppInfo(url=url))]])
+        [InlineKeyboardButton(text=text, web_app=WebAppInfo(url=url))]])
 
 
 def bottom_kb() -> ReplyKeyboardRemove:

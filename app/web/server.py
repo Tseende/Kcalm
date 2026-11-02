@@ -469,6 +469,35 @@ async def api_meal_delete(request: web.Request) -> web.Response:
     return web.Response(status=204)
 
 
+def _short_title(names: list[str]) -> str:
+    """Подпись для кнопки частого блюда: первое название и сколько ещё в составе."""
+    first = names[0][:1].upper() + names[0][1:]
+    if len(first) > 28:
+        first = first[:27].rstrip() + "…"
+    return first if len(names) == 1 else f"{first} +{len(names) - 1}"
+
+
+@routes.get("/api/frequent")
+async def api_frequent(request: web.Request) -> web.Response:
+    """Частые блюда за 60 дней для записи в одно нажатие. Разовые блюда не предлагаем."""
+    db, user, _ = ctx(request)
+    today = now_local(user).strftime("%Y-%m-%d")
+    items = [{"meal_id": f["meal_id"], "title": _short_title(f["names"]),
+              "names": f["names"], "kcal": int(f["kcal"]), "count": f["count"]}
+             for f in repo.frequent_meals(db, user["id"], limit=8, today=today)
+             if f["count"] >= 2]
+    return ok({"items": items})
+
+
+@routes.post("/api/meals/{id}/repeat")
+async def api_meal_repeat(request: web.Request) -> web.Response:
+    db, user, _ = ctx(request)
+    new_id = meals_svc.repeat_meal(db, user, path_id(request))
+    if new_id is None:
+        raise ApiError(404, "not_found", "Приём пищи не найден.")
+    return ok({"id": new_id, "kcal": int(repo.get_meal(db, user["id"], new_id)["kcal_total"])}, 201)
+
+
 @routes.post("/api/meals/{id}/refine")
 async def api_meal_refine(request: web.Request) -> web.Response:
     """Уточнение рассказом («жарил на масле»): правим состав, как кнопка «Уточнить» в боте."""

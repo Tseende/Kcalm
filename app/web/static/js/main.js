@@ -161,6 +161,15 @@ async function boot() {
   }
   if (isMock()) mockBadge();
   $('#boot')?.remove();
+  // Кнопка из напоминания открывает нужный экран: ?screen=analysis. Хеш занят данными Telegram.
+  const screen = new URLSearchParams(location.search).get('screen');
+  if (screen) {
+    const rest = new URLSearchParams(location.search);
+    rest.delete('screen');                            // one-shot: a later reload keeps the user's tab
+    const q = rest.toString();
+    const hash = ['analysis', 'stats', 'today'].includes(screen) ? '#/' + screen : location.hash;
+    history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + hash);
+  }
   window.addEventListener('hashchange', () => { nav._track(); render(); });
   render();
 }

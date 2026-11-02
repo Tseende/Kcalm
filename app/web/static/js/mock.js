@@ -237,10 +237,11 @@ function weekGoalMock() {
       { kind: 'late', ...WG_KINDS.late, target: 4, hits: 2 }] };
   }
   const k = WG_KINDS[weekGoal.kind];
-  const states = ['ok', 'miss', 'ok', 'today', 'future', 'future', 'future'];
-  const done = 2;
-  return { week_start: '2026-11-02', options: [], recap, goal: { kind: weekGoal.kind, ...k, target: weekGoal.target, done, achieved: false, possible: true,
-    cells: states.map((state, i) => ({ date: '2026-11-0' + (2 + i), state })), message: `Осталось ${weekGoal.target - done} дня из запланированных.` } };
+  const states = ['ok', 'miss', 'ok', 'ok', 'ok', 'future', 'future'];
+  const done = Math.min(weekGoal.target, 4);
+  const achieved = done >= weekGoal.target;
+  return { week_start: '2026-11-02', options: [], recap, goal: { kind: weekGoal.kind, ...k, target: weekGoal.target, done, achieved, possible: true,
+    cells: states.map((state, i) => ({ date: '2026-11-0' + (2 + i), state })), message: achieved ? 'Цель недели выполнена. Это уже привычка, а не случайность.' : `Осталось ${weekGoal.target - done} дня из запланированных.` } };
 }
 
 const routes = [
@@ -361,6 +362,12 @@ const routes = [
     return { ok: true };
   }],
   ['POST', /^\/activity$/, (m, q, b) => { const bd = body.get(b.date || todayISO()); if (bd) { if (b.steps) bd.steps = b.steps; if (b.active_kcal) bd.active_kcal = b.active_kcal; } return { ok: true }; }],
+  ['GET', /^\/frequent$/, () => ({ items: [
+    { meal_id: 1, title: 'Овсянка с бананом +1', names: ['Овсянка с бананом', 'Кофе с молоком'], kcal: 410, count: 9 },
+    { meal_id: 2, title: 'Гречка +1', names: ['Гречка', 'Куриная грудка'], kcal: 520, count: 6 },
+    { meal_id: 3, title: 'Творог 5%', names: ['Творог 5%'], kcal: 180, count: 4 },
+    { meal_id: 4, title: 'Капучино', names: ['Капучино'], kcal: 98, count: 3 }] })],
+  ['POST', /^\/meals\/(\d+)\/repeat$/, () => ({ id: 9001, kcal: 410 })],
   ['GET', /^\/week-goal$/, () => weekGoalMock()],
   ['PUT', /^\/week-goal$/, (m, q, b) => { weekGoal = { kind: b.kind, target: b.target }; return weekGoalMock(); }],
   ['DELETE', /^\/week-goal$/, () => { weekGoal = null; return weekGoalMock(); }],

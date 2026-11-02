@@ -167,10 +167,11 @@ def _is_due(kind: str, local_time: str, now: datetime, days: str | None = None) 
     return kind != "weekly" or now.weekday() == 6
 
 
-async def _app_pointer(bot, tg_id: int, text: str) -> None:
-    """Короткий пуш без цифр: сами отчёты читаются в Mini App."""
+async def _app_pointer(bot, tg_id: int, text: str, screen: str | None = None,
+                       button: str = "📱 Открыть приложение") -> None:
+    """Короткий пуш без цифр: сами отчёты читаются в Mini App, кнопка ведёт сразу на экран."""
     from app.routers import menu
-    await bot.send_message(tg_id, text, reply_markup=menu.main_kb())
+    await bot.send_message(tg_id, text, reply_markup=menu.main_kb(screen, button))
 
 
 async def _send_reminder(db: sqlite3.Connection, bot, user, kind: str,
@@ -202,7 +203,8 @@ async def _send_reminder(db: sqlite3.Connection, bot, user, kind: str,
             "А если вечером потянет переесть, просто напиши мне, поговорим.",
         )
     elif kind == "evening":
-        await _app_pointer(bot, tg_id, "🌙 Итог дня готов: что получилось и что поправить завтра.")
+        await _app_pointer(bot, tg_id, "🌙 Итог дня готов: что получилось и что поправить завтра.",
+                           "analysis", "🌙 Открыть итог дня")
     elif kind == "weigh":
         from app.storage import repo
         if user["care_mode"]:
@@ -223,6 +225,7 @@ async def _send_reminder(db: sqlite3.Connection, bot, user, kind: str,
                 tg_id, f"💧 Воды сегодня пока {total} мл из ориентира {goal}. "
                        "Выпей стакан и напиши «выпил стакан воды».")
     elif kind == "weekly":
-        await _app_pointer(bot, tg_id, "📅 Неделя закончилась: разбор готов в приложении.")
+        await _app_pointer(bot, tg_id, "📅 Неделя закончилась: итог и цель на новую неделю "
+                                        "готовы в приложении.", "analysis", "📅 Открыть итог недели")
     else:
         log.warning("неизвестный тип напоминания: %s", kind)

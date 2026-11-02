@@ -97,6 +97,31 @@ async def test_frequent_meals_ranked_and_repeat_adds_same_meal(client, db):
     assert after["kcal"] == before["kcal"] + 140
 
 
+@pytest.mark.asyncio
+async def test_frequent_api_repeat_and_undo(client):
+    for _ in range(2):
+        await client.post("/api/drinks", json={"drink": "cola", "ml": 330}, headers=H)
+    await client.post("/api/drinks", json={"drink": "fanta", "ml": 330}, headers=H)   # разовое
+    items = (await (await client.get("/api/frequent", headers=H)).json())["items"]
+    assert [(i["title"], i["kcal"], i["count"]) for i in items] == [("Кола", 140, 2)]
+
+    resp = await client.post(f"/api/meals/{items[0]['meal_id']}/repeat", headers=H)
+    assert resp.status == 201
+    new = await resp.json()
+    day = await (await client.get("/api/day", headers=H)).json()
+    assert day["totals"]["kcal"] == 140 * 3 + 132           # две колы, фанта и повтор колы
+    assert (await client.delete(f"/api/meals/{new['id']}", headers=H)).status == 204   # «Отменить»
+    day = await (await client.get("/api/day", headers=H)).json()
+    assert day["totals"]["kcal"] == 140 * 2 + 132
+    assert (await client.post("/api/meals/424242/repeat", headers=H)).status == 404
+
+
+def test_short_title_for_chip():
+    from app.web.server import _short_title
+    assert _short_title(["гречка", "курица"]) == "Гречка +1"
+    assert _short_title(["х" * 40]).endswith("…") and len(_short_title(["х" * 40])) == 28
+
+
 def test_repeat_rejects_foreign_or_deleted_meal(db):
     user = repo.get_user_by_tg(db, 1001) or {"id": 999, "tz": "UTC"}
     assert meals_svc.repeat_meal(db, {"id": user["id"], "tz": "UTC"}, 424242) is None

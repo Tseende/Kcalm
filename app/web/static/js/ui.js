@@ -257,13 +257,31 @@ export const nav = {
 };
 
 // -------------------------------------------------------------- components
-export function toast(msg, kind = '') {
-  const t = h('div', { class: 'toast ' + kind, role: 'status' }, msg);
+// `undo`: an async function; the toast then shows «Отменить» and stays longer.
+export function toast(msg, kind = '', { undo } = {}) {
+  const ms = undo ? 5000 : 3000;
+  const t = h('div', { class: 'toast ' + kind + (undo ? ' has-action' : ''), role: 'status' }, h('span', null, msg));
+  if (undo) {
+    let used = false;
+    t.append(h('button', { class: 'toast-action', type: 'button', onclick: async () => {
+      if (used) return;
+      used = true;
+      t.remove();
+      try {
+        await undo();
+        haptic('light');
+        dataChanged();
+      } catch (e) { toast(e.message, 'error'); }
+    } }, 'Отменить'));
+  }
   $('#toasts').append(t);
   if (kind === 'error') haptic('error');
-  setTimeout(() => t.classList.add('out'), 3000);
-  setTimeout(() => t.remove(), 3400);
+  setTimeout(() => t.classList.add('out'), ms);
+  setTimeout(() => t.remove(), ms + 400);
 }
+
+// Screens that show diary data listen for this to reload after changes made elsewhere (undo).
+export function dataChanged() { window.dispatchEvent(new Event('app:data')); }
 
 export function sheet({ title, content, onClose } = {}) {
   const wrap = h('div', { class: 'sheet-wrap' });

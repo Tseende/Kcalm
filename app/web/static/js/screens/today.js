@@ -9,6 +9,7 @@ import {
 
 let curDate = todayISO();
 const waterUndo = []; // ids of water entries added in this session
+let oftenCache = null; // last /frequent answer, painted instantly on re-render
 
 export default async function render(root, ctx) {
   const view = h('div', { class: 'screen' });
@@ -27,11 +28,11 @@ export default async function render(root, ctx) {
     load();
   }
 
-  async function load() {
+  async function load({ quiet = false } = {}) {
     const isToday = curDate === todayISO();
     label.replaceChildren(h('span', { class: 'date-main' }, dateLabel(curDate)), isToday ? h('span', { class: 'date-sub' }, longDate(curDate)) : h('span', { class: 'date-sub' }, 'нажмите, чтобы вернуться к сегодня'));
     next.disabled = isToday;
-    body.replaceChildren(skeletonCards(3, 120));
+    if (!quiet) body.replaceChildren(skeletonCards(3, 120));
     const date = curDate;
     try {
       const day = await api.get('/day', { date });
@@ -122,8 +123,46 @@ export default async function render(root, ctx) {
       : emptyState('tools-kitchen-2', 'Пока ничего не записано', 'Нажмите «Добавить», сфотографируйте тарелку, и бот посчитает калории.',
         h('button', { class: 'btn btn-primary', type: 'button', onclick: () => nav.go('/add/meal') }, 'Добавить приём'));
 
-    body.replaceChildren(kcalCard, macroCard, waterCard, miniRow, ...(curDate === todayISO() ? [weekGoalBlock(ctx)] : []), sectionTitle('Приёмы пищи'), mealsList);
+    const isToday = curDate === todayISO();
+    body.replaceChildren(kcalCard, macroCard, waterCard, miniRow, ...(isToday ? [weekGoalBlock(ctx, { compact: true })] : []),
+      sectionTitle('Приёмы пищи'), ...(isToday ? [oftenRow()] : []), mealsList);
   }
+
+  // One-tap «как обычно»: dishes eaten at least twice in 60 days. Hidden when there are none.
+  function oftenRow() {
+    const row = h('div', { class: 'often', role: 'group', 'aria-label': 'Частые блюда' });
+    const paint = (items) => {
+      row.hidden = !items.length;
+      row.replaceChildren(...items.map((f) => {
+        const b = h('button', { class: 'often-chip', type: 'button', title: f.names.join(', '),
+          'aria-label': `Записать: ${f.names.join(', ')}, ${f.kcal} ккал`, onclick: () => repeat(f, b) },
+        h('span', { class: 'often-name' }, f.title), h('span', { class: 'often-kcal' }, `${fmtKcal(f.kcal)} ккал`));
+        return b;
+      }));
+    };
+    paint(oftenCache || []);                          // last known list first: no jump on reload
+    api.get('/frequent').then(({ items }) => {
+      oftenCache = items;
+      if (ctx.alive() && row.isConnected) paint(items);
+    }).catch(() => { /* optional row: keep what is shown */ });
+    return row;
+  }
+
+  async function repeat(f, btn) {
+    btn.disabled = true;
+    try {
+      const r = await api.post(`/meals/${f.meal_id}/repeat`);
+      haptic('success');
+      toast(`+${fmtKcal(r.kcal)} ккал · ${f.title}`, 'ok', { undo: () => api.del('/meals/' + r.id) });
+      load({ quiet: true });
+    } catch (e) {
+      btn.disabled = false;
+      toast(e.message, 'error');
+    }
+  }
+
+  const onData = () => { if (ctx.alive()) load({ quiet: true }); else window.removeEventListener('app:data', onData); };
+  window.addEventListener('app:data', onData);
 
   function mealRow(m) {
     const mt = mealType(m.type);

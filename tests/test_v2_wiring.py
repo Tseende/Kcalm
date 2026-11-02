@@ -42,6 +42,15 @@ def test_menu_has_webapp_button_with_url(restore_config):
     assert web[0].text == "📱 Открыть приложение"
 
 
+def test_menu_button_can_open_a_screen(restore_config):
+    for base, want in (("https://example.org/app/", "https://example.org/app/?screen=analysis"),
+                       ("https://example.org/app/?v=2", "https://example.org/app/?v=2&screen=analysis"),
+                       ("https://example.org/app/#x", "https://example.org/app/?screen=analysis#x")):
+        config_mod.set_config(_cfg(webapp_url=base))
+        btn = _buttons(menu.main_kb("analysis", "🌙 Открыть итог дня"))[0]
+        assert btn.web_app.url == want and btn.text == "🌙 Открыть итог дня"
+
+
 @pytest.mark.asyncio
 async def test_start_web_safely_swallows_errors(monkeypatch, caplog):
     async def boom(db, bot, cfg):
