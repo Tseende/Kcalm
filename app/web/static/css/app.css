@@ -500,6 +500,20 @@ html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
 .an-tip-title { font-weight: 600; margin-bottom: 4px; }
 
 
+/* цель недели */
+.wg-card { display: grid; gap: 10px; padding: 14px 16px; }
+.wg-top { display: flex; align-items: center; gap: 12px; }
+.wg-ico { flex: none; width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; font-size: 20px; background: color-mix(in srgb, var(--c-accent) 14%, transparent); }
+.wg-count { font-size: 20px; font-variant-numeric: tabular-nums; }
+.wg-dots { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.wg-dot { height: 10px; border-radius: 99px; background: var(--c-sep); }
+.wg-dot.ok { background: #34a853; } .wg-dot.miss { background: color-mix(in srgb, #e5534b 35%, var(--c-sep)); }
+.wg-dot.today { background: color-mix(in srgb, var(--c-accent) 45%, var(--c-sep)); }
+.wg-card.achieved { border: 1px solid color-mix(in srgb, #34a853 45%, transparent); }
+.wg-opt { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 8px 12px; border-radius: 14px; border: 1px solid var(--c-sep); background: var(--c-card); text-align: left; }
+.wg-sub { display: block; }
+.btn-link { justify-self: start; padding: 6px 0; min-height: 32px; color: var(--c-accent); background: none; border: 0; }
+
 /* напитки */
 .drink-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .drink-card { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px 10px; text-align: center; border-radius: var(--r-card); border: 2px solid transparent; background: var(--c-card); box-shadow: var(--shadow-card); position: relative; min-width: 0; transition: transform .12s, border-color .15s, background .15s; }

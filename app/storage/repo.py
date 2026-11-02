@@ -1235,3 +1235,26 @@ def latest_body_rows(conn: sqlite3.Connection, user_id: int, limit: int = 2) -> 
     return conn.execute(
         """SELECT * FROM body_measurements WHERE user_id=? AND weight_kg IS NOT NULL
            ORDER BY local_date DESC, id DESC LIMIT ?""", (user_id, limit)).fetchall()
+
+
+# ----------------------------------------------------------------- мини-цель недели
+
+def weekly_goal(conn: sqlite3.Connection, user_id: int, week_start: str) -> sqlite3.Row | None:
+    return conn.execute("SELECT * FROM weekly_goals WHERE user_id=? AND week_start=?",
+                        (user_id, week_start)).fetchone()
+
+
+def set_weekly_goal(conn: sqlite3.Connection, user_id: int, week_start: str,
+                    kind: str, target_days: int) -> None:
+    """Цель недели можно сменить: новая заменяет прежнюю."""
+    conn.execute(
+        "INSERT INTO weekly_goals (user_id, week_start, kind, target_days) VALUES (?,?,?,?) "
+        "ON CONFLICT(user_id, week_start) DO UPDATE SET kind=excluded.kind, "
+        "target_days=excluded.target_days", (user_id, week_start, kind, target_days))
+    conn.commit()
+
+
+def clear_weekly_goal(conn: sqlite3.Connection, user_id: int, week_start: str) -> None:
+    conn.execute("DELETE FROM weekly_goals WHERE user_id=? AND week_start=?",
+                 (user_id, week_start))
+    conn.commit()

@@ -22,6 +22,7 @@ from app.config import Config, get_config
 from app.domain import dishes as dishdom
 from app.domain import drinks as drinksdom
 from app.domain import water as waterdom
+from app.domain import weekgoal as weekgoaldom
 from app.domain import weighin
 from app.llm import client as llm
 from app.services import dishes as dishsvc
@@ -29,6 +30,7 @@ from app.services import food as foodsvc
 from app.services import meals as meals_svc
 from app.services import screens as screens_svc
 from app.services import water as watersvc
+from app.services import weekgoal as weekgoalsvc
 from app.storage import photos, repo
 from app.timeutils import validate_hhmm
 from app.web import analysis
@@ -869,6 +871,36 @@ async def api_analysis(request: web.Request) -> web.Response:
     now = now_local(user)
     raw = request.query.get("date")
     return ok(analysis.build(db, user, parse_date(raw) if raw else now.date(), now))
+
+
+@routes.get("/api/week-goal")
+async def api_week_goal(request: web.Request) -> web.Response:
+    db, user, _ = ctx(request)
+    today = now_local(user).date()
+    data = weekgoalsvc.build(db, user, today)
+    data["recap"] = weekgoalsvc.recap(db, user, today)
+    return ok(data)
+
+
+@routes.put("/api/week-goal")
+async def api_week_goal_set(request: web.Request) -> web.Response:
+    db, user, _ = ctx(request)
+    data = await read_json(request)
+    target = number(data, "target", 1, 7, required=True)
+    today = now_local(user).date()
+    try:
+        weekgoalsvc.choose(db, user, today, str(data.get("kind") or ""), int(round(target)))
+    except ValueError as e:
+        raise bad(str(e), "bad_field") from None
+    return ok(weekgoalsvc.build(db, user, today))
+
+
+@routes.delete("/api/week-goal")
+async def api_week_goal_clear(request: web.Request) -> web.Response:
+    db, user, _ = ctx(request)
+    today = now_local(user).date()
+    repo.clear_weekly_goal(db, user["id"], weekgoaldom.week_start(today).isoformat())
+    return ok(weekgoalsvc.build(db, user, today))
 
 
 @routes.get("/api/export.csv")

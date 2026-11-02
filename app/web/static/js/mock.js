@@ -221,6 +221,28 @@ function guessType(time) {
 }
 function nowHHMM() { const d = new Date(); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
 
+// Weekly mini-goal demo state
+const WG_KINDS = {
+  protein: { icon: '🥩', title: 'Белок в норме', hint: 'Белок в каждый приём пищи: яйца или творог, курица или рыба, кефир.' },
+  water: { icon: '💧', title: 'Вода в норме', hint: 'Стакан после пробуждения, перед едой и в 16:00. Чай и кофе тоже считаются.' },
+  late: { icon: '🌙', title: 'Без поздней еды', hint: 'Ужин на час раньше и с белком, так вечером меньше тянет.' },
+};
+let weekGoal = null;
+function weekGoalMock() {
+  const recap = { week_start: '2026-10-26', good: ['Белок держится у цели', 'Воды хватает'], goal: { kind: 'water', icon: '💧', title: 'Вода в норме', done: 5, target: 4, achieved: true } };
+  if (!weekGoal) {
+    return { week_start: '2026-11-02', goal: null, recap, options: [
+      { kind: 'protein', ...WG_KINDS.protein, target: 4, hits: 2 },
+      { kind: 'water', ...WG_KINDS.water, target: 5, hits: 3 },
+      { kind: 'late', ...WG_KINDS.late, target: 4, hits: 2 }] };
+  }
+  const k = WG_KINDS[weekGoal.kind];
+  const states = ['ok', 'miss', 'ok', 'today', 'future', 'future', 'future'];
+  const done = 2;
+  return { week_start: '2026-11-02', options: [], recap, goal: { kind: weekGoal.kind, ...k, target: weekGoal.target, done, achieved: false, possible: true,
+    cells: states.map((state, i) => ({ date: '2026-11-0' + (2 + i), state })), message: `Осталось ${weekGoal.target - done} дня из запланированных.` } };
+}
+
 const routes = [
   ['GET', /^\/me$/, () => ({
     user: { tg_id: 1, first_name: 'Жан', sex: 'm', height_cm: 178, goal_weight_kg: 76, tz: 'Europe/Moscow', eating_cutoff: '21:00' },
@@ -339,6 +361,9 @@ const routes = [
     return { ok: true };
   }],
   ['POST', /^\/activity$/, (m, q, b) => { const bd = body.get(b.date || todayISO()); if (bd) { if (b.steps) bd.steps = b.steps; if (b.active_kcal) bd.active_kcal = b.active_kcal; } return { ok: true }; }],
+  ['GET', /^\/week-goal$/, () => weekGoalMock()],
+  ['PUT', /^\/week-goal$/, (m, q, b) => { weekGoal = { kind: b.kind, target: b.target }; return weekGoalMock(); }],
+  ['DELETE', /^\/week-goal$/, () => { weekGoal = null; return weekGoalMock(); }],
   ['GET', /^\/analysis$/, (m, q) => ({
     date: q.date || todayISO(),
     closed: true,

@@ -1,5 +1,6 @@
 // Screen: "Анализ" — what went well and what to fix, from the day's data
 import { api } from '../api.js';
+import { weekGoalBlock } from './weekgoal.js';
 import { h, icon, nav, skeletonCards, emptyState, errorState, sectionTitle, todayISO, addDays, dateLabel, longDate } from '../ui.js';
 
 let curDate = todayISO();
@@ -62,6 +63,7 @@ export default async function render(root, ctx) {
       kids.push(emptyState('sparkles', 'Пока нечего анализировать', 'Запишите еду, воду и сон, и здесь появится разбор дня.',
         h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => nav.go('/add/meal') }, 'Добавить приём пищи')));
     }
+    if (curDate === todayISO()) kids.push(weekGoalBlock(ctx, { withRecap: true }));
     body.replaceChildren(...kids);
   }
 

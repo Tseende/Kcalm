@@ -104,6 +104,7 @@ async function request(method, path, { query, body, timeout = 30000 } = {}) {
 export const api = {
   get: (path, query, opts) => request('GET', path, { query, ...opts }),
   post: (path, body, opts) => request('POST', path, { body: body === undefined ? {} : body, ...opts }),
+  put: (path, body) => request('PUT', path, { body }),
   patch: (path, body) => request('PATCH', path, { body }),
   del: (path) => request('DELETE', path),
   _me: null,

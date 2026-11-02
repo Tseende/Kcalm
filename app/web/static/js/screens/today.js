@@ -1,6 +1,7 @@
 // Screen 1: "Сегодня"
 import { api } from '../api.js';
 import { ring } from '../charts.js';
+import { weekGoalBlock } from './weekgoal.js';
 import {
   h, icon, tile, toast, haptic, nav, skeletonCards, emptyState, errorState, sectionTitle, photoImg,
   todayISO, addDays, dateLabel, longDate, fmtN, fmtKcal, fmtDur, mealType, macroLine,
@@ -121,7 +122,7 @@ export default async function render(root, ctx) {
       : emptyState('tools-kitchen-2', 'Пока ничего не записано', 'Нажмите «Добавить», сфотографируйте тарелку, и бот посчитает калории.',
         h('button', { class: 'btn btn-primary', type: 'button', onclick: () => nav.go('/add/meal') }, 'Добавить приём'));
 
-    body.replaceChildren(kcalCard, macroCard, waterCard, miniRow, sectionTitle('Приёмы пищи'), mealsList);
+    body.replaceChildren(kcalCard, macroCard, waterCard, miniRow, ...(curDate === todayISO() ? [weekGoalBlock(ctx)] : []), sectionTitle('Приёмы пищи'), mealsList);
   }
 
   function mealRow(m) {
