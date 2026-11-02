@@ -101,13 +101,15 @@ def day_facts(db: sqlite3.Connection, user, day: str) -> dict:
     late = sum(m["kcal_total"] for m in meals
                if analytics.is_late(m["local_time"], user["eating_cutoff"]))
     gap = _meal_gap(meals)
+    # чай, американо и кола без сахара записаны приёмом (source=manual), но едой не считаются
+    eaten = [m for m in meals if m["source"] != "manual" or m["kcal_total"] >= 50]
 
     def col(row, name):
         return row[name] if row and row[name] is not None else None
 
     return {
         "date": day,
-        "kcal": int(totals["kcal"]), "meals": int(totals["meals"]),
+        "kcal": int(totals["kcal"]), "meals": len(eaten),
         "kcal_low": int(sum(m["kcal_low"] or 0 for m in meals)),
         "kcal_high": int(sum(m["kcal_high"] or 0 for m in meals)),
         "protein": round(float(totals["protein"])),
@@ -123,8 +125,8 @@ def day_facts(db: sqlite3.Connection, user, day: str) -> dict:
         "sleep_score": col(sleep, "score"), "sleep_awake_min": col(sleep, "awake_min"),
         "sleep_deep_min": col(sleep, "deep_min"),
         "late_kcal": int(late), "cutoff": user["eating_cutoff"],
-        "first_meal": meals[0]["local_time"] if meals else None,
-        "last_meal": meals[-1]["local_time"] if meals else None,
+        "first_meal": eaten[0]["local_time"] if eaten else None,
+        "last_meal": eaten[-1]["local_time"] if eaten else None,
         "longest_gap_h": gap[0] if gap else None,
         "gap_from": gap[1] if gap else None, "gap_to": gap[2] if gap else None,
         "cravings": _cravings_of_day(db, uid, day),

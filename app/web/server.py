@@ -20,6 +20,7 @@ from aiohttp import web
 
 from app.config import Config, get_config
 from app.domain import dishes as dishdom
+from app.domain import drinks as drinksdom
 from app.domain import water as waterdom
 from app.domain import weighin
 from app.llm import client as llm
@@ -741,6 +742,33 @@ async def api_water_delete(request: web.Request) -> web.Response:
     if not repo.delete_water(db, user["id"], path_id(request)):
         raise ApiError(404, "not_found", "Запись воды не найдена.")
     return ok({"water_ml": _water_total(db, user), "goal_ml": watersvc.goal_for(db, user)})
+
+
+@routes.get("/api/drinks")
+async def api_drinks(request: web.Request) -> web.Response:
+    ctx(request)
+    return ok({"drinks": drinksdom.catalog_json()})
+
+
+@routes.post("/api/drinks")
+async def api_drink_add(request: web.Request) -> web.Response:
+    """Напиток записывается приёмом пищи (snack, source=manual): так калории попадают в день,
+    чай и кофе сами идут в воду, а отмена и правка работают как у любого приёма."""
+    db, user, _ = ctx(request)
+    data = await read_json(request)
+    drink = drinksdom.get(str(data.get("drink") or ""))
+    if drink is None:
+        raise bad("Неизвестный напиток.", "bad_field")
+    ml = number(data, "ml", drinksdom.MIN_ML, drinksdom.MAX_ML, required=True)
+    sugar = number(data, "sugar_tsp", 0, drinksdom.MAX_SUGAR_TSP) or 0
+    calc = drinksdom.calculate(drink, round(ml), int(round(sugar)))
+    now = now_local(user)
+    local_date, local_time = now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
+    meal_id = repo.save_meal(
+        db, user["id"], meals_svc.utc_of(user["tz"], local_date, local_time),
+        local_date, local_time, "snack", "manual", calc)
+    return ok({"id": meal_id, "kcal": calc.kcal_total,
+               "water_ml": _water_total(db, user), "goal_ml": watersvc.goal_for(db, user)}, 201)
 
 
 @routes.post("/api/weight")

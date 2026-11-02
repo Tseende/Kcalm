@@ -11,7 +11,8 @@ const routes = [
   R('/menu', () => import('./screens/menu.js'), { tab: 'menu' }),
   R('/meal/(\\d+)', () => import('./screens/meal.js'), { keys: ['id'], parent: '/today' }),
   R('/add/meal', () => import('./screens/add_meal.js'), { parent: '/today' }),
-  R('/add/(water|weight|sleep|activity)', () => import('./screens/forms.js'), { keys: ['kind'], parent: '/today' }),
+  R('/add/(drink|water)', () => import('./screens/drinks.js'), { parent: '/today' }),
+  R('/add/(weight|sleep|activity)', () => import('./screens/forms.js'), { keys: ['kind'], parent: '/today' }),
   R('/add/screen', () => import('./screens/screenshot.js'), { parent: '/today' }),
   R('/add/label', () => import('./screens/label.js'), { parent: '/menu/products' }),
   R('/menu/products', () => import('./screens/products.js'), { parent: '/menu' }),
@@ -56,19 +57,19 @@ function setActiveTab(tab) {
 function openAddSheet() {
   haptic('light');
   const actions = [
-    ['tools-kitchen-2', 'orange', 'Приём пищи', 'Фото тарелки или текстом', '/add/meal'],
-    ['droplet', 'teal', 'Вода', 'Быстро добавить воду', '/add/water'],
+    ['tools-kitchen-2', 'orange', 'Приём пищи', 'Фото тарелки или описание текстом', '/add/meal', true],
+    ['droplet', 'teal', 'Напитки', 'Вода, чай, кофе, газировка', '/add/drink'],
+    ['tag', 'pink', 'По этикетке', 'Фото таблицы КБЖУ', '/add/label'],
     ['scale', 'purple', 'Вес', 'Утреннее взвешивание', '/add/weight'],
     ['bed', 'indigo', 'Сон', 'Часы сна и оценка', '/add/sleep'],
     ['run', 'green', 'Активность', 'Шаги, калории, тренировка', '/add/activity'],
-    ['device-mobile', 'blue', 'Скриншот', 'Сон, шаги или весы из приложения', '/add/screen'],
-    ['tag', 'pink', 'Продукт по этикетке', 'Сфотографировать таблицу КБЖУ', '/add/label'],
+    ['device-mobile', 'blue', 'Скриншот', 'Сон, шаги или весы', '/add/screen'],
   ];
-  const s = sheet({ title: 'Добавить', content: h('div', { class: 'list tiles sheet-list' }, actions.map(([ic, col, t, sub, path]) =>
-    h('button', { class: 'row row-btn', type: 'button', onclick: () => { s.close(); nav.go(path); } },
-      tile(ic, col),
-      h('span', { class: 'grow' }, h('span', { class: 'row-title' }, t), h('span', { class: 'row-sub' }, sub)),
-      icon('next', 18)))) });
+  const s = sheet({ title: 'Добавить', content: h('div', { class: 'add-grid' }, actions.map(([ic, col, t, sub, path, wide]) =>
+    h('button', { class: 'add-card' + (wide ? ' wide' : ''), type: 'button', onclick: () => { s.close(); nav.go(path); } },
+      tile(ic, col, wide ? 48 : 42),
+      h('span', { class: 'grow' }, h('span', { class: 'row-title' }, t), h('span', { class: 'row-sub muted' }, sub)),
+      wide ? icon('next', 18) : null))) });
 }
 
 function match(path) {
