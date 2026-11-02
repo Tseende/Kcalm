@@ -24,8 +24,8 @@ class Config(BaseSettings):
     openrouter_api_key: str = ""
     model_vision: str = "deepseek/deepseek-v4.1-flash-1017"
     model_vision_escalation: str = "deepseek/deepseek-v4.1-flash"
-    model_text: str = "google/gemini-2.5-flash"
-    model_text_provider: str = ""     # например "DeepSeek": закрепить провайдера для текстовой модели
+    model_text: str = "deepseek/deepseek-v4.1-flash-1017"   # по умолчанию DeepSeek, а не Google: в облаке .env нет
+    model_text_provider: str = "DeepSeek"   # закрепить провайдера (без тихого перехода к другому); пусто — не закреплять
     model_text_reasoning: bool = False   # «думающий» режим текстовой модели: медленнее и дороже
     rich_messages: bool = True        # таблицы и абзацы через sendRichMessage (Bot API 10.1+); false = обычный текст
     model_dialog: str = ""            # разговор о тяге и срывах; пусто — та же, что model_text
@@ -60,6 +60,8 @@ class Config(BaseSettings):
     web_port: int = Field(8080, validation_alias=AliasChoices("WEB_PORT", "PORT"))   # Render задаёт PORT
     webapp_url: str = ""              # публичный HTTPS-адрес приложения (…/app/) для кнопки меню
     webhook_base_url: str = ""        # https://<сервис>.onrender.com: если задан, бот работает по webhook, а не polling
+    keepalive_window: str = ""        # «08:00-23:30»: в эти часы (по keepalive_tz) бот пингует сам себя, чтобы Render не усыплял
+    keepalive_tz: str = "Europe/Minsk"
     webhook_secret: str = ""          # секрет заголовка Telegram (A-Za-z0-9_-, до 256 символов)
     web_dev_tg_id: int = 0            # только локальная разработка: запросы с 127.0.0.1 без initData
 

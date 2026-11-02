@@ -528,3 +528,13 @@ html.fs .page-head:not(.chat-head) .back-btn, html.fs .page-head:not(.chat-head)
 html.fs .page-head:not(.chat-head) .date-label { line-height: 1.1; }
 html.fs .screen { padding-top: 8px; }
 html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
+
+/* add meal: capture card */
+.capture { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding: 22px 16px 16px; border-radius: var(--r-card); border: 1.5px dashed color-mix(in srgb, var(--c-btn) 45%, transparent); background: color-mix(in srgb, var(--c-btn) 7%, var(--c-card)); }
+.capture.compact { padding: 10px; border-style: solid; border-width: 1px; border-color: var(--card-edge); background: var(--c-card); }
+.capture-ico { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; color: #fff; margin-bottom: 4px; background: linear-gradient(145deg, color-mix(in srgb, var(--c-btn) 80%, #fff), var(--c-btn)); box-shadow: 0 8px 20px color-mix(in srgb, var(--c-btn) 40%, transparent); }
+.capture-ico .ico { color: #fff; }
+.capture-title { font-size: 18px; font-weight: 650; letter-spacing: -.01em; }
+.capture-sub { font-size: 13px; color: var(--c-hint); max-width: 280px; }
+.capture-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; margin-top: 12px; }
+.capture.compact .capture-actions { margin-top: 0; }

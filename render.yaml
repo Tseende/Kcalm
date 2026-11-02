@@ -30,3 +30,15 @@ services:
         sync: false
       - key: TZ
         value: Europe/Minsk
+      - key: KEEPALIVE_WINDOW     # не засыпать днём; вне окна сервис спит и просыпается от сообщения (webhook)
+        value: "08:00-23:30"
+      - key: MODEL_TEXT
+        value: deepseek/deepseek-v4.1-flash-1017
+      - key: MODEL_TEXT_PROVIDER
+        value: DeepSeek
+      - key: MODEL_VISION
+        value: deepseek/deepseek-v4.1-flash-1017
+      - key: MODEL_VISION_ESCALATION
+        value: deepseek/deepseek-v4.1-flash
+      - key: MODEL_ASR            # только голос: DeepSeek аудио не принимает
+        value: google/gemini-2.5-flash

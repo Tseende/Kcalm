@@ -28,7 +28,12 @@ export function initKeyboard() {
     clearTimeout(timer);
     timer = setTimeout(() => {
       if (document.activeElement !== el) return;
-      try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { el.scrollIntoView(); }
+      // Прокручиваем только если поле реально закрыто клавиатурой или шапкой: без лишних скачков.
+      const r = el.getBoundingClientRect();
+      const visTop = (vv ? vv.offsetTop : 0) + 60;
+      const visBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+      if (r.top >= visTop && r.bottom <= visBottom - 12) return;
+      try { el.scrollIntoView({ block: 'nearest' }); } catch (e) { el.scrollIntoView(); }
     }, 320);
   }
 

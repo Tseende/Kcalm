@@ -37,7 +37,7 @@ let cleanup = null;
 function buildTabbar() {
   tabbar.replaceChildren(...TABS.map(([id, label, ic, path]) => {
     if (id === 'add') {
-      return h('button', { class: 'tab tab-plus', type: 'button', 'aria-label': 'Добавить', 'aria-haspopup': 'dialog', onclick: openAddSheet }, h('span', { class: 'plus-circle' }, icon('plus', 20)), h('span', null, label));
+      return h('button', { class: 'tab tab-plus', type: 'button', 'aria-label': 'Добавить', 'aria-haspopup': 'dialog', onclick: openAddSheet }, h('span', { class: 'plus-circle' }, icon('plus', 20)));
     }
     return h('a', { class: 'tab', href: '#' + path, dataset: { tab: id }, 'aria-label': label }, icon(ic, 24), h('span', null, label));
   }));

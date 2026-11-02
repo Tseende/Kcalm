@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import sqlite3
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
@@ -37,6 +38,9 @@ def build_scheduler(db: sqlite3.Connection, bot) -> AsyncIOScheduler:
         misfire_grace_time=50,
     )
     cfg_ = get_config()
+    if cfg_.keepalive_window and (cfg_.webhook_base_url or os.environ.get("RENDER_EXTERNAL_URL")):
+        sched.add_job(keepalive_ping, "interval", minutes=9, id="keepalive", name="keepalive",
+                      coalesce=True, max_instances=1, misfire_grace_time=60)
     if cfg_.backup_in_process and not cfg_.turso_database_url:   # в облаке данные уже в Turso
         sched.add_job(
             run_daily_backup,
@@ -49,6 +53,31 @@ def build_scheduler(db: sqlite3.Connection, bot) -> AsyncIOScheduler:
             misfire_grace_time=3600,
         )
     return sched
+
+
+def in_keepalive_window(window: str, tz_name: str, now_utc: datetime | None = None) -> bool:
+    """«08:00-23:30» по локальному времени; окно через полночь («22:00-02:00») тоже понимает."""
+    try:
+        start, end = (part.strip() for part in window.split("-", 1))
+        now = (now_utc or datetime.now(timezone.utc)).astimezone(ZoneInfo(tz_name)).strftime("%H:%M")
+        start, end = start.zfill(5), end.zfill(5)
+    except Exception:  # noqa: BLE001
+        return False
+    return start <= now < end if start <= end else (now >= start or now < end)
+
+
+async def keepalive_ping() -> None:
+    """Запрос на собственный публичный адрес: Render считает его входящим трафиком и не усыпляет сервис."""
+    import httpx
+    cfg = get_config()
+    if not in_keepalive_window(cfg.keepalive_window, cfg.keepalive_tz):
+        return
+    base = (cfg.webhook_base_url or os.environ.get("RENDER_EXTERNAL_URL", "")).rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            await client.get(base + "/healthz")
+    except Exception:  # noqa: BLE001
+        log.warning("keepalive: пинг не прошёл", exc_info=True)
 
 
 async def run_daily_backup() -> None:

@@ -1,7 +1,7 @@
-// Add meal: photos (+ dish per photo) or text description
+// Add meal: photos (+ dish per photo) and/or a text description. Time and meal type are set by the server (now).
 import { api } from '../api.js';
 import {
-  h, icon, tile, toast, haptic, nav, mainButton, draft, pageHead, segmented, field, nowHHMM, todayISO, compressImage, busyOverlay, dishKind,
+  h, icon, tile, toast, haptic, nav, mainButton, draft, pageHead, field, compressImage, busyOverlay, dishKind,
 } from '../ui.js';
 import { dishInfo } from './dishes.js';
 
@@ -10,7 +10,6 @@ const MAX = 6;
 export default async function render(root, ctx) {
   const view = h('div', { class: 'screen' });
   root.append(view);
-  let mode = 'photo';
   let dishes = [];
   const photos = []; // {file, url, dishId}
   let busy = false;
@@ -21,13 +20,11 @@ export default async function render(root, ctx) {
 
   const camera = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, onchange: () => addFiles(camera) });
   const gallery = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, onchange: () => addFiles(gallery) });
-  const timeInput = h('input', { type: 'time', value: nowHHMM(), 'aria-label': 'Время приёма' });
-  const commentTa = h('textarea', { rows: 3, placeholder: 'Что внутри, масло, соус…', oninput: sync });
-  const textTa = h('textarea', { rows: 6, placeholder: 'Например: овсянка на молоке 250 г, банан и чёрный кофе без сахара', oninput: sync });
-  const clearDrafts = [draft('meal-comment', commentTa), draft('meal-text', textTa)];
+  const textTa = h('textarea', { rows: 3, placeholder: 'Например: овсянка на молоке 250 г, банан, кофе без сахара', oninput: sync });
+  const textLabel = h('span', { class: 'field-label' }, 'Что съели');
+  const clearDraft = draft('meal-text', textTa);
   const photoList = h('div', { class: 'stack-sm' });
-  const photoBox = h('div', { class: 'stack' });
-  const textBox = h('div', { class: 'stack', hidden: true });
+  const capture = h('div', { class: 'capture' });
 
   async function addFiles(input) {
     const files = [...input.files];
@@ -73,10 +70,28 @@ export default async function render(root, ctx) {
           h('div', { class: 'row-title' }, photos.length > 1 ? `Фото ${i + 1}` : 'Фото'),
           h('div', { class: 'row-sub' }, chosenLabel(p)))),
       dishes.length ? [h('div', { class: 'section-label' }, 'На чём еда?'), dishPicker(p, i)] : null)));
+    paintCapture();
     sync();
   }
 
-  function valid() { return mode === 'photo' ? photos.length > 0 : textTa.value.trim().length > 0; }
+  function pick(input) { if (photos.length >= MAX) toast(`Не больше ${MAX} фото`); else input.click(); }
+
+  // Пустое состояние: одно крупное приглашение, без переключателей режимов.
+  function paintCapture() {
+    const more = photos.length > 0;
+    capture.className = 'capture' + (more ? ' compact' : '');
+    capture.replaceChildren(
+      more ? null : h('span', { class: 'capture-ico' }, icon('camera', 30)),
+      more ? null : h('div', { class: 'capture-title' }, 'Сфотографируйте еду'),
+      more ? null : h('div', { class: 'capture-sub' }, `Можно до ${MAX} фото: общий вид, второй ракурс, этикетка`),
+      h('div', { class: 'capture-actions' },
+        h('button', { class: 'btn btn-primary', type: 'button', onclick: () => pick(camera) }, icon('camera', 20), more ? 'Ещё фото' : 'Снять'),
+        h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => pick(gallery) }, icon('image', 20), 'Галерея')));
+    textLabel.textContent = more ? 'Комментарий' : 'Или опишите словами';
+    textTa.placeholder = more ? 'Что внутри, масло, соус…' : 'Например: овсянка на молоке 250 г, банан, кофе без сахара';
+  }
+
+  function valid() { return photos.length > 0 || textTa.value.trim().length > 0; }
   function sync() { mainButton.setDisabled(busy || !valid()); }
 
   async function submit() {
@@ -85,21 +100,19 @@ export default async function render(root, ctx) {
     sync();
     mainButton.setLoading(true);
     const fd = new FormData();
-    if (mode === 'photo') {
+    if (photos.length) {
       photos.forEach((p) => { fd.append('photo', p.file, p.file.name || 'photo.jpg'); });
       photos.forEach((p) => fd.append('dish_id', p.dishId == null ? '' : String(p.dishId)));
-      if (commentTa.value.trim()) fd.append('comment', commentTa.value.trim());
+      if (textTa.value.trim()) fd.append('comment', textTa.value.trim());
     } else {
       fd.append('text', textTa.value.trim());
     }
-    if (timeInput.value) fd.append('time', timeInput.value);
-    fd.append('date', todayISO());
     const stop = busyOverlay('Распознаю…', 'Это может занять до минуты');
     try {
       const meal = await api.post('/meals', fd, { timeout: 150000 });
       haptic('success');
       stop();
-      clearDrafts.forEach((c) => c());
+      clearDraft();
       mainButton.hide();
       nav.replace('/meal/' + meal.id);
     } catch (e) {
@@ -115,26 +128,11 @@ export default async function render(root, ctx) {
     'Размер посуды помогает точнее оценить порцию. ',
     h('a', { href: '#/menu/dish/new' }, 'Добавить посуду'));
 
-  photoBox.append(
-    h('div', { class: 'row-btns' },
-      h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => (photos.length >= MAX ? toast(`Не больше ${MAX} фото`) : camera.click()) }, icon('camera', 20), 'Снять'),
-      h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => (photos.length >= MAX ? toast(`Не больше ${MAX} фото`) : gallery.click()) }, icon('image', 20), 'Из галереи')),
-    h('div', { class: 'muted small' }, `До ${MAX} фото: общий вид, второй ракурс, этикетка. Выберите посуду у каждого фото.`),
-    photoList, noDishHint || document.createDocumentFragment(),
-    field('Комментарий', commentTa));
-  textBox.append(field('Что вы съели', textTa, 'Укажите продукты и вес, если знаете'));
-
   view.append(
     pageHead('Приём пищи', { parent: '/today' }),
     h('div', { class: 'stack' },
-      segmented([['photo', h('span', { class: 'seg-in' }, icon('camera', 18), 'Фото')], ['text', h('span', { class: 'seg-in' }, icon('pencil', 18), 'Описать текстом')]], mode, (v) => {
-        mode = v;
-        photoBox.hidden = v !== 'photo';
-        textBox.hidden = v !== 'text';
-        sync();
-      }, 'Способ добавления'),
-      photoBox, textBox,
-      field('Время', timeInput),
+      capture, photoList, noDishHint || document.createDocumentFragment(),
+      h('label', { class: 'field' }, textLabel, textTa),
       camera, gallery));
 
   mainButton.show('Сохранить приём', submit, { disabled: true });
