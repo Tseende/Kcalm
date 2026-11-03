@@ -95,20 +95,23 @@ async def _parse_each(images_b64: list[str], caption: str | None, uid: int,
 
 
 async def parse_images(images_b64: list[str], caption: str | None, uid: int,
-                       db: sqlite3.Connection, dishes=None):
+                       db: sqlite3.Connection, dishes=None, groups: list[int] | None = None):
     """Распознать фото одного приёма. Одно фото — parse_photo; два и больше — все в одном
     запросе (parse_photos); сбой или невалидный ответ — запасной путь «по одному»."""
     dish_list = foodsvc._as_dish_list(dishes, len(images_b64))
     if len(images_b64) == 1:
         kw = {"dishes": dish_list[0]} if dish_list[0] is not None else {}
         return await foodsvc.parse_photo(images_b64[0], caption, uid, db, **kw)
-    chunks = [(images_b64[i:i + foodsvc.MAX_PHOTOS], dish_list[i:i + foodsvc.MAX_PHOTOS])
-              for i in range(0, len(images_b64), foodsvc.MAX_PHOTOS)]
+    grp = groups if groups and len(groups) == len(images_b64) else [None] * len(images_b64)
+    step = foodsvc.MAX_PHOTOS
+    chunks = [(images_b64[i:i + step], dish_list[i:i + step], grp[i:i + step])
+              for i in range(0, len(images_b64), step)]
     parts = []
-    for imgs, dsh in chunks:
+    for imgs, dsh, grs in chunks:
         try:
             parts.append(await foodsvc.parse_photos(
-                imgs, caption, uid, db, dishes=dsh if any(d is not None for d in dsh) else None))
+                imgs, caption, uid, db, dishes=dsh if any(d is not None for d in dsh) else None,
+                groups=None if None in grs else grs))
         except Exception:                                    # noqa: BLE001
             log.warning("запрос по нескольким фото не удался, разбираю по одному", exc_info=True)
             parts.append(await _parse_each(imgs, caption, uid, db, dsh))
@@ -187,8 +190,9 @@ def touch_foods(db: sqlite3.Connection, uid: int, u, calc) -> None:
 async def recognize_and_save(db: sqlite3.Connection, user, image_paths: list[str],
                              dish_ids: list[int | None] | None = None,
                              comment: str | None = None,
-                             local_dt: datetime | None = None) -> int:
-    """Фото (1–6) → один приём пищи. Возвращает meal_id.
+                             local_dt: datetime | None = None,
+                             groups: list[int] | None = None) -> int:
+    """Фото (1–6) → один приём пищи. groups[i] — номер блюда, к которому относится фото i. Возвращает meal_id.
 
     dish_ids: None — посуда по умолчанию, список под фото — явный выбор (None: без посуды).
     local_dt — наивное локальное время приёма (EXIF, поле формы); время из comment главнее.
@@ -200,7 +204,11 @@ async def recognize_and_save(db: sqlite3.Connection, user, image_paths: list[str
     paths = [image_paths[i] for i in idx]
     dishes = resolve_dishes(db, uid, dish_ids, len(image_paths))
     dishes = [dishes[i] for i in idx]
-    u = await parse_images(b64, comment, uid, db, dishes)
+    if groups and len(groups) == len(image_paths):
+        groups = [groups[i] for i in idx]
+    else:
+        groups = None
+    u = await parse_images(b64, comment, uid, db, dishes, groups)
     if not u.items:
         raise NoFood("не увидел еды на фото")
     saved = await save_understanding(

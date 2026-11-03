@@ -148,20 +148,53 @@ export function haptic(type = 'success') {
 let mbCb = null;
 let mbEl = null;
 let mbSuspended = false;
+let kbBar = null;
+let kbBtn = null;
+const mbState = { text: '', disabled: false, loading: false };
+// Пока открыта клавиатура, главная кнопка (Telegram или нижняя панель) пряталась и сохранить было нечем.
+// Теперь вместо неё прямо над клавиатурой показывается её копия: тот же текст, состояние и действие.
+function paintKbBtn() {
+  if (!kbBtn) return;
+  kbBtn.textContent = mbState.text;
+  kbBtn.disabled = mbState.disabled;
+  kbBtn.classList.toggle('loading', mbState.loading);
+}
+function showKbBar() {
+  if (!kbBar) {
+    kbBar = h('div', { id: 'kbbar', class: 'kbbar' });
+    document.body.append(kbBar);
+  }
+  // pointerdown не даёт полю потерять фокус и клавиатуре закрыться раньше, чем сработает нажатие.
+  kbBtn = h('button', {
+    class: 'btn btn-primary btn-block', type: 'button',
+    onpointerdown: (e) => e.preventDefault(),
+    onclick: () => { if (mbCb && !mbState.disabled) { document.activeElement?.blur?.(); mbCb(); } },
+  });
+  kbBar.replaceChildren(kbBtn);
+  kbBar.hidden = false;
+  paintKbBtn();
+}
+function hideKbBar() {
+  if (kbBar) { kbBar.hidden = true; kbBar.replaceChildren(); }
+  kbBtn = null;
+}
 export const mainButton = {
-  // Пока открыта клавиатура, кнопка не должна занимать место над ней: прячем и потом возвращаем как была.
   suspend() {
     if (mbSuspended || !mbCb) return;
-    if (inTelegram && tg.MainButton && tg.MainButton.isVisible) { mbSuspended = true; tg.MainButton.hide(); }
+    mbSuspended = true;
+    if (inTelegram && tg.MainButton && tg.MainButton.isVisible) tg.MainButton.hide();
+    showKbBar();
   },
   resume() {
     if (!mbSuspended) return;
     mbSuspended = false;
+    hideKbBar();
     if (mbCb && inTelegram && tg.MainButton) tg.MainButton.show();
   },
   show(text, cb, { disabled = false } = {}) {
     this.hide();
     mbCb = cb;
+    Object.assign(mbState, { text, disabled, loading: false });
     if (inTelegram && tg.MainButton) {
       tg.MainButton.setText(text);
       tg.MainButton.onClick(cb);
@@ -176,14 +209,20 @@ export const mainButton = {
     }
   },
   setText(text) {
+    mbState.text = text;
+    paintKbBtn();
     if (inTelegram && tg.MainButton) tg.MainButton.setText(text);
     else if (mbEl) mbEl.textContent = text;
   },
   setDisabled(d) {
+    mbState.disabled = d;
+    paintKbBtn();
     if (inTelegram && tg.MainButton) (d ? tg.MainButton.disable() : tg.MainButton.enable());
     else if (mbEl) mbEl.disabled = d;
   },
   setLoading(l) {
+    mbState.loading = l;
+    paintKbBtn();
     if (inTelegram && tg.MainButton) (l ? tg.MainButton.showProgress(false) : tg.MainButton.hideProgress());
     else if (mbEl) mbEl.classList.toggle('loading', l);
   },
@@ -196,6 +235,7 @@ export const mainButton = {
     mbCb = null;
     mbEl = null;
     mbSuspended = false;
+    hideKbBar();
     const bar = $('#mainbar');
     if (bar) {
       bar.hidden = true;

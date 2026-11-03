@@ -335,6 +335,31 @@ async def test_day_empty_and_params(client):
 
 # ------------------------------------------------------------------ приёмы пищи
 
+async def test_meal_photo_groups_reach_the_model(client, monkeypatch, fake_food):
+    seen = {}
+
+    async def parse_photos(imgs, caption, user_id, conn, **kw):  # noqa: ANN001
+        seen.update(kw)
+        return _food("гречка", 300)
+
+    monkeypatch.setattr(foodsvc, "parse_photos", parse_photos)
+    resp = await post_meal(client, jpeg("1"), jpeg("2"), jpeg("3"), groups="0,0,1")
+    assert resp.status == 201
+    assert seen["groups"] == [0, 0, 1]
+
+
+async def test_meal_photo_groups_must_match_photos(client, fake_food):
+    assert (await post_meal(client, jpeg("1"), jpeg("2"), groups="0")).status == 400
+    assert (await post_meal(client, jpeg("1"), groups="a")).status == 400
+
+
+def test_groups_note_describes_dishes():
+    assert foodsvc._groups_note(None, 2) == []
+    assert foodsvc._groups_note([0, 1], 2) == []
+    note = foodsvc._groups_note([0, 0, 1], 3)
+    assert "Блюдо 1: фото 1, 2" in note and "Блюдо 2: фото 3" in note
+
+
 async def test_meal_upload_photo(client, db, user_id, fake_food):
     dish_id = repo.create_dish(db, user_id, "Тарелка", "plate", diameter_cm=26)
     resp = await post_meal(client, jpeg("1"), jpeg("2"), comment="гречка на обед",

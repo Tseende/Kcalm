@@ -417,9 +417,18 @@ async def api_meal_create(request: web.Request) -> web.Response:
                     if raw and not raw.isdigit():
                         raise bad("dish_id должен быть числом или пустым.", "bad_field")
                     dish_ids.append(int(raw) if raw else None)
+            groups = None
+            raw_groups = form.value("groups")
+            if raw_groups:
+                try:
+                    groups = [int(x) for x in raw_groups.split(",")]
+                except ValueError:
+                    raise bad("groups: список номеров блюд через запятую.", "bad_field") from None
+                if len(groups) != len(photos):
+                    raise bad("groups должен быть по одному номеру на каждое фото.", "bad_field")
             paths = [save_upload(config, data) for data in photos]
             meal_id = await meals_svc.recognize_and_save(
-                db, user, paths, dish_ids, comment or text, local_dt)
+                db, user, paths, dish_ids, comment or text, local_dt, groups)
         else:
             u = await foodsvc.parse_text(text, user["id"], db)
             if not u.items:

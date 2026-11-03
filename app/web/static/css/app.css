@@ -467,6 +467,10 @@ input[type=text], input[type=number], input[type=time], input[type=search], inpu
 body.kb-open .tabbar, body.kb-open .mainbar { display: none; }
 body.kb-open { --safe-b: 0px; padding-bottom: calc(var(--kb-h) + 24px); }
 body.kb-open.has-tabbar, body.kb-open.has-main { padding-bottom: calc(var(--kb-h) + 24px); }
+/* главная кнопка над клавиатурой: «Сохранить» всегда под рукой */
+.kbbar { position: fixed; left: 0; right: 0; bottom: var(--kb-h); z-index: 26; box-sizing: border-box; height: 68px; padding: 10px 16px; background: var(--c-bg); border-top: 1px solid var(--card-edge); }
+.kbbar[hidden] { display: none; }
+body.kb-open.has-main, body.kb-open.has-main.has-tabbar { padding-bottom: calc(var(--kb-h) + 92px); }
 body.kb-open .sheet-wrap { padding-bottom: var(--kb-h); }
 body.kb-open .sheet { max-height: calc(88vh - var(--kb-h)); }
 /* поля не должны уезжать под липкую шапку и нижние панели при прокрутке к ним */
@@ -493,6 +497,9 @@ html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
 .capture-sub { font-size: 13px; color: var(--c-hint); max-width: 280px; }
 .capture-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; margin-top: 12px; }
 .capture.compact .capture-actions { margin-top: 0; }
+.capture-actions.tight { margin-top: 0; }
+.thumbs { display: flex; flex-wrap: wrap; gap: 8px; }
+.photo-card .hint { margin: 0; text-align: center; }
 
 /* ---------- анализ дня ---------- */
 .an-head { text-align: center; padding: 18px 16px; }

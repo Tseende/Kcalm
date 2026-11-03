@@ -5,6 +5,8 @@ import { tg, inTelegram } from './api.js';
 const TEXTUAL = new Set(['text', 'number', 'search', 'tel', 'email', 'url', 'password', 'time', 'date', '']);
 const isField = (el) => !!el && ((el.tagName === 'TEXTAREA') || (el.tagName === 'INPUT' && TEXTUAL.has((el.getAttribute('type') || '').toLowerCase())) || el.isContentEditable);
 
+const KBBAR_H = 68; // высота кнопки над клавиатурой, см. .kbbar в app.css
+
 export function initKeyboard() {
   const root = document.documentElement;
   const body = document.body;
@@ -28,12 +30,13 @@ export function initKeyboard() {
     clearTimeout(timer);
     timer = setTimeout(() => {
       if (document.activeElement !== el) return;
-      // Прокручиваем только если поле реально закрыто клавиатурой или шапкой: без лишних скачков.
+      // Прокручиваем только если поле реально закрыто клавиатурой, кнопкой над ней или шапкой: без лишних скачков.
+      // scrollIntoView здесь не годится: он двигает ещё и visualViewport, и поле «прыгает» вверх.
       const r = el.getBoundingClientRect();
       const visTop = (vv ? vv.offsetTop : 0) + 60;
-      const visBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
-      if (r.top >= visTop && r.bottom <= visBottom - 12) return;
-      try { el.scrollIntoView({ block: 'nearest' }); } catch (e) { el.scrollIntoView(); }
+      const visBottom = (vv ? vv.offsetTop + vv.height : window.innerHeight) - (open ? KBBAR_H : 0);
+      if (r.bottom > visBottom - 12) window.scrollBy(0, Math.ceil(r.bottom - visBottom + 16));
+      else if (r.top < visTop) window.scrollBy(0, Math.floor(r.top - visTop - 8));
     }, 320);
   }
 
