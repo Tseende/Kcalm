@@ -1,6 +1,6 @@
 // Product add/edit form (also reused by the label screen)
 import { api } from '../api.js';
-import { foodPic, FOOD_ICONS } from '../pics.js';
+import { foodPic, FOOD_ICONS, FOOD_GROUPS } from '../pics.js';
 import { h, icon, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, confirmDialog, errorState } from '../ui.js';
 
 const val = (v) => (v === null || v === undefined ? '' : v);
@@ -18,7 +18,7 @@ export function productForm(p = {}) {
   const ug = numInput({ value: val(p.unit_grams), min: 1, max: 5000, step: 1, placeholder: 'г в единице', 'aria-label': 'Грамм в единице' });
   let iconVal = FOOD_ICONS.includes(p.icon) ? p.icon : null;
   const titleIcon = h('div', { class: 'section-title' }, h('span', null, 'Иконка'));
-  const iconGrid = h('div', { class: 'icon-grid', role: 'radiogroup', 'aria-label': 'Иконка' });
+  const iconGrid = h('div', { class: 'icon-groups', role: 'radiogroup', 'aria-label': 'Иконка' });
   const iconPrev = h('button', { type: 'button', class: 'icon-prev', 'aria-expanded': 'false', onclick: () => { iconOpen = !iconOpen; paintIcon(); } });
   let iconOpen = false;
   function paintIcon() {
@@ -27,10 +27,12 @@ export function productForm(p = {}) {
       h('span', { class: 'icon-prev-lbl' }, iconOpen ? 'Свернуть' : 'Изменить иконку'));
     iconGrid.hidden = !iconOpen;
     titleIcon.hidden = !iconOpen;
-    iconGrid.replaceChildren(h('button', { type: 'button', class: 'icon-opt auto' + (iconVal ? '' : ' on'), role: 'radio', 'aria-checked': String(!iconVal),
-      onclick: () => { iconVal = null; iconOpen = false; haptic('light'); paintIcon(); } }, 'Авто'),
-    ...FOOD_ICONS.map((k) => h('button', { type: 'button', class: 'icon-opt' + (iconVal === k ? ' on' : ''), role: 'radio', 'aria-checked': String(iconVal === k),
-      onclick: () => { iconVal = k; iconOpen = false; haptic('light'); paintIcon(); } }, foodPic('', 40, k))));
+    const opt = (k) => h('button', { type: 'button', class: 'icon-opt' + (iconVal === k ? ' on' : ''), role: 'radio', 'aria-checked': String(iconVal === k),
+      onclick: () => { iconVal = k; iconOpen = false; haptic('light'); paintIcon(); } }, foodPic('', 40, k));
+    iconGrid.replaceChildren(
+      h('div', { class: 'icon-grid' }, h('button', { type: 'button', class: 'icon-opt auto' + (iconVal ? '' : ' on'), role: 'radio', 'aria-checked': String(!iconVal),
+        onclick: () => { iconVal = null; iconOpen = false; haptic('light'); paintIcon(); } }, 'Авто')),
+      ...FOOD_GROUPS.flatMap(([title, keys]) => [h('div', { class: 'icon-group-title' }, title), h('div', { class: 'icon-grid' }, keys.map(opt))]));
   }
   name.addEventListener('input', () => { if (!iconVal) paintIcon(); });
   paintIcon();

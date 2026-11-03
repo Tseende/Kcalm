@@ -104,6 +104,26 @@ const FOOD = [
 // Все доступные картинки продуктов (для ручного выбора).
 export const FOOD_ICONS = [...new Set(FOOD.map(([file]) => file))];
 
+// Группы для выбора иконки вручную. Всё, что не попало в группу, уйдёт в «Другое».
+const GROUPS = [
+  ['Молочное и яйца', ['milk', 'kefir', 'drinkyogurt', 'yogurt', 'sourcream', 'cottage', 'curdbar', 'cheese', 'smokedcheese', 'processedcheese', 'butter', 'egg', 'icecream']],
+  ['Мясо и колбасы', ['meat', 'steak', 'mince', 'cutlet', 'chicken', 'chickenmeat', 'turkey', 'sausage', 'smokedsausage', 'salo']],
+  ['Рыба и морепродукты', ['fish', 'salmon', 'herring', 'herringjar', 'shrimp', 'canfish', 'forshmak']],
+  ['Крупы и паста', ['rice', 'buckwheat', 'oatmeal', 'pasta', 'beans']],
+  ['Хлеб и выпечка', ['bread', 'ryebread', 'toast', 'croissant', 'pancakes', 'cookies', 'cake']],
+  ['Овощи и грибы', ['tomato', 'cucumber', 'carrot', 'potato', 'onion', 'broccoli', 'pumpkin', 'corn', 'mushroom', 'avocado', 'vegetables']],
+  ['Фрукты и ягоды', ['apple', 'banana', 'orange', 'lemon', 'grapes', 'watermelon', 'strawberry', 'peach', 'berries']],
+  ['Блюда и фастфуд', ['soup', 'salad', 'sandwich', 'burger', 'pizza', 'wrap', 'sushi', 'dumplings', 'khinkali', 'fries', 'chips']],
+  ['Соусы и заготовки', ['ketchup', 'mayo', 'adjika', 'lecho', 'oil', 'pickledcucumber', 'pickledtomato', 'pickledpepper', 'pickledmushroom', 'sauerkraut', 'olives', 'blackolives']],
+  ['Сладкое', ['chocolate', 'candy', 'honey', 'jamstrawberry', 'jamraspberry', 'jamcherry', 'jamapricot', 'jamcurrant', 'protein']],
+  ['Орехи и семечки', ['nuts', 'seeds']],
+];
+export const FOOD_GROUPS = (() => {
+  const used = new Set(GROUPS.flatMap(([, ks]) => ks));
+  const rest = FOOD_ICONS.filter((k) => !used.has(k));
+  return [...GROUPS.map(([t, ks]) => [t, ks.filter((k) => FOOD_ICONS.includes(k))]), ...(rest.length ? [['Другое', rest]] : [])];
+})();
+
 export function foodPicName(name) {
   const t = String(name || '').toLowerCase().replace(/ё/g, 'е');
   for (const [file, re] of FOOD) if (re.test(t) || re.test(String(name || '').toLowerCase())) return file;
