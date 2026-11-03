@@ -86,12 +86,12 @@ export function weekGoalBlock(ctx, { withRecap = false, compact = false } = {}) 
     const open = () => nav.go('/analysis');
     if (!g) {
       return h('button', { class: 'card wg-strip', type: 'button', onclick: open },
-        h('span', { class: 'wg-ico', 'aria-hidden': 'true' }, '🎯'),
+        h('span', { class: 'wg-ico wg-ico-line', 'aria-hidden': 'true' }, icon('target', 20)),
         h('span', { class: 'grow' }, h('span', { class: 'row-title' }, 'Цель на неделю'), h('span', { class: 'muted small wg-sub' }, 'Выберите одну привычку')),
         icon('next', 16));
     }
     return h('button', { class: 'card wg-strip' + (g.achieved ? ' achieved' : ''), type: 'button', onclick: open, 'aria-label': `Цель недели: ${g.title}, ${g.done} из ${g.target}` },
-      h('span', { class: 'wg-ico', 'aria-hidden': 'true' }, g.achieved ? '🏆' : g.icon),
+      h('span', { class: 'wg-ico wg-ico-line' + (g.achieved ? ' done' : ''), 'aria-hidden': 'true' }, icon(g.achieved ? 'check' : 'target', 20)),
       h('span', { class: 'grow wg-strip-main' }, h('span', { class: 'row-title' }, g.title), dots(g)),
       h('b', { class: 'wg-count' }, `${g.done}/${g.target}`));
   }

@@ -157,18 +157,48 @@ export function stackedBars({ bars, height = 170, classes = ['p', 'f', 'c'] }) {
 }
 
 /** Donut ring. Returns SVG only; put text in an overlay. */
-export function ring({ value, max, size = 150, stroke = 14, color = 'var(--c-accent)' }) {
+let ringSeq = 0;
+export function ring({ value, max, size = 150, stroke = 14, color = 'var(--c-accent)', gradient = null, animate = false }) {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const pct = max > 0 ? Math.min(1, Math.max(0, value / max)) : 0;
   const over = max > 0 && value > max * 1.0001;
   const svg = s('svg', { viewBox: `0 0 ${size} ${size}`, width: size, height: size, class: 'ring', role: 'img', 'aria-label': `${Math.round(value)} из ${Math.round(max)}`, style: `--ch:${color}` });
   svg.append(s('circle', { cx: size / 2, cy: size / 2, r, class: 'ring-track', 'stroke-width': stroke, fill: 'none' }));
+  let strokeStyle = null;
+  if (gradient) {
+    const id = 'rg' + (++ringSeq);
+    svg.append(s('defs', null, s('linearGradient', { id, x1: '0', y1: '0', x2: '1', y2: '1' },
+      s('stop', { offset: '0', 'stop-color': gradient[0] }), s('stop', { offset: '1', 'stop-color': gradient[1] }))));
+    strokeStyle = `stroke:url(#${id})`;
+  }
   svg.append(s('circle', {
+    style: strokeStyle,
     cx: size / 2, cy: size / 2, r, fill: 'none', 'stroke-width': stroke, 'stroke-linecap': 'round',
     'stroke-dasharray': `${(c * pct).toFixed(1)} ${c.toFixed(1)}`,
     transform: `rotate(-90 ${size / 2} ${size / 2})`,
-    class: over ? 'ring-val ring-over' : 'ring-val',
+    class: (over ? 'ring-val ring-over' : 'ring-val') + (animate ? ' ring-anim' : ''),
   }));
+  return svg;
+}
+
+// Activity-style concentric rings, outermost first. Over 100 % the arc starts a second lap on top of the first.
+export function macroRings({ items, size = 208, stroke = 15, gap = 5, animate = false, label = '' }) {
+  const svg = s('svg', { viewBox: `0 0 ${size} ${size}`, width: size, height: size, class: 'ring macro-rings', role: 'img', 'aria-label': label });
+  items.forEach((it, i) => {
+    const r = (size - stroke) / 2 - i * (stroke + gap);
+    if (r <= stroke / 2) return;
+    const circ = 2 * Math.PI * r;
+    const cx = size / 2;
+    const ratio = it.max > 0 ? Math.max(0, it.value / it.max) : 0;
+    const tf = `rotate(-90 ${cx} ${cx})`;
+    svg.append(s('circle', { cx, cy: cx, r, fill: 'none', 'stroke-width': stroke, class: 'mr-track', style: `stroke:color-mix(in srgb, ${it.color} 20%, transparent)` }));
+    const arc = (frac, cls) => s('circle', {
+      cx, cy: cx, r, fill: 'none', 'stroke-width': stroke, 'stroke-linecap': 'round', transform: tf,
+      'stroke-dasharray': `${(circ * frac).toFixed(1)} ${circ.toFixed(1)}`, class: cls + (animate ? ' ring-anim' : ''), style: `stroke:${it.color}`,
+    });
+    if (ratio > 0.002) svg.append(arc(Math.min(1, ratio), 'mr-arc'));
+    if (ratio > 1.002) svg.append(arc(Math.min(1, ratio - 1), 'mr-arc mr-lap2'));
+  });
   return svg;
 }

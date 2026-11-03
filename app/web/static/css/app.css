@@ -604,3 +604,119 @@ html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
 .prod-kcal { display: flex; flex-direction: column; align-items: flex-end; flex: none; line-height: 1.1; }
 .prod-kcal b { font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .prod-kcal span { font-size: 11px; color: var(--c-hint); }
+
+/* Today: calorie card holds the macros too */
+.kcal-card { flex-direction: column; align-items: stretch; gap: 14px; }
+.kcal-top { display: flex; align-items: center; gap: 20px; }
+.kcal-card .macros { padding: 14px 0 0; border-top: .5px solid var(--c-sep); }
+.macro-left { font-size: 12px; font-weight: 600; color: var(--c-text); font-variant-numeric: tabular-nums; }
+.macro.is-over .macro-left { color: var(--c-red); }
+.macro-of { color: var(--c-header); }
+.day-tip { padding: 10px 12px; border-radius: 10px; background: var(--c-tonal); color: var(--c-text); line-height: 1.35; }
+.section-add { display: inline-flex; align-items: center; gap: 4px; text-transform: none; letter-spacing: 0; font-size: 15px; min-height: 28px; }
+
+/* ---------- Today: премиальная полировка (только этот экран) ---------- */
+.today { --edge: color-mix(in srgb, var(--c-text) 7%, transparent); gap: 12px; }
+.today .stack { gap: 12px; }
+.today .card { border-radius: 20px; box-shadow: inset 0 0 0 .5px var(--edge); }
+
+/* hero */
+.today .kcal-card {
+  gap: 18px; padding: 20px 20px 18px;
+}
+.today .kcal-top { gap: 22px; }
+.today .ring-box { width: 132px; height: 132px; }
+.today .ring-track { stroke: color-mix(in srgb, var(--c-text) 9%, transparent); }
+.today .ring-val { transition: stroke-dasharray .5s; }
+.today .ring-val.ring-anim { animation: ring-in 1s cubic-bezier(.2, .8, .2, 1); }
+@keyframes ring-in { from { stroke-dasharray: 0 1000; } }
+@media (prefers-reduced-motion: reduce) { .today .ring-val.ring-anim { animation: none; } }
+.today .ring-num { font-size: 30px; font-weight: 700; letter-spacing: -.03em; }
+.today .ring-unit { margin-top: 2px; font-size: 13px; font-weight: 400; color: var(--c-hint); }
+.today .kcal-cap { font-size: 15px; font-weight: 400; color: var(--c-hint); }
+.today .kcal-card .kcal-left { font-size: 46px; font-weight: 700; letter-spacing: -.035em; line-height: 1; margin: 4px 0 2px; }
+.today .kcal-card .kcal-left .unit { font-size: 16px; font-weight: 600; letter-spacing: 0; margin-left: 2px; }
+.today .kcal-info .muted.small { font-size: 13px; }
+.today .kcal-card .range-hint { display: block; padding: 0; margin-top: 6px; background: none; border-radius: 0; font-size: 12px; font-weight: 400; color: var(--c-hint); white-space: normal; opacity: .85; }
+
+/* macros */
+.today .kcal-card .macros { padding: 16px 0 0; gap: 18px; border-top: 0; position: relative; }
+.today .kcal-card .macros::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: .5px; background: var(--edge); }
+.today .macro { gap: 6px; }
+.today .macro-name { font-size: 13px; font-weight: 400; }
+.today .macro-dot { width: 7px; height: 7px; }
+.today .macro-val { font-size: 21px; letter-spacing: -.025em; }
+.today .macro-val small { font-size: 12px; font-weight: 500; letter-spacing: 0; }
+.today .macros .bar { height: 5px; margin: 1px 0 0; background: color-mix(in srgb, var(--c-text) 9%, transparent); }
+.today .macro-left { font-size: 12px; font-weight: 600; color: var(--c-hint); }
+.today .macro.is-over .macro-left { color: var(--c-red); }
+.today .day-tip { display: flex; gap: 8px; align-items: center; padding: 0; background: none; border-radius: 0; font-size: 14px; line-height: 1.35; color: var(--c-hint); }
+.today .day-tip .ico { flex: none; color: var(--c-accent); }
+.today .kcal-card.is-over .day-tip .ico { color: var(--c-warn); }
+
+/* water: одна компактная карточка */
+.today .water-card { gap: 10px; padding: 14px 16px 14px; }
+.today .water-card .card-title { font-size: 15px; font-weight: 600; }
+.today .water-card .water-num b { font-size: 18px; letter-spacing: -.02em; }
+.today .water-card .bar-w { height: 6px; background: color-mix(in srgb, var(--c-text) 9%, transparent); }
+.today .water-card .quick { gap: 8px; align-items: center; }
+.today .water-card .quick .btn-tonal { min-height: 36px; font-size: 15px; border-radius: 99px; }
+.today .water-undo { flex: none; width: 36px; height: 36px; border: 0; border-radius: 50%; display: grid; place-items: center; background: transparent; color: var(--c-hint); }
+.today .water-undo:not(:disabled) { color: var(--c-water); background: color-mix(in srgb, var(--c-water) 12%, transparent); }
+.today .water-undo:disabled { opacity: .35; }
+
+/* health strip: одна сгруппированная карточка */
+.today .mini-group { display: grid; grid-template-columns: repeat(3, 1fr); padding: 0; overflow: hidden; }
+.today .mini { display: flex; flex-direction: column; align-items: flex-start; gap: 0; padding: 14px 14px 13px; border: 0; background: none; border-radius: 0; text-align: left; min-width: 0; position: relative; color: var(--c-text); }
+.today .mini + .mini::before { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: .5px; background: var(--edge); }
+.today .mini:active { background: color-mix(in srgb, var(--c-text) 6%, transparent); }
+.today .mini-ico { display: block; margin-bottom: 10px; line-height: 0; }
+.today .mini-val { font-size: 20px; font-weight: 700; letter-spacing: -.025em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.today .mini-val.is-empty { color: var(--c-hint); font-weight: 400; }
+.today .mini-sub { font-size: 12px; color: var(--c-hint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; margin-top: 1px; }
+.today .mini-sub.is-act { color: var(--c-accent); font-weight: 500; }
+.today .wg-ico-line { background: none; width: 28px; color: var(--c-accent); }
+.today .wg-ico-line.done { color: var(--c-green); }
+
+/* meals header + list */
+.today .section-title { margin: 6px 6px -6px; font-size: 13px; font-weight: 400; letter-spacing: .01em; }
+.today .section-add { color: var(--c-accent); font-size: 15px; font-weight: 500; letter-spacing: 0; }
+.today .list { border-radius: 20px; box-shadow: inset 0 0 0 .5px var(--edge); }
+.today .thumb { border-radius: 12px; }
+.today .ring { overflow: visible; }
+.today .macro-val { white-space: nowrap; }
+
+/* meal thumbs: type icon under the photo, photo fades in; photo-count badge */
+.today .thumb { background: none; }
+.today .thumb > .ticon, .today .thumb > img.thumb-photo { position: absolute; inset: 0; width: 100%; height: 100%; }
+.today .thumb > :first-child:not(img) { width: 100%; height: 100%; }
+.today .thumb img.thumb-photo { object-fit: cover; opacity: 0; transition: opacity .25s; }
+.today .thumb img.thumb-photo.loaded { opacity: 1; }
+.today .thumb img.thumb-photo.broken { display: none; }
+.today .thumb-count { display: inline-flex; align-items: center; gap: 2px; right: 3px; bottom: 3px; padding: 1px 5px; font-size: 10px; font-weight: 600; background: rgba(0, 0, 0, .55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+
+/* частые блюда: компактные одно-строчные пилюли */
+.today .often { margin-top: -4px; }
+.today .often-chip { flex-direction: row; align-items: center; gap: 8px; min-height: 38px; max-width: 230px; padding: 0 14px; border-radius: 99px; border: 0; background: var(--c-card); box-shadow: inset 0 0 0 .5px var(--edge); }
+.today .often-name { font-size: 14px; font-weight: 500; }
+.today .often-kcal { font-size: 13px; color: var(--c-hint); font-variant-numeric: tabular-nums; }
+
+/* Today hero: concentric macro rings */
+.today .kcal-top { flex-direction: column; align-items: center; gap: 12px; }
+.today .kcal-card .ring-box { width: 208px; height: 208px; }
+.today .kcal-card .ring { overflow: visible; }
+.today .mr-arc { transition: stroke-dasharray .5s; }
+.today .mr-arc.ring-anim { animation: ring-in 1s cubic-bezier(.2, .8, .2, 1); }
+.today .mr-lap2 { filter: drop-shadow(0 0 2.5px rgba(0, 0, 0, .55)); }
+.today .ring-center { gap: 0; }
+.today .ring-cap { font-size: 12px; color: var(--c-hint); }
+.today .kcal-card .ring-num { font-size: 36px; font-weight: 700; letter-spacing: -.035em; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.today .kcal-card .ring-num.over { color: var(--c-warn); }
+.today .kcal-card .ring-unit { margin-top: 0; font-size: 12px; }
+.today .kcal-sub { text-align: center; font-size: 14px; color: var(--c-hint); line-height: 1.35; }
+.today .kcal-card .range-hint { margin-top: 1px; font-size: 12px; text-align: center; }
+.today .kcal-card .macros { padding-top: 14px; gap: 8px; }
+.today .macro { align-items: center; text-align: center; gap: 4px; }
+.today .macro-name { justify-content: center; }
+.today .macro-dot { width: 8px; height: 8px; }
+.today .day-tip { justify-content: center; text-align: left; }

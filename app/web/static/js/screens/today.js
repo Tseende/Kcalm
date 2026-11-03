@@ -1,6 +1,6 @@
 // Screen 1: "Сегодня"
 import { api } from '../api.js';
-import { ring } from '../charts.js';
+import { macroRings } from '../charts.js';
 import { weekGoalBlock } from './weekgoal.js';
 import { mealPic } from '../pics.js';
 import {
@@ -10,10 +10,11 @@ import {
 
 let curDate = todayISO();
 const waterUndo = []; // ids of water entries added in this session
+let firstPaint = true; // animate the ring once per visit, not on every refresh
 let oftenCache = null; // last /frequent answer, painted instantly on re-render
 
 export default async function render(root, ctx) {
-  const view = h('div', { class: 'screen' });
+  const view = h('div', { class: 'screen today' });
   const body = h('div', { class: 'stack' });
   root.append(view);
 
@@ -52,33 +53,52 @@ export default async function render(root, ctx) {
     const high = day.meals.reduce((a, m) => a + (m.kcal_high || m.kcal), 0);
     const over = remaining < 0;
 
-    // calories
-    const ringBox = h('div', { class: 'ring-box' }, ring({ value: eaten, max: t.kcal, size: 136, stroke: 13, color: 'var(--c-accent)' }),
-      h('div', { class: 'ring-center' }, h('div', { class: 'ring-num' }, fmtKcal(eaten)), h('div', { class: 'muted small' }, 'ккал')));
-    const kcalCard = h('section', { class: 'card kcal-card' + (over ? ' is-over' : ''), 'aria-label': 'Калории' }, ringBox,
-      h('div', { class: 'kcal-info' },
-        h('div', { class: 'kcal-cap' }, over ? 'Выше нормы на' : 'Осталось'),
-        h('div', { class: 'kcal-left' + (over ? ' over' : '') }, fmtKcal(Math.abs(remaining)), h('span', { class: 'unit' }, ' ккал')),
-        h('div', { class: 'muted small' }, `Норма ${fmtKcal(t.kcal)} ккал`),
-        day.meals.length ? h('div', { class: 'range-hint small' }, `Оценка: ${fmtKcal(low)}–${fmtKcal(high)} ккал`) : null));
+    // hero: three concentric rings (protein / fat / carbs), calories in the middle, numbers below
+    const P = day.totals.protein; const F = day.totals.fat; const C = day.totals.carbs;
+    const ringBox = h('div', { class: 'ring-box' },
+      macroRings({ size: 208, stroke: 15, gap: 5, animate: firstPaint, label: `Белки ${fmtN(P)} из ${fmtN(t.protein)} г, жиры ${fmtN(F)} из ${fmtN(t.fat)} г, углеводы ${fmtN(C)} из ${fmtN(t.carbs)} г`,
+        items: [{ value: P, max: t.protein, color: 'var(--c-p)' }, { value: F, max: t.fat, color: 'var(--c-f)' }, { value: C, max: t.carbs, color: 'var(--c-c)' }] }),
+      h('div', { class: 'ring-center' },
+        h('div', { class: 'ring-cap' }, over ? 'сверх нормы' : 'осталось'),
+        h('div', { class: 'ring-num' + (over ? ' over' : '') }, fmtKcal(Math.abs(remaining))),
+        h('div', { class: 'ring-unit' }, 'ккал')));
+    firstPaint = false;
+    const kcalCard = h('section', { class: 'card kcal-card' + (over ? ' is-over' : ''), 'aria-label': 'Калории и БЖУ' });
+    kcalCard.append(h('div', { class: 'kcal-top' }, ringBox,
+      h('div', { class: 'kcal-sub' },
+        h('div', null, `Съедено ${fmtKcal(eaten)} из ${fmtKcal(t.kcal)} ккал`),
+        day.meals.length ? h('div', { class: 'range-hint' }, `Оценка: ${fmtKcal(low)}–${fmtKcal(high)} ккал`) : null)));
 
-    // macros
-    const macro = (name, val, target, cls) => h('div', { class: 'macro ' + cls },
-      h('div', { class: 'macro-name' }, h('i', { class: 'macro-dot' }), name),
-      h('div', { class: 'macro-val' }, fmtN(val), h('small', null, ' г')),
-      h('div', { class: 'bar ' + cls, role: 'progressbar', 'aria-label': name, 'aria-valuenow': Math.round(val), 'aria-valuemax': Math.round(target) },
-        h('i', { style: { width: Math.min(100, target ? (val / target) * 100 : 0) + '%' } })),
-      h('div', { class: 'macro-of' }, `из ${fmtN(target)} г`));
-    const macroCard = h('section', { class: 'card macros', 'aria-label': 'Белки, жиры, углеводы' },
-      macro('Белки', day.totals.protein, t.protein, 'bar-p'),
-      macro('Жиры', day.totals.fat, t.fat, 'bar-f'),
-      macro('Углеводы', day.totals.carbs, t.carbs, 'bar-c'));
+    // macros: numbers under the rings (what is left, or the excess)
+    const macro = (name, val, target, cls) => {
+      const left = target - val;
+      const isOver = target > 0 && left < -0.05;
+      return h('div', { class: 'macro ' + cls + (isOver ? ' is-over' : '') },
+        h('div', { class: 'macro-name' }, h('i', { class: 'macro-dot' }), name),
+        h('div', { class: 'macro-val' }, fmtN(val), h('small', null, ` / ${fmtN(target)}`)),
+        h('div', { class: 'macro-left' }, isOver ? `+${fmtN(-left)} г сверх` : `ещё ${fmtN(left)} г`));
+    };
+    const macroRow = h('div', { class: 'macros', role: 'group', 'aria-label': 'Белки, жиры, углеводы' },
+      macro('Белки', P, t.protein, 'bar-p'),
+      macro('Жиры', F, t.fat, 'bar-f'),
+      macro('Углеводы', C, t.carbs, 'bar-c'));
+
+    // soft one-line hint instead of a verdict (today only, once something is logged)
+    const proteinLeft = Math.round(t.protein - day.totals.protein);
+    let tipText = null;
+    if (curDate === todayISO() && day.meals.length) {
+      if (over && proteinLeft > 10) tipText = `Белка ещё ${proteinLeft} г — лучше нежирный источник.`;
+      else if (over) tipText = 'Калории выбраны. Смотрите на неделю, а не на день.';
+      else if (proteinLeft > 15) tipText = `Белка ещё ${proteinLeft} г.`;
+    }
+    const tip = tipText ? h('div', { class: 'day-tip' }, icon('sparkles', 15), h('span', null, tipText)) : null;
+    kcalCard.append(macroRow, ...(tip ? [tip] : []));
 
     // water
     let waterMl = day.water_ml;
     const waterNum = h('div', { class: 'water-num' });
     const waterBar = h('div', { class: 'bar bar-w', role: 'progressbar', 'aria-label': 'Вода', 'aria-valuemax': t.water_ml }, h('i'));
-    const undoBtn = h('button', { class: 'btn btn-secondary btn-sm', type: 'button', 'aria-label': 'Отменить последнюю добавленную воду', onclick: undoWater }, icon('undo', 18), 'Отменить');
+    const undoBtn = h('button', { class: 'water-undo', type: 'button', 'aria-label': 'Отменить последнюю добавленную воду', title: 'Отменить', onclick: undoWater }, icon('undo', 20));
     function paintWater() {
       waterNum.replaceChildren(h('b', null, fmtKcal(waterMl)), h('span', { class: 'muted' }, ` / ${fmtKcal(t.water_ml)} мл`));
       waterBar.firstChild.style.width = Math.min(100, (waterMl / t.water_ml) * 100) + '%';
@@ -104,19 +124,22 @@ export default async function render(root, ctx) {
         paintWater();
       } catch (e) { waterUndo.push(id); toast(e.message, 'error'); }
     }
-    const waterCard = h('section', { class: 'card stack-sm', 'aria-label': 'Вода' },
-      h('div', { class: 'row-between' }, h('div', { class: 'card-title with-ico' }, tile('droplet', 'teal', 26), 'Вода'), waterNum),
+    const waterCard = h('section', { class: 'card stack-sm water-card', 'aria-label': 'Вода' },
+      h('div', { class: 'row-between' }, h('div', { class: 'card-title with-ico' }, tile('droplet', 'teal', 24), 'Вода'), waterNum),
       waterBar,
       h('div', { class: 'quick' }, [200, 300, 500].map((ml) => h('button', { class: 'btn btn-tonal', type: 'button', onclick: () => addWater(ml) }, '+' + ml)), undoBtn));
     paintWater();
 
-    // mini cards
-    const mini = (ic, color, title, value, sub, path) => h('button', { class: 'card mini', type: 'button', onclick: () => nav.go(path), 'aria-label': `${title}: ${value}` },
-      tile(ic, color, 28), h('div', { class: 'mini-val' }, value), h('div', { class: 'muted small' }, sub || title));
-    const miniRow = h('div', { class: 'grid3' },
-      mini('bed', 'indigo', 'Сон', day.sleep ? fmtDur(day.sleep.duration_min) : '—', day.sleep && day.sleep.score ? 'оценка ' + day.sleep.score : 'Сон', '/add/sleep'),
-      mini('walk', 'green', 'Шаги', day.activity && day.activity.steps != null ? fmtKcal(day.activity.steps) : '—', day.activity && day.activity.active_kcal ? day.activity.active_kcal + ' ккал' : 'Шаги', '/add/activity'),
-      mini('scale', 'purple', 'Вес', day.weight != null ? fmtN(day.weight) + ' кг' : '—', 'Вес', '/add/weight'));
+    // health strip: one grouped card, line icons, empty states are actions
+    const mini = (ic, color, title, value, sub, path) => h('button', { class: 'mini', type: 'button', onclick: () => nav.go(path), 'aria-label': `${title}: ${value}` },
+      h('span', { class: 'mini-ico', style: { color }, 'aria-hidden': 'true' }, icon(ic, 22)),
+      h('div', { class: 'mini-val' + (value === '—' ? ' is-empty' : '') }, value), h('div', { class: 'mini-sub' + (value === '—' ? ' is-act' : '') }, sub));
+    const sleepOk = !!day.sleep;
+    const stepsOk = day.activity && day.activity.steps != null;
+    const miniRow = h('div', { class: 'card mini-group' },
+      mini('bed', 'var(--c-sleep)', 'Сон', sleepOk ? fmtDur(day.sleep.duration_min) : '—', sleepOk ? (day.sleep.score ? 'оценка ' + day.sleep.score : 'сон') : 'записать сон', '/add/sleep'),
+      mini('walk', 'var(--c-steps)', 'Шаги', stepsOk ? fmtKcal(day.activity.steps) : '—', stepsOk ? 'шагов' : 'записать шаги', '/add/activity'),
+      mini('scale', '#af52de', 'Вес', day.weight != null ? fmtN(day.weight) + ' кг' : '—', day.weight != null ? 'вес' : 'записать вес', '/add/weight'));
 
     // meals
     const mealsList = day.meals.length
@@ -125,8 +148,8 @@ export default async function render(root, ctx) {
         h('button', { class: 'btn btn-primary', type: 'button', onclick: () => nav.go('/add/meal') }, 'Добавить приём'));
 
     const isToday = curDate === todayISO();
-    body.replaceChildren(kcalCard, macroCard, waterCard, miniRow, ...(isToday ? [weekGoalBlock(ctx, { compact: true })] : []),
-      sectionTitle('Приёмы пищи'), ...(isToday ? [oftenRow()] : []), mealsList);
+    body.replaceChildren(kcalCard, waterCard, miniRow, ...(isToday ? [weekGoalBlock(ctx, { compact: true })] : []),
+      sectionTitle('Приёмы пищи', isToday ? h('button', { class: 'btn-link section-add', type: 'button', onclick: () => nav.go('/add/meal') }, icon('plus', 14), 'Добавить') : null), ...(isToday ? [oftenRow()] : []), mealsList);
   }
 
   // One-tap «как обычно»: dishes eaten at least twice in 60 days. Hidden when there are none.
@@ -137,7 +160,7 @@ export default async function render(root, ctx) {
       row.replaceChildren(...items.map((f) => {
         const b = h('button', { class: 'often-chip', type: 'button', title: f.names.join(', '),
           'aria-label': `Записать: ${f.names.join(', ')}, ${f.kcal} ккал`, onclick: () => repeat(f, b) },
-        h('span', { class: 'often-name' }, f.title), h('span', { class: 'often-kcal' }, `${fmtKcal(f.kcal)} ккал`));
+        h('span', { class: 'often-name' }, f.title), h('span', { class: 'often-kcal' }, fmtKcal(f.kcal)));
         return b;
       }));
     };
@@ -167,9 +190,14 @@ export default async function render(root, ctx) {
 
   function mealRow(m) {
     const mt = mealType(m.type);
-    const thumb = m.photos && m.photos.length
-      ? h('div', { class: 'thumb' }, photoImg(m.photos[0].url, '', 'Фото приёма'), m.photos.length > 1 ? h('span', { class: 'thumb-count' }, '×' + m.photos.length) : null)
-      : (mealPic(m.type, 56) || tile(mt.icon, mt.color, 56));
+    const fallback = () => mealPic(m.type, 56) || tile(mt.icon, mt.color, 56);
+    let thumb;
+    if (m.photos && m.photos.length) {
+      const img = photoImg(m.photos[0].url, 'thumb-photo', 'Фото приёма');
+      img.addEventListener('load', () => img.classList.add('loaded'));
+      thumb = h('div', { class: 'thumb' }, fallback(), img,
+        m.photos.length > 1 ? h('span', { class: 'thumb-count' }, icon('photo', 10), String(m.photos.length)) : null);
+    } else thumb = fallback();
     const names = (m.items || []).map((i) => i.name).slice(0, 3).join(', ');
     return h('button', { class: 'row meal-row', type: 'button', onclick: () => nav.go('/meal/' + m.id), 'aria-label': `${mt.label} ${m.time}, ${m.kcal} ккал` },
       thumb,
