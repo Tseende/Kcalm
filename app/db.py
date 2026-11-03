@@ -91,11 +91,43 @@ class LibsqlConnection:
 
     cloud = True
 
-    def __init__(self, raw) -> None:
+    def __init__(self, raw, reopen=None) -> None:
         self._raw = raw
+        self._reopen = reopen      # фабрика нового соединения: Turso рвёт «простоявший» поток
+
+    # Сбои потока Hrana: запрос не выполнен, можно открыть соединение заново и повторить.
+    _STALE = ("stream was idle", "rolled back", "connection closed", "stream error", "stream not found", "expired")
+
+    def _is_stale(self, exc: Exception) -> bool:
+        return isinstance(exc, ValueError) and "hrana" in str(exc).lower() \
+            and any(m in str(exc).lower() for m in self._STALE)
+
+    def _reconnect(self) -> None:
+        old = self._raw
+        self._raw = self._reopen()
+        try:
+            old.close()
+        except Exception:  # noqa: BLE001 — старый поток уже мёртв
+            log.debug("close stale libsql", exc_info=True)
+        log.warning("Turso: соединение пересоздано после обрыва потока")
 
     def execute(self, sql: str, params=()):
-        return _Cursor(self._raw.execute(sql, params if isinstance(params, dict) else tuple(params)))
+        args = params if isinstance(params, dict) else tuple(params)
+        try:
+            return _Cursor(self._raw.execute(sql, args))
+        except Exception as e:  # noqa: BLE001
+            # Чтение повторяем всегда; запись — только вне открытой транзакции, чтобы не продублировать часть её.
+            read = sql.lstrip()[:6].upper() in ("SELECT", "PRAGMA")
+            if not self._reopen or not self._is_stale(e) or (not read and self.in_transaction_safe()):
+                raise
+            self._reconnect()
+            return _Cursor(self._raw.execute(sql, args))
+
+    def in_transaction_safe(self) -> bool:
+        try:
+            return bool(self._raw.in_transaction)
+        except Exception:  # noqa: BLE001 — поток мёртв, транзакции нет
+            return False
 
     def executemany(self, sql: str, seq):
         return _Cursor(self._raw.executemany(sql, [tuple(p) for p in seq]))
@@ -140,11 +172,15 @@ def connect(db_path: str | Path, *, url: str = "", token: str = ""):
         import libsql
 
         if url:
-            raw = libsql.connect(str(p), sync_url=url, auth_token=token)
+            def reopen():
+                return libsql.connect(str(p), sync_url=url, auth_token=token)
+            raw = reopen()
             raw.sync()                               # подтянуть актуальную БД из облака
         else:
-            raw = libsql.connect(str(p))
-        conn = LibsqlConnection(raw)
+            def reopen():
+                return libsql.connect(str(p))
+            raw = reopen()
+        conn = LibsqlConnection(raw, reopen)
         try:
             conn.execute("PRAGMA foreign_keys=ON")
         except Exception:  # noqa: BLE001
