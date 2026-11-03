@@ -1,5 +1,6 @@
 // "Мои продукты" list
 import { api } from '../api.js';
+import { foodPic } from '../pics.js';
 import { h, icon, tile, nav, pageHead, skeletonCards, emptyState, errorState, debounce, fmtN } from '../ui.js';
 
 const PALETTE = ['blue', 'green', 'orange', 'purple', 'teal', 'pink', 'red'];
@@ -29,7 +30,7 @@ export default async function render(root, ctx) {
         return;
       }
       list.replaceChildren(h('div', { class: 'list tiles' }, products.map((p) => h('button', { class: 'row', type: 'button', onclick: () => nav.go('/menu/product/' + p.id) },
-        tile('package', PALETTE[Math.abs(Number(p.id) || 0) % PALETTE.length]),
+        foodPic(p.name) || tile('package', PALETTE[Math.abs(Number(p.id) || 0) % PALETTE.length]),
         h('span', { class: 'grow' },
           h('span', { class: 'row-title' }, p.name, p.brand ? h('span', { class: 'muted' }, ' · ' + p.brand) : null),
           h('span', { class: 'row-sub' }, `${fmtN(p.kcal)} ккал · Б ${fmtN(p.protein)} · Ж ${fmtN(p.fat)} · У ${fmtN(p.carbs)} на 100 г`)),

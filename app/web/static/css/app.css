@@ -572,3 +572,8 @@ html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
 .add-card.wide .row-title { font-size: 17px; }
 .add-card.wide .row-sub { font-size: 13px; }
 .add-card.wide .ico { margin-left: auto; color: var(--c-hint); }
+
+/* картинки продуктов и напитков: светлая плитка как у иконок iOS, в обеих темах одинаково */
+.pic { display: inline-flex; align-items: center; justify-content: center; flex: none; border-radius: 22.5%; background: linear-gradient(160deg, #fff, #eceef3); box-shadow: 0 1px 3px rgba(0, 0, 0, .14), inset 0 0 0 .5px rgba(0, 0, 0, .06); overflow: hidden; }
+.pic img { width: 84%; height: 84%; object-fit: contain; display: block; }
+.row:has(.pic) { padding-left: 15px; }

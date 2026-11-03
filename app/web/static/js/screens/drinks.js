@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import {
   h, toast, haptic, nav, mainButton, pageHead, field, numInput, numVal, fmtN, TILE, errorState, skeletonCards,
 } from '../ui.js';
+import { drinkPic } from '../pics.js';
 
 const WATER = { id: 'water', name: 'Вода', emoji: '💧', color: 'teal', kcal_100: 0, sizes: [150, 200, 250, 300, 500], sugar: false, hydrates: true };
 const SUGAR_KCAL = 20; // one teaspoon, about 5 g
@@ -42,7 +43,7 @@ export default async function render(root, ctx) {
 
   const cards = catalog.map((d) => {
     const b = h('button', { type: 'button', class: 'drink-card', 'aria-pressed': 'false', onclick: () => select(d) },
-      h('span', { class: 'drink-emo', style: { background: TILE[d.color] || TILE.blue } }, d.emoji),
+      drinkPic(d.id) || h('span', { class: 'drink-emo', style: { background: TILE[d.color] || TILE.blue } }, d.emoji),
       h('span', { class: 'drink-name' }, d.name),
       h('span', { class: 'drink-sub' }, d.id === 'water' ? 'без калорий' : d.kcal_100 < 1 ? '≈ 0 ккал' : `≈ ${fmtN(d.kcal_100)} ккал / 100 мл`));
     b.dataset.id = d.id;
