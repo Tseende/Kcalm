@@ -113,11 +113,11 @@ def user_default_grams(conn: sqlite3.Connection, user_id: int, food_id: int) -> 
 # ------------------------------------------------------------------- свои продукты
 
 PRODUCT_FIELDS = ("name", "brand", "kcal", "protein", "fat", "carbs", "default_grams",
-                  "unit_name", "unit_grams", "barcode")
+                  "unit_name", "unit_grams", "barcode", "icon")
 _PRODUCT_COLS = {"name": "name_ru", "brand": "brand", "kcal": "kcal_100g",
                  "protein": "protein_100g", "fat": "fat_100g", "carbs": "carbs_100g",
                  "default_grams": "default_grams", "unit_name": "unit_name",
-                 "unit_grams": "unit_grams", "barcode": "barcode"}
+                 "unit_grams": "unit_grams", "barcode": "barcode", "icon": "icon"}
 
 
 def _product_aliases(name: str, brand: str | None) -> list[str]:
@@ -150,7 +150,8 @@ def _check_product(fields: dict) -> None:
 def create_product(conn: sqlite3.Connection, user_id: int, name: str, kcal: float,
                    protein: float, fat: float, carbs: float, brand: str | None = None,
                    default_grams: float | None = None, unit_name: str | None = None,
-                   unit_grams: float | None = None, barcode: str | None = None) -> int:
+                   unit_grams: float | None = None, barcode: str | None = None,
+                   icon: str | None = None) -> int:
     """Свой продукт (КБЖУ на 100 г). ValueError — значения вне допустимых границ."""
     import uuid
     name = (name or "").strip()
@@ -164,10 +165,10 @@ def create_product(conn: sqlite3.Connection, user_id: int, name: str, kcal: floa
     cur = conn.execute(
         """INSERT INTO foods (name_ru, name_en, kcal_100g, protein_100g, fat_100g, carbs_100g,
            source, barcode, external_id, owner_user_id, default_grams, unit_name, unit_grams,
-           brand, created_at) VALUES (?,?,?,?,?,?, 'user', ?,?,?,?,?,?,?,?)""",
+           brand, created_at, icon) VALUES (?,?,?,?,?,?, 'user', ?,?,?,?,?,?,?,?,?)""",
         (name, full_name, kcal, protein, fat, carbs, barcode,
          f"u{user_id}-{uuid.uuid4().hex}", user_id, default_grams, unit_name, unit_grams,
-         brand, utcnow_iso()))
+         brand, utcnow_iso(), icon))
     food_id = cur.lastrowid
     _set_product_aliases(conn, user_id, food_id, name, brand)
     conn.commit()
@@ -193,7 +194,7 @@ def update_product(conn: sqlite3.Connection, user_id: int, product_id: int,
         "name": row["name_ru"], "brand": row["brand"], "kcal": row["kcal_100g"],
         "protein": row["protein_100g"], "fat": row["fat_100g"], "carbs": row["carbs_100g"],
         "default_grams": row["default_grams"], "unit_name": row["unit_name"],
-        "unit_grams": row["unit_grams"], "barcode": row["barcode"],
+        "unit_grams": row["unit_grams"], "barcode": row["barcode"], "icon": row["icon"],
     }
     merged.update(fields)
     merged["name"] = (merged["name"] or "").strip()
@@ -204,11 +205,11 @@ def update_product(conn: sqlite3.Connection, user_id: int, product_id: int,
     full_name = f"{merged['name']} {merged['brand']}" if merged["brand"] else merged["name"]
     conn.execute(
         """UPDATE foods SET name_ru=?, name_en=?, brand=?, kcal_100g=?, protein_100g=?,
-           fat_100g=?, carbs_100g=?, default_grams=?, unit_name=?, unit_grams=?, barcode=?
+           fat_100g=?, carbs_100g=?, default_grams=?, unit_name=?, unit_grams=?, barcode=?, icon=?
            WHERE id=? AND owner_user_id=?""",
         (merged["name"], full_name, merged["brand"], merged["kcal"], merged["protein"],
          merged["fat"], merged["carbs"], merged["default_grams"], merged["unit_name"],
-         merged["unit_grams"], merged["barcode"], product_id, user_id))
+         merged["unit_grams"], merged["barcode"], merged["icon"], product_id, user_id))
     _set_product_aliases(conn, user_id, product_id, merged["name"], merged["brand"])
     conn.commit()
     return get_product(conn, user_id, product_id)

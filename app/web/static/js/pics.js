@@ -67,6 +67,9 @@ const FOOD = [
   ['nuts', /орех|миндал|фундук|кешью|арахис|фисташк|семечк|семена|финик|изюм|чернослив/],
 ];
 
+// Все доступные картинки продуктов (для ручного выбора).
+export const FOOD_ICONS = [...new Set(FOOD.map(([file]) => file))];
+
 export function foodPicName(name) {
   const t = String(name || '').toLowerCase().replace(/ё/g, 'е');
   for (const [file, re] of FOOD) if (re.test(t) || re.test(String(name || '').toLowerCase())) return file;
@@ -79,8 +82,8 @@ function pic(path, size) {
 }
 
 // null, если подходящей картинки нет: вызывающий код рисует обычную плитку.
-export function foodPic(name, size = 40) {
-  const f = foodPicName(name);
+export function foodPic(name, size = 40, icon = null) {
+  const f = FOOD_ICONS.includes(icon) ? icon : foodPicName(name);
   return f ? pic(`img/food/${f}.webp?v=3`, size) : null;
 }
 

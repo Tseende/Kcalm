@@ -819,7 +819,7 @@ async def test_products_endpoints(client, monkeypatch, fake_food):
     assert created.status == 201
     product = await created.json()
     assert set(product) == {"id", "name", "brand", "kcal", "protein", "fat", "carbs",
-                            "default_grams", "unit_name", "unit_grams", "barcode", "times_used"}
+                            "default_grams", "unit_name", "unit_grams", "barcode", "icon", "times_used"}
     assert (product["name"], product["brand"], product["kcal"], product["protein"],
             product["carbs"], product["unit_grams"]) == \
         ("Творог 5%", "Савушкин", 121, 17.0, 1.8, 180)
@@ -829,6 +829,9 @@ async def test_products_endpoints(client, monkeypatch, fake_food):
     assert (await (await client.get("/api/products?q=zzz", headers=H)).json()) == {"products": []}
     patched = await client.patch(f"/api/products/{pid}", json={"name": "Творог 9%"}, headers=H)
     assert patched.status == 200 and (await patched.json())["name"] == "Творог 9%"
+    with_icon = await client.patch(f"/api/products/{pid}", json={"icon": "yogurt"}, headers=H)
+    assert with_icon.status == 200 and (await with_icon.json())["icon"] == "yogurt"
+    assert (await client.patch(f"/api/products/{pid}", json={"icon": "../x"}, headers=H)).status == 400
     assert (await client.patch("/api/products/99999", json={"name": "x"}, headers=H)).status == 404
     assert (await client.post("/api/products", json={"name": "Х"}, headers=H)).status == 400
     assert (await client.post("/api/products", headers=H, json={

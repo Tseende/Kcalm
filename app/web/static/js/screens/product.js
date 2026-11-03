@@ -1,6 +1,7 @@
 // Product add/edit form (also reused by the label screen)
 import { api } from '../api.js';
-import { h, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, confirmDialog, errorState } from '../ui.js';
+import { foodPic, FOOD_ICONS } from '../pics.js';
+import { h, icon, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, confirmDialog, errorState } from '../ui.js';
 
 const val = (v) => (v === null || v === undefined ? '' : v);
 
@@ -15,8 +16,23 @@ export function productForm(p = {}) {
   const dg = numInput({ value: val(p.default_grams), min: 1, max: 5000, step: 1, placeholder: 'например, 150', 'aria-label': 'Порция по умолчанию' });
   const un = h('input', { type: 'text', value: val(p.unit_name), maxLength: 30, placeholder: 'пачка, шт, ломтик', 'aria-label': 'Название единицы' });
   const ug = numInput({ value: val(p.unit_grams), min: 1, max: 5000, step: 1, placeholder: 'г в единице', 'aria-label': 'Грамм в единице' });
+  let iconVal = FOOD_ICONS.includes(p.icon) ? p.icon : null;
+  const iconGrid = h('div', { class: 'icon-grid', role: 'radiogroup', 'aria-label': 'Иконка' });
+  const iconPrev = h('div', { class: 'icon-prev' });
+  function paintIcon() {
+    iconPrev.replaceChildren(foodPic(name.value, 72, iconVal) || h('span', { class: 'pic', style: { width: '72px', height: '72px' } }, icon('package', 32)));
+    iconGrid.replaceChildren(h('button', { type: 'button', class: 'icon-opt auto' + (iconVal ? '' : ' on'), role: 'radio', 'aria-checked': String(!iconVal),
+      onclick: () => { iconVal = null; haptic('light'); paintIcon(); } }, 'Авто'),
+    ...FOOD_ICONS.map((k) => h('button', { type: 'button', class: 'icon-opt' + (iconVal === k ? ' on' : ''), role: 'radio', 'aria-checked': String(iconVal === k),
+      onclick: () => { iconVal = k; haptic('light'); paintIcon(); } }, foodPic('', 40, k))));
+  }
+  name.addEventListener('input', () => { if (!iconVal) paintIcon(); });
+  paintIcon();
   const el = h('div', { class: 'stack' },
+    iconPrev,
     group([frow('Название', name), frow('Бренд', brand)]),
+    h('div', { class: 'section-title' }, h('span', null, 'Иконка')),
+    iconGrid,
     h('div', { class: 'section-title' }, h('span', null, 'На 100 г')),
     group([frow('Калории, ккал', kcal), frow('Белки, г', pr), frow('Жиры, г', fat), frow('Углеводы, г', carb)]),
     h('div', { class: 'section-title' }, h('span', null, 'Порция')),
@@ -34,7 +50,7 @@ export function productForm(p = {}) {
     return {
       name: n, brand: brand.value.trim() || null, kcal: Math.round(k),
       protein: macros[0] ?? 0, fat: macros[1] ?? 0, carbs: macros[2] ?? 0,
-      default_grams: grams(dg), unit_name: un.value.trim() || null, unit_grams: grams(ug),
+      default_grams: grams(dg), unit_name: un.value.trim() || null, unit_grams: grams(ug), icon: iconVal,
     };
   }
   return { el, collect };

@@ -30,7 +30,7 @@ export default async function render(root, ctx) {
         return;
       }
       list.replaceChildren(h('div', { class: 'list tiles' }, products.map((p) => h('button', { class: 'row', type: 'button', onclick: () => nav.go('/menu/product/' + p.id) },
-        foodPic(p.name) || tile('package', PALETTE[Math.abs(Number(p.id) || 0) % PALETTE.length]),
+        foodPic(p.name, 40, p.icon) || tile('package', PALETTE[Math.abs(Number(p.id) || 0) % PALETTE.length]),
         h('span', { class: 'grow' },
           h('span', { class: 'row-title' }, p.name),
           p.brand ? h('span', { class: 'row-sub' }, p.brand) : null,

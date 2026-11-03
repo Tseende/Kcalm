@@ -79,6 +79,7 @@ def product_json(product) -> dict:
             "unit_name": _get(product, "unit_name"),
             "unit_grams": _int(_get(product, "unit_grams")),
             "barcode": _get(product, "barcode"),
+            "icon": _get(product, "icon"),
             "times_used": int(_get(product, "times_used") or 0)}
 
 

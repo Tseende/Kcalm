@@ -12,6 +12,7 @@ import importlib
 import inspect
 import json
 import logging
+import re
 import sqlite3
 from datetime import date, datetime
 from pathlib import Path
@@ -578,7 +579,7 @@ async def api_item_save_product(request: web.Request) -> web.Response:
 
 _PRODUCT_NUMBERS = {"kcal": (0, 900), "protein": (0, 100), "fat": (0, 100), "carbs": (0, 100),
                     "default_grams": (1, 5000), "unit_grams": (1, 5000)}
-_PRODUCT_TEXTS = {"name": 60, "brand": 60, "unit_name": 30, "barcode": 32}
+_PRODUCT_TEXTS = {"name": 60, "brand": 60, "unit_name": 30, "barcode": 32, "icon": 24}
 
 
 def clean_product(data: dict, *, partial: bool) -> dict:
@@ -594,6 +595,8 @@ def clean_product(data: dict, *, partial: bool) -> dict:
             text = str(data[key] or "").strip()[:limit]
             if key == "name" and not text:
                 raise bad("У продукта должно быть название.", "bad_field")
+            if key == "icon" and text and not re.fullmatch(r"[a-z_]{1,24}", text):
+                raise bad("Неизвестная иконка.", "bad_field")
             out[key] = text or None
     if not partial and not out.get("name"):
         raise bad("У продукта должно быть название.", "bad_field")
