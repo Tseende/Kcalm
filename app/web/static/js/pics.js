@@ -23,6 +23,9 @@ const FOOD = [
   ['soup', /суп|борщ|щи(?![а-яё])|бульон|солянк|харчо|уха(?![а-яё])|окрошк/],
   ['salad', /салат|винегрет|оливье|зелень|руккол|шпинат/],
   ['egg', /яйц|яичн|омлет|глазунь/],
+  ['forshmak', /форшмак|паштет рыб|рыбн[а-яё]* паштет|рыбн[а-яё]* намазк/],
+  ['canfish', /консерв|шпрот|сардин/],
+  ['drinkyogurt', /питьев[а-яё]* йогурт|кисломолочн[а-яё]* напит|биойогурт|био-йогурт|снежок/],
   ['pancakes', /блин|оладь|панкейк|драник/],
   ['cheese', /творог|творожн|сырок|сырник/],
   ['yogurt', /йогурт|сметан|скир|десерт/],
@@ -36,6 +39,7 @@ const FOOD = [
   ['steak', /стейк|рёбр|ребр|отбивн|антрекот/],
   ['meat', /мясо|говядин|свинин|баранин|фарш|котлет|телятин|бифштекс|шашлык|печён|печен[ьи]/],
   ['shrimp', /креветк|краб|лангустин|мидии|морепродукт|кальмар/],
+  ['salmon', /лосос|сёмг|семг|форел/],
   ['fish', /рыб|лосос|сёмг|семг|тунец|форел|сельд|треск|минтай|скумбри|икра|шпрот/],
   ['banana', /банан/],
   ['orange', /апельсин|мандарин|грейпфрут|помело/],
@@ -77,7 +81,7 @@ function pic(path, size) {
 // null, если подходящей картинки нет: вызывающий код рисует обычную плитку.
 export function foodPic(name, size = 40) {
   const f = foodPicName(name);
-  return f ? pic(`img/food/${f}.webp?v=2`, size) : null;
+  return f ? pic(`img/food/${f}.webp?v=3`, size) : null;
 }
 
 const DRINKS = new Set(['cola', 'cola_zero', 'fanta', 'tea', 'americano', 'cappuccino', 'flat_white', 'latte', 'juice', 'water', 'smoothie', 'beer', 'wine', 'energy', 'shake']);
@@ -85,16 +89,16 @@ const DRINK_ALIAS = { juice: 'juice_box' };
 
 export function drinkPic(id, size = 48) {
   if (!DRINKS.has(id)) return null;
-  return pic(`img/drink/${DRINK_ALIAS[id] || id}.webp?v=2`, size);
+  return pic(`img/drink/${DRINK_ALIAS[id] || id}.webp?v=3`, size);
 }
 
 const DISH_PICS = { plate: 'plate', deep_plate: 'deep_plate', bowl: 'bowl', salad_bowl: 'salad_bowl', mug: 'mug', cup: 'cup', glass: 'glass', pan: 'pan', pot: 'pot', container: 'lunchbox', jar: 'jar', thermos: 'thermos' };
 
 // null для «другое»: вызывающий код рисует обычную плитку.
 export function dishPic(kind, size = 48) {
-  return DISH_PICS[kind] ? pic(`img/dish/${DISH_PICS[kind]}.webp?v=2`, size) : null;
+  return DISH_PICS[kind] ? pic(`img/dish/${DISH_PICS[kind]}.webp?v=3`, size) : null;
 }
 
 export function mealPic(type, size = 48) {
-  return ['breakfast', 'lunch', 'dinner', 'snack'].includes(type) ? pic(`img/meal/${type}.webp?v=2`, size) : null;
+  return ['breakfast', 'lunch', 'dinner', 'snack'].includes(type) ? pic(`img/meal/${type}.webp?v=3`, size) : null;
 }
