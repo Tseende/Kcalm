@@ -1,6 +1,7 @@
 """Конвейер еды: FoodExtraction → матчинг → детерминированный расчёт → карточка."""
 from __future__ import annotations
 
+import asyncio
 import json
 from collections import OrderedDict
 import logging
@@ -258,8 +259,8 @@ async def parse_photo(photo_b64: str, caption: str | None, user_id: int | None,
         temperature=0.1, user_id=user_id, db=db,
     )
     u = understanding_from_json(data, {1} if dish is not None else None)
-    # escalation: низкая уверенность → модель классом выше
-    if u.overall_confidence < 0.5 and not model:
+    # escalation: низкая уверенность → модель классом выше (этикетку повторно не гоняем)
+    if u.overall_confidence < 0.5 and not model and u.photo_kind != "label":
         cfg = get_config()
         return await parse_photo(photo_b64, caption, user_id, db,
                                  model=cfg.model_vision_escalation, prompt_name=prompt_name,
@@ -391,28 +392,38 @@ def _bounded(value, low: float, high: float) -> float | None:
     return number
 
 
+async def _resolve_missing(item: IngredientEstimate, conn: sqlite3.Connection, user_id: int,
+                           use_llm_fallback: bool) -> FoodRef:
+    """Продукта нет в локальной базе: OFF по бренду → LLM-оценка → грубая оценка по категории."""
+    ref = await _off_branded_ref(item, conn) if item.brand else None
+    if ref is None and use_llm_fallback:
+        try:
+            ref = await _llm_food_ref(item, user_id, conn)
+        except llm.LLMError:
+            log.warning("КБЖУ для %r не определены", item.name_ru, exc_info=True)
+    return ref or generic_ref(item.name_ru, item.name) or _empty_ref(item)
+
+
 async def build_calc(u: MealUnderstanding, conn: sqlite3.Connection,
                      user_id: int, use_llm_fallback: bool = True):
-    """Матчинг каждой позиции и детерминированный расчёт приёма."""
+    """Матчинг каждой позиции и детерминированный расчёт приёма.
+
+    Позиции, которых нет в локальной базе, разрешаются ПАРАЛЛЕЛЬНО (сеть: OFF, LLM)."""
+    refs = [matching.find_food(conn, item.name, item.name_ru, brand=item.brand, user_id=user_id)
+            for item in u.items]
+    missing = [i for i, ref in enumerate(refs) if ref is None]
+    if missing:
+        resolved = await asyncio.gather(*(
+            _resolve_missing(u.items[i], conn, user_id, use_llm_fallback) for i in missing))
+        for i, ref in zip(missing, resolved):
+            refs[i] = ref
     pairs = []
-    for item in u.items:
-        ref = matching.find_food(conn, item.name, item.name_ru,
-                                 brand=item.brand, user_id=user_id)
-        if ref is None and item.brand:
-            ref = await _off_branded_ref(item, conn)
-        if ref is None and use_llm_fallback:
-            try:
-                ref = await _llm_food_ref(item, user_id, conn)
-            except llm.LLMError:
-                log.warning("КБЖУ для %r не определены", item.name_ru, exc_info=True)
-                ref = generic_ref(item.name_ru, item.name) or _empty_ref(item)
-        if ref and ref.food_id:
+    for item, ref in zip(u.items, refs):
+        if ref.food_id:
             preset = repo.user_default_grams(conn, user_id, ref.food_id)
             if preset and item.explicit_grams is None:
                 # персональный пресет начинает расчёт, диапазон вокруг него
                 item.grams_min, item.grams_max = preset * 0.85, preset * 1.15
-        if ref is None:
-            ref = generic_ref(item.name_ru, item.name) or _empty_ref(item)
         pairs.append((item, ref))
     return calculate_meal(pairs)
 

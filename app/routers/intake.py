@@ -29,6 +29,7 @@ from app.routers import craving as craving_router
 from app.adapters import off
 from app.services import barcode
 from app.services import food as foodsvc
+from app.services import products as prodsvc
 from app.services import meals as meals_svc
 from app.services import water as watersvc
 from app.services import screens
@@ -526,6 +527,16 @@ async def _recognize_photo(msg: Message, db: sqlite3.Connection, user, data: byt
                             caption, status, source)
 
 
+def _drop_label_task(task) -> None:
+    """Параллельное чтение этикетки не понадобилось: гасим задачу и её возможную ошибку."""
+    if task is None:
+        return
+    if not task.done():
+        task.cancel()
+    else:
+        task.exception() if not task.cancelled() else None
+
+
 async def _recognize_images(msg: Message, db: sqlite3.Connection, user, images: list[_Image],
                             caption: str | None, status: Message, source: str) -> None:
     """Распознать фото (одно или весь альбом) сразу и записать одним приёмом пищи.
@@ -535,9 +546,16 @@ async def _recognize_images(msg: Message, db: sqlite3.Connection, user, images: 
     uid = user["id"]
     await _typing(msg)
     dishes = meals_svc.resolve_dishes(db, uid, None, len(images))     # посуда по умолчанию
+    label_task = None
+    if len(images) == 1 and not caption:
+        # одно фото без подписи может оказаться этикеткой: читаем её ПАРАЛЛЕЛЬНО с распознаванием
+        # еды, чтобы не ждать два запроса подряд; если это еда, результат выбрасываем
+        label_task = asyncio.ensure_future(prodsvc.parse_label(
+            db, user, base64.b64encode(images[0].data).decode()))
     try:
         u = await _parse_images(images, caption, uid, db, dishes)
     except Exception:                                     # noqa: BLE001
+        _drop_label_task(label_task)
         for im in images:
             repo.save_pending_input(db, uid, "photo", {"path": im.photo_path, "caption": caption})
             repo.forget_file(db, uid, im.file_hash)
@@ -545,11 +563,12 @@ async def _recognize_images(msg: Message, db: sqlite3.Connection, user, images: 
                                "Сохранил: повтори позже командой /retry или опиши текстом.")
         return
     if len(images) == 1 and u.photo_kind == "label" and not u.items:
-        # на фото упаковка с таблицей КБЖУ, а не блюдо: читаем этикетку и предлагаем внести в мои продукты
-        await status.edit_text("🥫 это этикетка, читаю…")
+        # на фото упаковка с таблицей КБЖУ, а не блюдо: этикетка уже читается, показываем карточку
+        await status.edit_text("🥫 это этикетка, дочитываю…")
         await products_router.from_label_photo(
-            msg, db, user, base64.b64encode(images[0].data).decode(), status)
+            msg, db, user, base64.b64encode(images[0].data).decode(), status, parsed=label_task)
         return
+    _drop_label_task(label_task)
     if not u.items:
         if len(images) == 1:
             await _process_screenshot(msg, db, user, images[0].data, images[0].file_hash,

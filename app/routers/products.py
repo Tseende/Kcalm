@@ -236,10 +236,13 @@ async def handle_draft_text(msg: Message, db: sqlite3.Connection, user, text: st
 # ------------------------------------------------------------------ этикетка
 
 async def from_label_photo(msg: Message, db: sqlite3.Connection, user, image_b64: str,
-                           status: Message) -> None:
-    """Фото этикетки → карточка с распознанными числами (ничего не сохраняется само)."""
+                           status: Message, parsed=None) -> None:
+    """Фото этикетки → карточка с распознанными числами (ничего не сохраняется само).
+
+    parsed — уже запущенная задача parse_label (чтение шло параллельно с распознаванием еды)."""
     try:
-        draft, conf, notes = await prodsvc.parse_label(db, user, image_b64)
+        draft, conf, notes = await (parsed if parsed is not None
+                                    else prodsvc.parse_label(db, user, image_b64))
     except Exception:                                        # noqa: BLE001
         log.warning("этикетка не прочитана", exc_info=True)
         await status.edit_text("Не смог прочитать этикетку (LLM недоступен). Попробуй позже "

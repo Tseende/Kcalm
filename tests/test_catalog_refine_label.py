@@ -105,12 +105,37 @@ async def test_label_photo_without_caption_goes_to_label_reader(db, monkeypatch)
         return foodsvc.understanding_from_json(
             {"items": [], "overall_confidence": 0.9, "photo_kind": "label"})
 
-    async def fake_label(msg, conn, user, image_b64, status):  # noqa: ANN001
+    async def fake_label(msg, conn, user, image_b64, status, parsed=None):  # noqa: ANN001
         called["ok"] = True
+        called["parsed"] = parsed is not None
 
     monkeypatch.setattr(foodsvc, "parse_photo", fake_photo)
     monkeypatch.setattr(products_router, "from_label_photo", fake_label)
     await _feed(dp, bot, _photo(bot, "lab1"))
-    assert called.get("ok") is True
+    assert called.get("ok") is True and called.get("parsed") is True   # читалась параллельно
     assert db.execute("SELECT COUNT(*) FROM meals").fetchone()[0] == 0
     await _drain()
+
+
+async def test_missing_items_resolved_in_parallel(db, monkeypatch):
+    import asyncio
+
+    running = {"now": 0, "max": 0}
+
+    async def slow(item, user_id, conn):  # noqa: ANN001
+        running["now"] += 1
+        running["max"] = max(running["max"], running["now"])
+        await asyncio.sleep(0.05)
+        running["now"] -= 1
+        from app.domain.nutrition import FoodRef
+        return FoodRef(name_ru=item.name_ru, name_en=item.name, kcal_100g=100, protein_100g=5,
+                       fat_100g=3, carbs_100g=14, source="llm", confidence=0.4)
+
+    monkeypatch.setattr(foodsvc, "_llm_food_ref", slow)
+    u = foodsvc.understanding_from_json({"items": [
+        {"name_ru": f"неведомое блюдо {n}", "name_en": f"zzq{n}", "amount": {"kind": "grams",
+         "grams": 100}, "confidence": 0.8} for n in "абвг"], "overall_confidence": 0.8})
+    uid = repo.create_user(db, 1)
+    calc = await foodsvc.build_calc(u, db, uid)
+    assert running["max"] == 4, "вызовы шли последовательно"
+    assert [i.name_ru for i in calc.items] == [i.name_ru for i in u.items]
