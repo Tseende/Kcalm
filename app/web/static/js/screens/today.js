@@ -49,8 +49,6 @@ export default async function render(root, ctx) {
     const t = day.targets;
     const eaten = day.totals.kcal;
     const remaining = day.remaining_kcal;
-    const low = day.meals.reduce((a, m) => a + (m.kcal_low || m.kcal), 0);
-    const high = day.meals.reduce((a, m) => a + (m.kcal_high || m.kcal), 0);
     const over = remaining < 0;
 
     // hero: three concentric rings (protein / fat / carbs), calories in the middle, numbers below
@@ -66,8 +64,7 @@ export default async function render(root, ctx) {
     const kcalCard = h('section', { class: 'card kcal-card' + (over ? ' is-over' : ''), 'aria-label': 'Калории и БЖУ' });
     kcalCard.append(h('div', { class: 'kcal-top' }, ringBox,
       h('div', { class: 'kcal-sub' },
-        h('div', null, `Съедено ${fmtKcal(eaten)} из ${fmtKcal(t.kcal)} ккал`),
-        day.meals.length ? h('div', { class: 'range-hint' }, `Оценка: ${fmtKcal(low)}–${fmtKcal(high)} ккал`) : null)));
+        h('div', null, `Съедено ${fmtKcal(eaten)} из ${fmtKcal(t.kcal)} ккал`))));
 
     // macros: numbers under the rings (what is left, or the excess)
     const macro = (name, val, target, cls) => {

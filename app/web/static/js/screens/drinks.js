@@ -73,7 +73,7 @@ export default async function render(root, ctx) {
       sumKcal.textContent = '≈ ' + k + ' ккал';
       sumSub.textContent = `${cur.name}${cur.sugar && sugar ? ` + ${sugar} ч. л. сахара` : ''} · ${v} мл`;
     }
-    sumWater.textContent = cur.hydrates ? `💧 +${v} мл в дневную норму воды` : 'В норму воды не идёт';
+    sumWater.textContent = cur.hydrates ? `+${v} мл в дневную норму воды` : 'В норму воды не идёт';
     sumWater.classList.toggle('off', !cur.hydrates);
   }
 

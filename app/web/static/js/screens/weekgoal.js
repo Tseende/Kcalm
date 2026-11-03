@@ -13,7 +13,7 @@ function celebrateOnce(g, weekStart, el) {
   } catch (e) { /* private mode: celebrate anyway, at worst twice */ }
   haptic('success');
   el.classList.add('celebrate');
-  toast(`🎉 Цель недели выполнена: ${g.title.toLowerCase()} ${g.done} из ${g.target}`, 'ok');
+  toast(`Цель недели выполнена: ${g.title.toLowerCase()} ${g.done} из ${g.target}`, 'ok');
 }
 
 // Returns a container that fills itself. `withRecap` adds last week's summary (Analysis screen);

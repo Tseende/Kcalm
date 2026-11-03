@@ -725,3 +725,7 @@ html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
 .today .mini-ico { color: var(--c-hint); }
 .today .macro.is-over .macro-left { color: var(--c-text); }
 .today .section-title { letter-spacing: .06em; }
+
+/* unslop: частые блюда переносятся, без горизонтальной карусели */
+.today .often { flex-wrap: wrap; overflow: visible; margin: -4px 0 0; padding: 0; scroll-snap-type: none; }
+.today .often-chip { max-width: 100%; }
