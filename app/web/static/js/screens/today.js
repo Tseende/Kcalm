@@ -132,7 +132,7 @@ export default async function render(root, ctx) {
 
     // health strip: one grouped card, line icons, empty states are actions
     const mini = (ic, color, title, value, sub, path) => h('button', { class: 'mini', type: 'button', onclick: () => nav.go(path), 'aria-label': `${title}: ${value}` },
-      h('span', { class: 'mini-ico', style: { color }, 'aria-hidden': 'true' }, icon(ic, 22)),
+      h('span', { class: 'mini-ico', 'aria-hidden': 'true' }, icon(ic, 22)),
       h('div', { class: 'mini-val' + (value === '—' ? ' is-empty' : '') }, value), h('div', { class: 'mini-sub' + (value === '—' ? ' is-act' : '') }, sub));
     const sleepOk = !!day.sleep;
     const stepsOk = day.activity && day.activity.steps != null;

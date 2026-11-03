@@ -720,3 +720,8 @@ html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
 .today .macro-name { justify-content: center; }
 .today .macro-dot { width: 8px; height: 8px; }
 .today .day-tip { justify-content: center; text-align: left; }
+
+/* unslop pass: один акцент, нейтральные иконки, красный только для ошибок */
+.today .mini-ico { color: var(--c-hint); }
+.today .macro.is-over .macro-left { color: var(--c-text); }
+.today .section-title { letter-spacing: .06em; }
