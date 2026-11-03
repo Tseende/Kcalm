@@ -32,9 +32,9 @@ export default async function render(root, ctx) {
       return;
     }
     const lbl = (d) => shortDate(d.date);
-    const tile = (title, value, sub) => h('div', { class: 'card tile' }, h('div', { class: 'muted small' }, title), h('div', { class: 'tile-val' }, value), sub ? h('div', { class: 'muted small' }, sub) : null);
+    const tile = (title, value, sub) => h('div', { class: 'tile' }, h('div', { class: 'muted small' }, title), h('div', { class: 'tile-val' }, value), sub ? h('div', { class: 'muted small' }, sub) : null);
     const wc = s.weight_change;
-    const tiles = h('div', { class: 'grid2' },
+    const tiles = h('div', { class: 'card stat-group' },
       tile('Средние ккал', s.avg_kcal != null ? fmtKcal(s.avg_kcal) : '—', s.avg_protein != null ? `белка ${fmtN(s.avg_protein)} г` : null),
       tile('Дней в норме', s.days_logged ? `${s.days_on_target} из ${s.days_logged}` : '—', 'по дням с записями'),
       tile('Вес (тренд)', wc == null ? '—' : (wc > 0 ? '+' : wc < 0 ? '−' : '') + fmtN(Math.abs(wc)) + ' кг', 'за период'),

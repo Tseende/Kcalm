@@ -744,3 +744,23 @@ html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
 .today .water-card .quick .btn-tonal small { font-size: 12px; font-weight: 500; color: var(--c-hint); }
 .today .water-card .quick .btn-tonal:active { background: color-mix(in srgb, var(--c-water) 20%, transparent); }
 .today .water-undo:not(:disabled) { color: var(--c-hint); background: transparent; }
+
+/* unslop: весь экран */
+/* иконки списков: один акцент вместо шести цветов */
+.row > .ticon { background: color-mix(in srgb, var(--c-accent, var(--c-btn)) 14%, transparent) !important; }
+.row > .ticon, .row > .ticon .ico { color: var(--c-accent, var(--c-btn)); }
+/* статистика: одна сгруппированная карточка вместо пяти */
+.stat-group { display: grid; grid-template-columns: 1fr 1fr; padding: 0; overflow: hidden; }
+.stat-group .tile { padding: 16px; display: flex; flex-direction: column; gap: 2px; min-width: 0; box-shadow: none; background: none; border-radius: 0; }
+.stat-group .tile:nth-child(odd) { border-right: .5px solid var(--c-sep); }
+.stat-group .tile:not(:last-child) { border-bottom: .5px solid var(--c-sep); }
+.stat-group .tile.span2 { grid-column: 1 / -1; border-right: 0; border-bottom: 0; }
+.stat-group .tile-val { font-size: 24px; letter-spacing: -.025em; font-variant-numeric: tabular-nums; margin: 2px 0; }
+/* анализ: читаемый размер текста */
+.an-tip { font-size: 15px; line-height: 1.5; }
+.an-tip-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+/* напитки: компактная подпись */
+.drink-sub { font-size: 12px; font-variant-numeric: tabular-nums; }
+/* цели/о приложении: иконка повторяет подпись, убираем */
+.row.static > .ticon { display: none; }
+.row.static:has(.ticon) { padding-left: 16px; }

@@ -56,7 +56,7 @@ export default async function render(root, ctx) {
     if (a.tips.length) {
       kids.push(sectionTitle('Что поправить'),
         h('div', { class: 'stack-sm' }, a.tips.map((t) => h('div', { class: 'card an-tip' },
-          h('div', { class: 'an-tip-title' }, h('span', { 'aria-hidden': 'true' }, t.icon), ' ', t.title),
+          h('div', { class: 'an-tip-title' }, t.title),
           h('div', null, t.text)))));
     }
     if (!a.good.length && !a.tips.length) {

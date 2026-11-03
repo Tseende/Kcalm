@@ -45,7 +45,7 @@ export default async function render(root, ctx) {
     const b = h('button', { type: 'button', class: 'drink-card', 'aria-pressed': 'false', onclick: () => select(d) },
       drinkPic(d.id) || h('span', { class: 'drink-emo', style: { background: TILE[d.color] || TILE.blue } }, d.emoji),
       h('span', { class: 'drink-name' }, d.name),
-      h('span', { class: 'drink-sub' }, d.id === 'water' ? 'без калорий' : d.kcal_100 < 1 ? '≈ 0 ккал' : `≈ ${fmtN(d.kcal_100)} ккал / 100 мл`));
+      h('span', { class: 'drink-sub' }, d.id === 'water' ? 'без калорий' : d.kcal_100 < 1 ? '0 ккал' : `${fmtN(Math.round(d.kcal_100))} ккал`));
     b.dataset.id = d.id;
     return b;
   });
