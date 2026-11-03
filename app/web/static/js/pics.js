@@ -124,6 +124,12 @@ export const FOOD_GROUPS = (() => {
   return [...GROUPS.map(([t, ks]) => [t, ks.filter((k) => FOOD_ICONS.includes(k))]), ...(rest.length ? [['Другое', rest]] : [])];
 })();
 
+export function foodGroupOf(name, icon = null) {
+  const k = FOOD_ICONS.includes(icon) ? icon : foodPicName(name);
+  const g = FOOD_GROUPS.find(([, ks]) => ks.includes(k));
+  return g ? g[0] : 'Другое';
+}
+
 export function foodPicName(name) {
   const t = String(name || '').toLowerCase().replace(/ё/g, 'е');
   for (const [file, re] of FOOD) if (re.test(t) || re.test(String(name || '').toLowerCase())) return file;
