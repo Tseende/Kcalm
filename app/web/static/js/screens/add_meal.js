@@ -4,6 +4,7 @@ import {
   h, icon, tile, toast, haptic, nav, mainButton, draft, pageHead, compressImage, busyOverlay, dishKind,
 } from '../ui.js';
 import { dishInfo } from './dishes.js';
+import { dishPic } from '../pics.js';
 
 const MAX = 6;
 
@@ -54,18 +55,18 @@ export default async function render(root, ctx) {
 
   // Radio list of the user's dishes with sizes; the size is what makes the estimate better.
   function dishPicker(g, n) {
-    const opt = (id, ic, color, title, sub) => {
+    const opt = (id, ic, color, title, sub, pic) => {
       const on = g.dishId === id;
       return h('button', {
         type: 'button', class: 'row row-btn' + (on ? ' selected' : ''), role: 'radio', 'aria-checked': String(on),
         onclick: () => { g.dishId = id; haptic('light'); paint(); },
       },
-      tile(ic, color),
+      (pic || tile(ic, color)),
       h('span', { class: 'grow' }, h('span', { class: 'row-title' }, title), h('span', { class: 'row-sub' }, sub)),
       h('span', { class: 'radio' + (on ? ' on' : '') }, on ? icon('check', 14) : null));
     };
     return h('div', { class: 'list dish-pick', role: 'radiogroup', 'aria-label': `Посуда блюда ${n}` },
-      dishes.map((d) => { const k = dishKind(d.kind); return opt(d.id, k.icon, k.color, d.name, dishInfo(d)); }),
+      dishes.map((d) => { const k = dishKind(d.kind); return opt(d.id, k.icon, k.color, d.name, dishInfo(d), dishPic(d.kind, 40)); }),
       opt(null, 'x', 'gray', 'Без посуды', 'Размер оценю по фото сам'));
   }
 

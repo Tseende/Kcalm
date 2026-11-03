@@ -1,5 +1,6 @@
 // "Моя посуда" list
 import { api } from '../api.js';
+import { dishPic } from '../pics.js';
 import { h, icon, tile, nav, pageHead, skeletonCards, emptyState, errorState, photoImg, dishKind, fmtN } from '../ui.js';
 
 export function dishInfo(d) {
@@ -30,7 +31,7 @@ export default async function render(root, ctx) {
         return;
       }
       list.replaceChildren(h('div', { class: 'list tiles' }, dishes.map((d) => h('button', { class: 'row', type: 'button', onclick: () => nav.go('/menu/dish/' + d.id) },
-        d.photo_url ? h('div', { class: 'thumb sm' }, photoImg(d.photo_url, '', d.name)) : tile(dishKind(d.kind).icon, dishKind(d.kind).color),
+        d.photo_url ? h('div', { class: 'thumb sm' }, photoImg(d.photo_url, '', d.name)) : (dishPic(d.kind, 40) || tile(dishKind(d.kind).icon, dishKind(d.kind).color)),
         h('span', { class: 'grow' },
           h('span', { class: 'row-title' }, d.name, d.is_default ? h('span', { class: 'badge' }, 'по умолчанию') : null),
           h('span', { class: 'row-sub' }, dishKind(d.kind).label + ' · ' + dishInfo(d))),

@@ -572,3 +572,10 @@ html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
 .frow .switch { margin-left: auto; }
 .frow > .grow { padding: 8px 0; }
 .photo-pick .ph-big { width: 96px; height: 96px; border-radius: 22%; background: var(--c-card); }
+
+/* выбор типа посуды */
+.kind-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.kind-opt { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 2px 8px; border-radius: var(--r-card); background: var(--c-card); border: 2px solid transparent; min-width: 0; }
+.kind-opt.on { border-color: var(--c-btn); }
+.kind-lbl { font-size: 11px; line-height: 1.15; text-align: center; color: var(--c-text); max-width: 100%; overflow-wrap: anywhere; }
+.chip .pic { border-radius: 7px; }

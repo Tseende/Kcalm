@@ -113,11 +113,15 @@ export const DISH_KINDS = {
   plate: { label: 'Тарелка', icon: 'tools-kitchen-2', color: 'blue' },
   deep_plate: { label: 'Глубокая тарелка', icon: 'soup', color: 'teal' },
   bowl: { label: 'Миска', icon: 'bowl', color: 'green' },
+  salad_bowl: { label: 'Салатник', icon: 'bowl', color: 'green' },
   mug: { label: 'Кружка', icon: 'coffee', color: 'orange' },
   cup: { label: 'Чашка', icon: 'cup', color: 'pink' },
   glass: { label: 'Стакан', icon: 'glass-full', color: 'indigo' },
   pan: { label: 'Сковорода', icon: 'cooker', color: 'red' },
+  pot: { label: 'Кастрюля', icon: 'cooker', color: 'gray' },
   container: { label: 'Контейнер', icon: 'box', color: 'purple' },
+  jar: { label: 'Банка', icon: 'box', color: 'teal' },
+  thermos: { label: 'Термос', icon: 'cup', color: 'green' },
   other: { label: 'Другое', icon: 'tools-kitchen', color: 'gray' },
 };
 export const dishKind = (k) => DISH_KINDS[k] || DISH_KINDS.other;

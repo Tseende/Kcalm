@@ -1,5 +1,6 @@
 // Meal detail
 import { api } from '../api.js';
+import { mealPic } from '../pics.js';
 import {
   h, icon, toast, haptic, nav, sheet, confirmDialog, pageHead, sectionTitle, skeletonCards, errorState, photoImg,
   fmtN, fmtKcal, longDate, mealType, MEAL_TYPES, dishKind, numVal, busyOverlay,
@@ -110,7 +111,7 @@ export default async function render(root, ctx) {
 
   function carousel() {
     if (!meal.photos || !meal.photos.length) {
-      return h('div', { class: 'photo-ph', 'aria-hidden': 'true' }, icon(mealType(meal.type).icon, 44), h('span', { class: 'muted small' }, meal.source === 'text' ? 'Описание текстом' : 'Без фото'));
+      return h('div', { class: 'photo-ph', 'aria-hidden': 'true' }, (mealPic(meal.type, 64) || icon(mealType(meal.type).icon, 44)), h('span', { class: 'muted small' }, meal.source === 'text' ? 'Описание текстом' : 'Без фото'));
     }
     const track = h('div', { class: 'carousel', tabindex: 0, 'aria-label': 'Фото приёма' }, meal.photos.map((p, i) => {
       const dish = p.dish_id && dishNames[p.dish_id];
@@ -138,7 +139,7 @@ export default async function render(root, ctx) {
     const s = sheet({ title: 'Тип приёма', content: h('div', { class: 'chips wrap' }, Object.entries(MEAL_TYPES).map(([k, v]) =>
       h('button', { class: 'chip' + (meal.type === k ? ' active' : ''), type: 'button', onclick: async () => {
         try { const m = await api.patch('/meals/' + meal.id, { type: k }); s.close(); onMeal(m, true); } catch (e) { toast(e.message, 'error'); }
-      } }, icon(v.icon, 18), v.label))) });
+      } }, (mealPic(k, 24) || icon(v.icon, 18)), v.label))) });
   }
 
   function refine() {
@@ -171,7 +172,7 @@ export default async function render(root, ctx) {
       pageHead('Приём пищи', { parent: '/today' }),
       carousel(),
       h('div', { class: 'meta-row' },
-        h('button', { class: 'chip', type: 'button', onclick: pickType, 'aria-label': 'Тип приёма: ' + mt.label }, icon(mt.icon, 18), mt.label),
+        h('button', { class: 'chip', type: 'button', onclick: pickType, 'aria-label': 'Тип приёма: ' + mt.label }, (mealPic(meal.type, 24) || icon(mt.icon, 18)), mt.label),
         h('button', { class: 'chip', type: 'button', onclick: pickTime, 'aria-label': 'Время ' + meal.time + ', изменить' }, icon('clock', 16), meal.time),
         h('span', { class: 'muted small' }, longDate(meal.date))),
       totalsEl,

@@ -2,6 +2,7 @@
 import { api } from '../api.js';
 import { ring } from '../charts.js';
 import { weekGoalBlock } from './weekgoal.js';
+import { mealPic } from '../pics.js';
 import {
   h, icon, tile, toast, haptic, nav, skeletonCards, emptyState, errorState, sectionTitle, photoImg,
   todayISO, addDays, dateLabel, longDate, fmtN, fmtKcal, fmtDur, mealType, macroLine,
@@ -168,7 +169,7 @@ export default async function render(root, ctx) {
     const mt = mealType(m.type);
     const thumb = m.photos && m.photos.length
       ? h('div', { class: 'thumb' }, photoImg(m.photos[0].url, '', 'Фото приёма'), m.photos.length > 1 ? h('span', { class: 'thumb-count' }, '×' + m.photos.length) : null)
-      : tile(mt.icon, mt.color, 56);
+      : (mealPic(m.type, 56) || tile(mt.icon, mt.color, 56));
     const names = (m.items || []).map((i) => i.name).slice(0, 3).join(', ');
     return h('button', { class: 'row meal-row', type: 'button', onclick: () => nav.go('/meal/' + m.id), 'aria-label': `${mt.label} ${m.time}, ${m.kcal} ккал` },
       thumb,

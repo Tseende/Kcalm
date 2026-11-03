@@ -1,5 +1,6 @@
 // Dish add/edit form
 import { api } from '../api.js';
+import { dishPic } from '../pics.js';
 import {
   h, icon, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, toggle, confirmDialog, errorState,
   photoImg, compressImage, DISH_KINDS, dishKind,
@@ -23,7 +24,14 @@ export default async function render(root, ctx) {
   let isDefault = !!dish.is_default;
   let photoFile = null;
   const name = h('input', { type: 'text', value: val(dish.name), maxLength: 60, placeholder: 'Глубокая тарелка', 'aria-label': 'Название' });
-  const kind = h('select', { 'aria-label': 'Тип посуды' }, Object.entries(DISH_KINDS).map(([k, v]) => h('option', { value: k, selected: k === dish.kind }, v.label)));
+  let kindVal = DISH_KINDS[dish.kind] ? dish.kind : 'plate';
+  const kindGrid = h('div', { class: 'kind-grid', role: 'radiogroup', 'aria-label': 'Тип посуды' });
+  function paintKinds() {
+    kindGrid.replaceChildren(...Object.entries(DISH_KINDS).map(([k, v]) => h('button', {
+      type: 'button', class: 'kind-opt' + (kindVal === k ? ' on' : ''), role: 'radio', 'aria-checked': String(kindVal === k),
+      onclick: () => { kindVal = k; haptic('light'); paintKinds(); if (!photoFile && !dish.photo_url) paintPhoto(null); },
+    }, dishPic(k, 44) || h('span', { class: 'pic', style: { width: '44px', height: '44px' } }, icon(v.icon, 24)), h('span', { class: 'kind-lbl' }, v.label))));
+  }
   const diam = numInput({ value: val(dish.diameter_cm), min: 1, max: 80, step: 0.5, placeholder: '20', 'aria-label': 'Диаметр' });
   const depth = numInput({ value: val(dish.depth_cm), min: 0.5, max: 50, step: 0.5, placeholder: '5', 'aria-label': 'Глубина' });
   const vol = numInput({ value: val(dish.volume_ml), min: 10, max: 10000, step: 10, placeholder: '500', inputmode: 'numeric', 'aria-label': 'Объём' });
@@ -37,10 +45,10 @@ export default async function render(root, ctx) {
   } });
   function paintPhoto(url) {
     preview.replaceChildren(...[
-      url ? h('img', { src: url, alt: 'Фото посуды' }) : (dish.photo_url ? photoImg(dish.photo_url, '', 'Фото посуды') : h('div', { class: 'ph-big', 'aria-hidden': 'true' }, icon(dishKind(kind.value).icon, 56))),
+      url ? h('img', { src: url, alt: 'Фото посуды' }) : (dish.photo_url ? photoImg(dish.photo_url, '', 'Фото посуды') : (dishPic(kindVal, 96) || h('div', { class: 'ph-big', 'aria-hidden': 'true' }, icon(dishKind(kindVal).icon, 56)))),
       isNew ? h('button', { class: 'btn btn-secondary btn-sm', type: 'button', onclick: () => fileInput.click() }, icon('camera', 18), url ? 'Заменить фото' : 'Фото пустой посуды') : null].filter(Boolean));
   }
-  kind.addEventListener('change', () => { if (!photoFile && !dish.photo_url) paintPhoto(null); });
+  paintKinds();
   paintPhoto(null);
 
   let busy = false;
@@ -54,7 +62,7 @@ export default async function render(root, ctx) {
     try {
       if (isNew) {
         const fd = new FormData();
-        fd.append('name', n); fd.append('kind', kind.value);
+        fd.append('name', n); fd.append('kind', kindVal);
         if (d !== null) fd.append('diameter_cm', d);
         if (dp !== null) fd.append('depth_cm', dp);
         if (v !== null) fd.append('volume_ml', Math.round(v));
@@ -62,7 +70,7 @@ export default async function render(root, ctx) {
         if (photoFile) fd.append('photo', photoFile, photoFile.name || 'dish.jpg');
         await api.post('/dishes', fd);
       } else {
-        await api.patch('/dishes/' + dish.id, { name: n, kind: kind.value, diameter_cm: d, depth_cm: dp, volume_ml: v === null ? null : Math.round(v), is_default: isDefault });
+        await api.patch('/dishes/' + dish.id, { name: n, kind: kindVal, diameter_cm: d, depth_cm: dp, volume_ml: v === null ? null : Math.round(v), is_default: isDefault });
       }
       haptic('success'); toast('Посуда сохранена', 'ok'); mainButton.hide(); nav.replace('/menu/dishes');
     } catch (e) { busy = false; mainButton.setLoading(false); toast(e.message, 'error'); }
@@ -76,7 +84,9 @@ export default async function render(root, ctx) {
     h('form', { class: 'stack', onsubmit: (e) => { e.preventDefault(); save(); } },
       h('div', { class: 'hint-card small' }, 'Размер посуды помогает точнее оценить порцию. Достаточно диаметра, а для глубоких тарелок и кружек добавьте объём.'),
       preview,
-      group([frow('Название', name), frow('Тип', kind)]),
+      group([frow('Название', name)]),
+      h('div', { class: 'section-title' }, h('span', null, 'Тип посуды')),
+      kindGrid,
       group([frow('Диаметр, см', diam), frow('Глубина, см', depth), frow('Объём, мл', vol)]),
       group([h('div', { class: 'frow' },
         h('span', { class: 'grow' }, h('span', { class: 'row-title' }, 'По умолчанию'), h('span', { class: 'row-sub' }, 'Подставлять при добавлении фото')),
