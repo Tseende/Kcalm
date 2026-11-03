@@ -12,7 +12,9 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from app import rich
 from app.config import get_config
+from app.adapters import off
 from app.db import connect_from_config, migrate
+from app.llm import client as llm_client
 from app.middleware import AccessMiddleware
 from app.routers import (commands, craving, dishes, intake, menu, onboarding, products, reports,
                          support, tracking)
@@ -113,6 +115,8 @@ async def main() -> None:
         sched.shutdown(wait=False)
         db.close()
         await bot.session.close()
+        await llm_client.close_client()
+        await off.close_client()
 
 
 if __name__ == "__main__":

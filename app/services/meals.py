@@ -106,15 +106,17 @@ async def parse_images(images_b64: list[str], caption: str | None, uid: int,
     step = foodsvc.MAX_PHOTOS
     chunks = [(images_b64[i:i + step], dish_list[i:i + step], grp[i:i + step])
               for i in range(0, len(images_b64), step)]
-    parts = []
-    for imgs, dsh, grs in chunks:
+    async def one(imgs, dsh, grs):
         try:
-            parts.append(await foodsvc.parse_photos(
+            return await foodsvc.parse_photos(
                 imgs, caption, uid, db, dishes=dsh if any(d is not None for d in dsh) else None,
-                groups=None if None in grs else grs))
+                groups=None if None in grs else grs)
         except Exception:                                    # noqa: BLE001
             log.warning("запрос по нескольким фото не удался, разбираю по одному", exc_info=True)
-            parts.append(await _parse_each(imgs, caption, uid, db, dsh))
+            return await _parse_each(imgs, caption, uid, db, dsh)
+
+    # чанки независимы: считаем параллельно, gather сохраняет порядок результатов
+    parts = list(await asyncio.gather(*(one(*c) for c in chunks)))
     return merge_understandings(parts)
 
 

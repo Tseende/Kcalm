@@ -1,6 +1,7 @@
 """Клиент OpenRouter: JSON-режим, терпимый парсер, 1 retry, лог в llm_calls."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -16,6 +17,48 @@ log = logging.getLogger(__name__)
 
 class LLMError(Exception):
     pass
+
+
+RETRY_PAUSE_S = 0.7           # пауза перед повтором
+_client: httpx.AsyncClient | None = None
+_client_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    """Общий клиент: keep-alive и TLS-сессия живут между вызовами.
+
+    Создаётся лениво внутри работающего loop; если loop сменился (тесты) или клиент
+    закрыт — делаем новый (старый от чужого loop закрыть уже нельзя, просто бросаем).
+    """
+    global _client, _client_loop
+    loop = asyncio.get_running_loop()
+    if _client is None or _client.is_closed or _client_loop is not loop:
+        _client = httpx.AsyncClient()
+        _client_loop = loop
+    return _client
+
+
+async def close_client() -> None:
+    """Закрыть общий клиент (при остановке бота)."""
+    global _client, _client_loop
+    client, _client, _client_loop = _client, None, None
+    if client is not None and not client.is_closed:
+        try:
+            await client.aclose()
+        except Exception:  # noqa: BLE001 — закрытие не должно мешать остановке
+            log.debug("закрытие LLM-клиента не удалось", exc_info=True)
+
+
+def _timeout(cfg) -> httpx.Timeout:
+    return httpx.Timeout(cfg.llm_timeout_s, connect=5.0)
+
+
+def _retryable(e: Exception) -> bool:
+    """Повторяем только сеть/таймауты, 5xx и 429; прочие 4xx — нет смысла."""
+    if isinstance(e, httpx.HTTPStatusError):
+        code = e.response.status_code
+        return code == 429 or code >= 500
+    return isinstance(e, httpx.TransportError)
 
 
 def extract_json(text: str) -> dict[str, Any]:
@@ -118,26 +161,28 @@ async def chat_json(purpose: str, messages: list[dict], model: str | None = None
     }
     start = time.monotonic()
     ok, error, usage, last_content = False, None, {}, ""
-    async with httpx.AsyncClient(timeout=cfg.llm_timeout_s) as client:
-        for attempt in (1, 2):                      # 1 retry
-            try:
-                resp = await client.post(f"{cfg.openrouter_base_url}/chat/completions",
-                                         headers=headers, json=body)
-                resp.raise_for_status()
-                data = resp.json()
-                usage = data.get("usage", {})
-                last_content = data["choices"][0]["message"]["content"] or ""
-                model_used = data.get("model", model)
-                ok = True
-                break
-            except Exception as e:                  # noqa: BLE001 — честный лог любой ошибки
-                error = f"{type(e).__name__}: {e}"
-                log.warning("LLM %s попытка %s ошибка: %s", purpose, attempt, error)
-        else:
-            model_used = model
-        if not ok:
-            await _log_call(cfg, user_id, purpose, model, usage, start, ok, error, db)
-            raise LLMError("LLM недоступен после повтора")
+    client = _get_client()
+    for attempt in (1, 2):                          # 1 retry
+        try:
+            resp = await client.post(f"{cfg.openrouter_base_url}/chat/completions",
+                                     headers=headers, json=body, timeout=_timeout(cfg))
+            resp.raise_for_status()
+            data = resp.json()
+            usage = data.get("usage", {})
+            last_content = data["choices"][0]["message"]["content"] or ""
+            model_used = data.get("model", model)
+            ok = True
+            break
+        except Exception as e:                      # noqa: BLE001 — честный лог любой ошибки
+            error = f"{type(e).__name__}: {e}"
+            log.warning("LLM %s попытка %s ошибка: %s", purpose, attempt, error)
+            if attempt == 1 and _retryable(e):
+                await asyncio.sleep(RETRY_PAUSE_S)
+                continue
+            break
+    if not ok:
+        await _log_call(cfg, user_id, purpose, model, usage, start, ok, error, db)
+        raise LLMError("LLM недоступен после повтора")
     try:
         parsed = extract_json(last_content)
     except LLMError as e:
@@ -158,21 +203,24 @@ async def transcribe_ogg(ogg_bytes: bytes, filename: str = "voice.ogg",
     cfg = get_config()
     headers = {"Authorization": f"Bearer {cfg.openrouter_api_key}"}
     start = time.monotonic()
-    async with httpx.AsyncClient(timeout=cfg.llm_timeout_s) as client:
-        for attempt in (1, 2):
-            try:
-                files = {"file": (filename, ogg_bytes, "audio/ogg")}
-                data = {"model": model, "language": language_hint}
-                resp = await client.post(f"{cfg.openrouter_base_url}/audio/transcriptions",
-                                         headers=headers, files=files, data=data)
-                resp.raise_for_status()
-                await _log_call(cfg, user_id, "asr", model, {}, start, True, None, db)
-                return resp.json().get("text", "").strip()
-            except Exception as e:                  # noqa: BLE001
-                if attempt == 2:
-                    await _log_call(cfg, user_id, "asr", model, {}, start, False,
-                                    f"{type(e).__name__}: {e}", db)
-                    raise LLMError("распознавание голоса не удалось") from e
+    client = _get_client()
+    for attempt in (1, 2):
+        try:
+            files = {"file": (filename, ogg_bytes, "audio/ogg")}
+            data = {"model": model, "language": language_hint}
+            resp = await client.post(f"{cfg.openrouter_base_url}/audio/transcriptions",
+                                     headers=headers, files=files, data=data,
+                                     timeout=_timeout(cfg))
+            resp.raise_for_status()
+            await _log_call(cfg, user_id, "asr", model, {}, start, True, None, db)
+            return resp.json().get("text", "").strip()
+        except Exception as e:                      # noqa: BLE001
+            if attempt == 1 and _retryable(e):
+                await asyncio.sleep(RETRY_PAUSE_S)
+                continue
+            await _log_call(cfg, user_id, "asr", model, {}, start, False,
+                            f"{type(e).__name__}: {e}", db)
+            raise LLMError("распознавание голоса не удалось") from e
     raise LLMError("unreachable")
 
 

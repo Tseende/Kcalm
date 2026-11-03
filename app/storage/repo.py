@@ -307,9 +307,17 @@ def frequent_meals(conn: sqlite3.Connection, user_id: int, limit: int = 6,
            AND kcal_total>=50 AND local_date >= date(COALESCE(?, 'now'), ?)
            ORDER BY id DESC LIMIT 150""",
         (user_id, today, f"-{int(days)} days")).fetchall()
+    # позиции всех приёмов одним запросом (вместо запроса на каждый приём), порядок как в get_meal_items
+    items_by_meal: dict[int, list] = {}
+    if rows:
+        marks = ",".join("?" * len(rows))
+        for i in conn.execute(
+                f"SELECT meal_id, name_ru FROM meal_items WHERE meal_id IN ({marks}) ORDER BY id",
+                [r["id"] for r in rows]).fetchall():
+            items_by_meal.setdefault(i["meal_id"], []).append(i)
     groups: dict[str, dict] = {}
     for r in rows:
-        names = [i["name_ru"].strip() for i in get_meal_items(conn, r["id"])]
+        names = [i["name_ru"].strip() for i in items_by_meal.get(r["id"], [])]
         if not names:
             continue
         sig = "|".join(sorted(n.lower() for n in names))
@@ -1114,13 +1122,14 @@ def due_craving_followups(conn: sqlite3.Connection) -> list[sqlite3.Row]:
 
 
 def dismiss_stale_cravings(conn: sqlite3.Connection, hours: int = 3) -> None:
-    conn.execute(
+    cur = conn.execute(
         f"""UPDATE craving_events SET outcome='dismissed', closed_utc=datetime('now')
            WHERE id IN (SELECT c.id FROM craving_events c WHERE c.outcome='open'
                         AND {_LAST_ACTIVITY} < datetime('now', ?))""",
         (f"-{int(hours)} hours",),
     )
-    conn.commit()
+    if cur.rowcount > 0:                # пустой коммит каждую минуту не нужен
+        conn.commit()
 
 
 def craving_memory(conn: sqlite3.Connection, user_id: int, limit: int = 3) -> list[sqlite3.Row]:

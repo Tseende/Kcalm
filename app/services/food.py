@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
+import functools
+import io
 import json
 from collections import OrderedDict
 import logging
@@ -40,7 +44,9 @@ NO_KCAL_OK = {"вода", "water", "чай", "tea", "кофе", "coffee", "сп�
 MAX_KCAL_100G = 900       # чистый жир ≈ 900 ккал/100 г, больше — ошибка модели
 
 
+@functools.lru_cache(maxsize=None)
 def load_prompt(name: str) -> str:
+    # файлы промптов не меняются во время работы бота: читаем с диска один раз
     return (PROMPTS_DIR / f"{name}.md").read_text(encoding="utf-8")
 
 
@@ -251,8 +257,39 @@ def _groups_note(groups: list[int] | None, n: int) -> list[str]:
     return out
 
 
+VISION_MAX_SIDE = 1600       # длинная сторона фото для vision-модели
+VISION_JPEG_QUALITY = 85
+
+
+def shrink_b64(b64: str, max_side: int = VISION_MAX_SIDE) -> str:
+    """Уменьшает фото, если длинная сторона больше max_side (LANCZOS, JPEG q85).
+
+    Меньше фото — меньше токенов и быстрее ответ. Нет Pillow или любая ошибка —
+    возвращаем оригинал как есть. Оригиналы на диске и в БД не трогаем."""
+    try:
+        from PIL import Image, ImageOps
+        raw = base64.b64decode(b64)
+        with Image.open(io.BytesIO(raw)) as im:
+            if max(im.size) <= max_side:
+                return b64
+            im = ImageOps.exif_transpose(im)         # поворот из EXIF, иначе после пережатия он потеряется
+            im.thumbnail((max_side, max_side), Image.LANCZOS)
+            if im.mode != "RGB":
+                im = im.convert("RGB")
+            out = io.BytesIO()
+            im.save(out, format="JPEG", quality=VISION_JPEG_QUALITY)
+        return base64.b64encode(out.getvalue()).decode("ascii")
+    except Exception:                                # noqa: BLE001 — не вышло, шлём оригинал
+        return b64
+
+
 def _image_part(b64: str) -> dict:
     return {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
+
+
+async def _image_part_async(b64: str) -> dict:
+    """_image_part с ужатием фото в отдельном потоке (не блокирует event loop)."""
+    return _image_part(await asyncio.to_thread(shrink_b64, b64))
 
 
 async def parse_photo(photo_b64: str, caption: str | None, user_id: int | None,
@@ -264,11 +301,11 @@ async def parse_photo(photo_b64: str, caption: str | None, user_id: int | None,
     text = prompt + _caption_block(caption)
     if dish is not None:
         text += "\n\n" + dish_note(dish)
-    content: list[dict] = [{"type": "text", "text": text}, _image_part(photo_b64)]
+    content: list[dict] = [{"type": "text", "text": text}, await _image_part_async(photo_b64)]
     dish_b64 = dishsvc.photo_b64(dish) if dish is not None else None
     if dish_b64:
         content += [{"type": "text", "text": "Фото пустой посуды (для масштаба, не еда):"},
-                    _image_part(dish_b64)]
+                    await _image_part_async(dish_b64)]
     data, used = await llm.chat_json(
         "food_vision",
         [{"role": "user", "content": content}],
@@ -310,8 +347,9 @@ async def parse_photos(images_b64: list[str], caption: str | None, user_id: int 
             lines.append(dish_note(dish, f"Посуда на фото {i}"))
     content: list[dict] = [{"type": "text", "text": load_prompt(prompt_name) + _caption_block(caption)
                             + "\n\n" + "\n".join(lines)}]
-    for i, b64 in enumerate(images, 1):
-        content += [{"type": "text", "text": f"Фото {i}:"}, _image_part(b64)]
+    parts = await asyncio.gather(*(_image_part_async(b64) for b64 in images))
+    for i, part in enumerate(parts, 1):
+        content += [{"type": "text", "text": f"Фото {i}:"}, part]
     seen: set[int] = set()
     for i, dish in enumerate(dish_list, 1):
         key = dishdom._get(dish, "id") or id(dish) if dish is not None else None
@@ -322,7 +360,7 @@ async def parse_photos(images_b64: list[str], caption: str | None, user_id: int 
         if dish_b64:
             content += [{"type": "text", "text": f"Фото пустой посуды «{dishdom._get(dish, 'name')}» "
                                                  f"(для масштаба, не еда; относится к фото {i}):"},
-                        _image_part(dish_b64)]
+                        await _image_part_async(dish_b64)]
     data, _used = await llm.chat_json(
         "food_vision", [{"role": "user", "content": content}],
         model=model or get_config().model_vision,

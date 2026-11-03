@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 
@@ -64,24 +65,51 @@ def parse_product(product: dict) -> dict | None:
     }
 
 
-def _client(transport) -> httpx.AsyncClient:
-    return httpx.AsyncClient(timeout=TIMEOUT, headers={"User-Agent": USER_AGENT},
-                             transport=transport)
+_shared: httpx.AsyncClient | None = None
+_shared_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _client(transport) -> tuple[httpx.AsyncClient, bool]:
+    """(клиент, временный ли он). С явным transport (тесты) — одноразовый,
+    иначе общий: создаётся лениво в работающем loop и пересоздаётся при смене loop."""
+    global _shared, _shared_loop
+    if transport is not None:
+        return (httpx.AsyncClient(timeout=TIMEOUT, headers={"User-Agent": USER_AGENT},
+                                  transport=transport), True)
+    loop = asyncio.get_running_loop()
+    if _shared is None or _shared.is_closed or _shared_loop is not loop:
+        _shared = httpx.AsyncClient(timeout=TIMEOUT, headers={"User-Agent": USER_AGENT})
+        _shared_loop = loop
+    return _shared, False
+
+
+async def close_client() -> None:
+    """Закрыть общий клиент (при остановке бота)."""
+    global _shared, _shared_loop
+    client, _shared, _shared_loop = _shared, None, None
+    if client is not None and not client.is_closed:
+        try:
+            await client.aclose()
+        except Exception:  # noqa: BLE001
+            log.debug("закрытие OFF-клиента не удалось", exc_info=True)
 
 
 async def fetch_barcode(code: str, transport: httpx.AsyncBaseTransport | None = None) -> dict | None:
     """Продукт по штрихкоду или None (не найден, неполные данные, сеть недоступна)."""
     if not valid_barcode(code):
         return None
+    client, temporary = _client(transport)
     try:
-        async with _client(transport) as client:
-            resp = await client.get(f"{BASE_URL}/api/v2/product/{code}.json",
-                                    params={"fields": FIELDS})
-            resp.raise_for_status()
-            data = resp.json()
+        resp = await client.get(f"{BASE_URL}/api/v2/product/{code}.json",
+                                params={"fields": FIELDS})
+        resp.raise_for_status()
+        data = resp.json()
     except Exception as e:  # noqa: BLE001 — сеть и формат ответа не должны ронять бота
         log.warning("OFF barcode %s: %s: %s", code, type(e).__name__, e)
         return None
+    finally:
+        if temporary:
+            await client.aclose()
     if data.get("status") != 1 or not isinstance(data.get("product"), dict):
         return None
     product = dict(data["product"])
@@ -99,16 +127,19 @@ async def search_branded(name: str, brand: str,
     и название пересекается с запросом хотя бы наполовину. Иначе None (пусть решает LLM-оценка)."""
     if not name or not brand:
         return None
+    client, temporary = _client(transport)
     try:
-        async with _client(transport) as client:
-            resp = await client.get(f"{BASE_URL}/cgi/search.pl", params={
-                "search_terms": f"{brand} {name}", "search_simple": 1, "action": "process",
-                "json": 1, "page_size": 8, "fields": FIELDS})
-            resp.raise_for_status()
-            products = resp.json().get("products") or []
+        resp = await client.get(f"{BASE_URL}/cgi/search.pl", params={
+            "search_terms": f"{brand} {name}", "search_simple": 1, "action": "process",
+            "json": 1, "page_size": 8, "fields": FIELDS})
+        resp.raise_for_status()
+        products = resp.json().get("products") or []
     except Exception as e:  # noqa: BLE001
         log.warning("OFF search %r: %s: %s", name, type(e).__name__, e)
         return None
+    finally:
+        if temporary:
+            await client.aclose()
     want = _tokens(name)
     brand_l = brand.lower().replace("ё", "е")
     for raw in products:

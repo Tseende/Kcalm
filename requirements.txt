@@ -9,3 +9,4 @@ pytest>=8
 pytest-asyncio>=0.24
 matplotlib>=3.8
 libsql>=0.1.11
+Pillow>=13.0

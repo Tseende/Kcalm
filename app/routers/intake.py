@@ -8,6 +8,7 @@ import json
 import logging
 import re
 import sqlite3
+import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -293,7 +294,8 @@ async def on_voice(msg: Message, db: sqlite3.Connection, bot=None) -> None:
 
 # ------------------------------------------------------------------ фото
 
-ALBUM_WAIT_SEC = 1.5          # сколько ждём остальные фото альбома
+ALBUM_WAIT_SEC = 1.5          # верхний предел ожидания остальных фото альбома
+ALBUM_QUIET_SEC = 0.6         # debounce: альбом закрыт, если столько времени новых фото не было
 _ALBUMS: dict[tuple[int, str], "_Album"] = {}
 _BG_TASKS: set[asyncio.Task] = set()
 
@@ -316,6 +318,7 @@ class _Album:
     pending: int = 0
     duplicates: int = 0
     add_to: dict | None = None           # фото альбома дополняют готовый приём (кнопка «➕ Фото к приёму»)
+    last_seen: float = field(default_factory=time.monotonic)   # когда пришло последнее фото группы
 
 
 async def _typing(msg: Message) -> None:
@@ -330,6 +333,11 @@ def _spawn(coro) -> None:
     task = asyncio.create_task(coro)
     _BG_TASKS.add(task)
     task.add_done_callback(_BG_TASKS.discard)
+
+
+def _typing_bg(msg: Message) -> None:
+    """«Печатает» в фоне: основной путь (скачивание, распознавание) не ждёт Telegram."""
+    _spawn(_typing(msg))
 
 
 @router.message(F.photo)
@@ -361,6 +369,7 @@ async def _ingest_image(msg: Message, db: sqlite3.Connection, file_id: str,
         if album is None:
             album = _ALBUMS[group] = _Album(msg=msg, user=user, db=db, add_to=add_to)
             _spawn(_flush_album(group))
+        album.last_seen = time.monotonic()       # каждое новое фото двигает дедлайн debounce
         album.pending += 1
     try:
         image = await _download_image(msg, db, uid, file_id, file_size, from_document, album)
@@ -412,7 +421,7 @@ async def _download_image(msg: Message, db: sqlite3.Connection, uid: int, file_i
     """Скачать, проверить размер и дубликат, сохранить на диск. None — дальше не идём."""
     from app.config import get_config
     cfg = get_config()
-    await _typing(msg)
+    _typing_bg(msg)
     if file_size and file_size > cfg.max_media_bytes:
         await msg.answer("Фото слишком большое. Лимит — 10 МБ.")
         return None
@@ -444,7 +453,14 @@ def _fresh_exif(data: bytes) -> datetime | None:
 
 async def _flush_album(group: tuple[int, str]) -> None:
     """Подождать хвост альбома и записать все фото ОДНИМ приёмом пищи."""
-    await asyncio.sleep(ALBUM_WAIT_SEC)
+    started = time.monotonic()
+    while True:
+        album = _ALBUMS.get(group)
+        left = ALBUM_WAIT_SEC - (time.monotonic() - started)       # общий потолок ожидания
+        quiet = ALBUM_QUIET_SEC - (time.monotonic() - album.last_seen) if album else 0
+        if left <= 0 or quiet <= 0:
+            break
+        await asyncio.sleep(min(left, quiet))
     album = _ALBUMS.get(group)
     for _ in range(100):                         # ещё качается — ждём, но не дольше ~30 с
         if album is None or album.pending <= 0:
@@ -544,7 +560,7 @@ async def _recognize_images(msg: Message, db: sqlite3.Connection, user, images: 
     Подпись, пришедшая позже, правит этот же приём (см. _apply_late_caption).
     """
     uid = user["id"]
-    await _typing(msg)
+    _typing_bg(msg)
     dishes = meals_svc.resolve_dishes(db, uid, None, len(images))     # посуда по умолчанию
     label_task = None
     if len(images) == 1 and not caption:
