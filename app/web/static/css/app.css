@@ -729,3 +729,18 @@ html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
 /* unslop: частые блюда переносятся, без горизонтальной карусели */
 .today .often { flex-wrap: wrap; overflow: visible; margin: -4px 0 0; padding: 0; scroll-snap-type: none; }
 .today .often-chip { max-width: 100%; }
+
+/* water: тихая карточка, акцент только в иконке и шкале */
+.today .water-card { gap: 12px; padding: 16px; }
+.today .water-head { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
+.today .water-ico { display: inline-flex; color: var(--c-water); }
+.today .water-card .water-num { font-size: 13px; color: var(--c-hint); font-variant-numeric: tabular-nums; }
+.today .water-card .water-num b { font-size: 20px; font-weight: 700; color: var(--c-text); letter-spacing: -.025em; }
+.today .water-card .bar-w { height: 8px; position: relative; overflow: hidden;
+  -webkit-mask: repeating-linear-gradient(90deg, #000 0 calc(10% - 3px), transparent calc(10% - 3px) 10%);
+          mask: repeating-linear-gradient(90deg, #000 0 calc(10% - 3px), transparent calc(10% - 3px) 10%); }
+.today .water-card .bar-w i { background: var(--c-water); }
+.today .water-card .quick .btn-tonal { background: color-mix(in srgb, var(--c-text) 7%, transparent); color: var(--c-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.today .water-card .quick .btn-tonal small { font-size: 12px; font-weight: 500; color: var(--c-hint); }
+.today .water-card .quick .btn-tonal:active { background: color-mix(in srgb, var(--c-water) 20%, transparent); }
+.today .water-undo:not(:disabled) { color: var(--c-hint); background: transparent; }

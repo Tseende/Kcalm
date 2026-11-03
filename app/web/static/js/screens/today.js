@@ -97,7 +97,7 @@ export default async function render(root, ctx) {
     const waterBar = h('div', { class: 'bar bar-w', role: 'progressbar', 'aria-label': 'Вода', 'aria-valuemax': t.water_ml }, h('i'));
     const undoBtn = h('button', { class: 'water-undo', type: 'button', 'aria-label': 'Отменить последнюю добавленную воду', title: 'Отменить', onclick: undoWater }, icon('undo', 20));
     function paintWater() {
-      waterNum.replaceChildren(h('b', null, fmtKcal(waterMl)), h('span', { class: 'muted' }, ` / ${fmtKcal(t.water_ml)} мл`));
+      waterNum.replaceChildren(h('b', null, fmtKcal(waterMl)), h('span', { class: 'muted' }, ` из ${fmtKcal(t.water_ml)} мл`));
       waterBar.firstChild.style.width = Math.min(100, (waterMl / t.water_ml) * 100) + '%';
       waterBar.setAttribute('aria-valuenow', waterMl);
       undoBtn.disabled = !waterUndo.length || curDate !== todayISO();
@@ -122,9 +122,9 @@ export default async function render(root, ctx) {
       } catch (e) { waterUndo.push(id); toast(e.message, 'error'); }
     }
     const waterCard = h('section', { class: 'card stack-sm water-card', 'aria-label': 'Вода' },
-      h('div', { class: 'row-between' }, h('div', { class: 'card-title with-ico' }, tile('droplet', 'teal', 24), 'Вода'), waterNum),
+      h('div', { class: 'row-between' }, h('div', { class: 'water-head' }, h('span', { class: 'water-ico', 'aria-hidden': 'true' }, icon('droplet', 18)), h('span', null, 'Вода')), waterNum),
       waterBar,
-      h('div', { class: 'quick' }, [200, 300, 500].map((ml) => h('button', { class: 'btn btn-tonal', type: 'button', onclick: () => addWater(ml) }, '+' + ml)), undoBtn));
+      h('div', { class: 'quick' }, [200, 300, 500].map((ml) => h('button', { class: 'btn btn-tonal', type: 'button', onclick: () => addWater(ml) }, '+' + ml, h('small', null, ' мл'))), undoBtn));
     paintWater();
 
     // health strip: one grouped card, line icons, empty states are actions
