@@ -93,8 +93,10 @@ def test_migration_017_applies_on_top_of_v16():
     assert user_version(conn) == 16
     migrate(conn)
     assert user_version(conn) >= 17
+    # общий справочник не тронут (новые миграции могут только дописывать seed-продукты)
     assert conn.execute("SELECT COUNT(*) c FROM foods WHERE owner_user_id IS NULL").fetchone()["c"] \
-        == seeded                                     # общий справочник не тронут
+        >= seeded
+    assert conn.execute("SELECT COUNT(*) c FROM foods WHERE owner_user_id IS NOT NULL").fetchone()["c"] == 0
     conn.close()
     os.unlink(path)
 

@@ -544,6 +544,12 @@ async def _recognize_images(msg: Message, db: sqlite3.Connection, user, images: 
         await status.edit_text("Не смог распознать фото (LLM недоступен). "
                                "Сохранил: повтори позже командой /retry или опиши текстом.")
         return
+    if len(images) == 1 and u.photo_kind == "label" and not u.items:
+        # на фото упаковка с таблицей КБЖУ, а не блюдо: читаем этикетку и предлагаем внести в мои продукты
+        await status.edit_text("🥫 это этикетка, читаю…")
+        await products_router.from_label_photo(
+            msg, db, user, base64.b64encode(images[0].data).decode(), status)
+        return
     if not u.items:
         if len(images) == 1:
             await _process_screenshot(msg, db, user, images[0].data, images[0].file_hash,
@@ -728,17 +734,15 @@ async def _refine_meal(msg: Message, db: sqlite3.Connection, user, meal_id: int,
     for estimate, item in zip(u.items, calc.items):
         if item.food_ref_id:
             repo.touch_user_food(db, uid, item.food_ref_id, estimate.explicit_grams)
-    card = _render_card(db, user, meal_id)
+    # Итог и карточка уходят ВНИЗ чата: старая карточка остаётся без кнопок, а кнопки
+    # (в том числе «Уточнить») всегда на последнем сообщении и не улетают вверх.
     if chat_id and card_message_id:
         try:
-            await rich.edit(_card_message(msg, chat_id, card_message_id), card,
-                            reply_markup=_meal_kb(meal_id))
+            await _card_message(msg, chat_id, card_message_id).edit_reply_markup(reply_markup=None)
         except Exception:                                 # noqa: BLE001
-            log.warning("не смог отредактировать карточку", exc_info=True)
-            await rich.answer(msg, card, reply_markup=_meal_kb(meal_id))
-    else:
-        await rich.answer(msg, card, reply_markup=_meal_kb(meal_id))
+            log.debug("не смог снять кнопки со старой карточки", exc_info=True)
     await msg.answer(_diff_text(old, calc, meal["kcal_total"]))
+    await rich.answer(msg, _render_card(db, user, meal_id), reply_markup=_meal_kb(meal_id))
     return True
 
 

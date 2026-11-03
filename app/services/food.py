@@ -12,6 +12,7 @@ from app.adapters import off
 from app.config import get_config
 from app.domain import dishes as dishdom
 from app.domain import intents, matching
+from app.domain.generic_foods import generic_ref
 from app.domain.nutrition import (FoodRef, IngredientEstimate, MealUnderstanding,
                                   calculate_meal)
 from app.domain.targets import round10_kcal
@@ -116,7 +117,11 @@ def understanding_from_json(data: dict, dish_photos: set[int] | None = None) -> 
     intent = str(data.get("intent") or "food").strip().lower()
     if intent not in intents.LLM_INTENTS:
         intent = "food"
+    photo_kind = str(data.get("photo_kind") or "meal").strip().lower()
+    if photo_kind not in ("meal", "label", "other"):
+        photo_kind = "meal"
     return MealUnderstanding(
+        photo_kind=photo_kind,
         intent=intent, intent_arg=str(data.get("intent_arg") or "").strip()[:200],
         items=items,
         assumptions=[str(a) for a in data.get("assumptions", [])][:5],
@@ -345,6 +350,9 @@ async def _llm_food_ref(item: IngredientEstimate, user_id: int | None,
     carbs = _bounded(data.get("carbs_100g"), 0, 100)
     if None in (kcal, protein, fat, carbs) or protein + fat + carbs > 105:
         raise llm.LLMError("LLM вернул некорректные КБЖУ на 100 г")
+    names = {item.name.lower().strip(), item.name_ru.lower().strip()}
+    if kcal == 0 and protein + fat + carbs == 0 and not names & NO_KCAL_OK:
+        raise llm.LLMError("LLM вернул нули для еды с калориями")
     conf = _bounded(data.get("confidence"), 0, 1)
     return FoodRef(
         name_ru=item.name_ru, name_en=item.name,
@@ -397,13 +405,15 @@ async def build_calc(u: MealUnderstanding, conn: sqlite3.Connection,
                 ref = await _llm_food_ref(item, user_id, conn)
             except llm.LLMError:
                 log.warning("КБЖУ для %r не определены", item.name_ru, exc_info=True)
-                ref = _empty_ref(item)
+                ref = generic_ref(item.name_ru, item.name) or _empty_ref(item)
         if ref and ref.food_id:
             preset = repo.user_default_grams(conn, user_id, ref.food_id)
             if preset and item.explicit_grams is None:
                 # персональный пресет начинает расчёт, диапазон вокруг него
                 item.grams_min, item.grams_max = preset * 0.85, preset * 1.15
-        pairs.append((item, ref or _empty_ref(item)))
+        if ref is None:
+            ref = generic_ref(item.name_ru, item.name) or _empty_ref(item)
+        pairs.append((item, ref))
     return calculate_meal(pairs)
 
 

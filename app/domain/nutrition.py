@@ -51,6 +51,7 @@ class MealUnderstanding(BaseModel):
     # что хочет человек: food или имя команды (определяет та же модель, что разбирает еду)
     intent: str = "food"
     intent_arg: str = ""
+    photo_kind: str = "meal"      # meal | label (фото этикетки) | other
 
 
 class FoodRef(BaseModel):

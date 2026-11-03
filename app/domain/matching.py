@@ -10,7 +10,7 @@ from difflib import SequenceMatcher
 
 from app.domain.nutrition import FoodRef
 
-STOP_TOKENS = {"и", "с", "на", "в", "по", "a", "the", "with", "and", "of", "de"}
+STOP_TOKENS = {"и", "с", "со", "на", "в", "по", "из", "a", "the", "with", "and", "of", "de"}
 
 # способ приготовления в запросе отсутствует, но есть у кандидата → штраф
 MISMATCH_PREP = {"baked", "breaded", "dried", "powdered"}
@@ -109,7 +109,7 @@ def _name_overlap(name_en: str, name_ru: str, query_tokens: list[str]) -> float:
     hay = set(_tokens(name_en)) | set(_tokens(name_ru))
     if not query_tokens:
         return 0.0
-    hit = sum(1 for t in query_tokens if t in hay)
+    hit = sum(1 for t in query_tokens if any(tokens_match(t, h) for h in hay))
     return hit / len(query_tokens)
 
 
@@ -120,15 +120,19 @@ def score_candidate(query: str, query_type: str, brand: str | None,
     name_norm = normalize(row["name_ru"])
     name_en_norm = normalize(row["name_en"])
 
+    cand_ru = _tokens(row["name_ru"])
     if name_norm == normalize(query) or name_en_norm == normalize(query):
         score += 0.34
+    elif cand_ru and len(cand_ru) == len(q_tokens) and \
+            all(any(tokens_match(a, b) for b in q_tokens) for a in cand_ru):
+        score += 0.34          # те же слова в другом числе/падеже/порядке: «сосиски» = «Сосиска»
     elif name_norm in normalize(query) or name_en_norm in normalize(query) \
             or normalize(query) in name_norm:
         score += 0.26
     else:
         overlap = _name_overlap(row["name_en"], row["name_ru"], q_tokens)
         if overlap >= 0.5:
-            score += 0.18
+            score += 0.18 + 0.20 * (overlap - 0.5)
 
     if brand:
         score += 0.18 if brand.lower() in name_norm or brand.lower() in name_en_norm else -0.08
@@ -138,13 +142,17 @@ def score_candidate(query: str, query_type: str, brand: str | None,
     score += 0.16 if macros_full else -0.25
 
     # пропущен главный токен запроса
-    missing = [t for t in q_tokens if t not in name_norm and t not in name_en_norm]
+    # (с учётом падежа и числа: «сосиски» находят «Сосиска»)
+    cand_tokens = set(_tokens(row["name_ru"])) | set(_tokens(row["name_en"]))
+    missing = [t for t in q_tokens if t not in name_norm and t not in name_en_norm
+               and not any(tokens_match(t, h) for h in cand_tokens)]
     if q_tokens and len(missing) == len(q_tokens):
         score -= 0.36
     elif missing:
-        score -= min(0.06 * (len(missing) - 1), 0.30) + 0.0
+        score -= min(0.06 * len(missing), 0.30)
     # подмена уточнения: в запросе «ржаной», в кандидате «белый» — это другой продукт
-    extra = [t for t in _tokens(row["name_ru"]) if t not in q_tokens]
+    extra = [t for t in _tokens(row["name_ru"])
+             if not any(tokens_match(t, q) for q in q_tokens)]
     if missing and extra and len(missing) < len(q_tokens):
         score -= 0.5          # лучше честная LLM-оценка, чем уверенно не тот продукт
 
