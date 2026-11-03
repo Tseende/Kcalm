@@ -48,12 +48,10 @@ export function icon(name, size = 22) {
   return s;
 }
 
-// Rounded-square coloured tile with a white icon (Telegram Settings style)
-const grad = (a, b) => `linear-gradient(145deg, ${a}, ${b})`;
+// Rounded-square tile with a white icon, flat iOS system colours (Settings style)
 export const TILE = {
-  blue: grad('#5CC4FF', '#2A8EEA'), green: grad('#5EDB7E', '#25A84B'), orange: grad('#FFB547', '#FF8A00'), red: grad('#FF7A6E', '#F0362B'),
-  purple: grad('#C98BF2', '#8E44D6'), teal: grad('#7DDDFB', '#27A9D8'), pink: grad('#FF7A98', '#F0245A'), indigo: grad('#7F7DF0', '#4B49C7'),
-  yellow: grad('#FFD04D', '#FFA400'), gray: grad('#A9A9B0', '#7C7C84'),
+  blue: '#007aff', green: '#34c759', orange: '#ff9500', red: '#ff3b30', purple: '#af52de',
+  teal: '#30b0c7', pink: '#ff2d55', indigo: '#5856d6', yellow: '#ffcc00', gray: '#8e8e93',
 };
 export function tile(name, color = 'blue', size = 30) {
   const t = h('span', { class: 'ticon', 'aria-hidden': 'true', style: { background: TILE[color] || color, width: size + 'px', height: size + 'px' } }, icon(name, Math.round(size * 0.63)));
@@ -70,6 +68,11 @@ export function fmtDur(min) {
   return `${Math.floor(m / 60)} ч ${String(m % 60).padStart(2, '0')} м`;
 }
 export const isDark = () => (inTelegram && tg && tg.colorScheme ? tg.colorScheme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches);
+export function plural(n, one, few, many) {
+  const a = Math.abs(n) % 100; const b = a % 10;
+  const w = a > 10 && a < 20 ? many : b === 1 ? one : b >= 2 && b <= 4 ? few : many;
+  return `${n} ${w}`;
+}
 export const pad2 = (n) => String(n).padStart(2, '0');
 export function isoDate(d) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -370,7 +373,7 @@ export function errorState(root, err, retry) {
 
 // Telegram-like top bar: [< Назад] centered title [right]
 export function pageHead(title, { right, back = true, parent = '/today' } = {}) {
-  return h('header', { class: 'page-head' },
+  return h('header', { class: 'page-head' + (back ? '' : ' large') },
     h('div', { class: 'ph-side' }, back ? h('button', { class: 'back-btn', type: 'button', 'aria-label': 'Назад', onclick: () => nav.back(parent) }, icon('back', 24), h('span', null, 'Назад')) : null),
     h('h1', null, title),
     h('div', { class: 'ph-side end' }, right || null));
@@ -402,6 +405,14 @@ export function toggle(checked, onChange, label) {
 
 export function field(label, control, hint) {
   return h('label', { class: 'field' }, h('span', { class: 'field-label' }, label), control, hint ? h('span', { class: 'hint' }, hint) : null);
+}
+
+// Строка формы в стиле iOS: подпись слева, значение справа. Строки собираются в group().
+export function frow(label, control) {
+  return h('label', { class: 'frow' }, h('span', { class: 'frow-label' }, label), control);
+}
+export function group(rows, footnote) {
+  return h('div', { class: 'fgroup' }, h('div', { class: 'list form' }, rows), footnote ? h('div', { class: 'footnote' }, footnote) : null);
 }
 
 export function numInput(props = {}) {

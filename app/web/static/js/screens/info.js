@@ -32,7 +32,7 @@ async function goals(view, ctx) {
         me.weight && me.weight.trend ? row('Тренд веса', `${fmtN(me.weight.trend)} кг`, 'chart-bar', 'teal') : null,
         u.goal_weight_kg ? row('Цель', `${fmtN(u.goal_weight_kg)} кг`, 'target', 'pink') : null,
         u.eating_cutoff ? row('Не есть после', u.eating_cutoff, 'clock', 'gray') : null),
-      h('div', { class: 'muted small center' }, 'Цели считает бот по вашим данным. Поменять их можно в чате с ботом.'));
+      h('div', { class: 'footnote' }, 'Цели считает бот по вашим данным. Поменять их можно в чате с ботом.'));
   } catch (e) { if (ctx.alive()) errorState(box, e); }
 }
 
@@ -47,7 +47,7 @@ async function exportKind(kind) {
 function exportPage(view) {
   const kinds = [['meals', 'tools-kitchen-2', 'orange', 'Приёмы пищи'], ['body', 'scale', 'purple', 'Вес и замеры'], ['water', 'droplet', 'teal', 'Вода'], ['sleep', 'bed', 'indigo', 'Сон'], ['activity', 'run', 'green', 'Активность']];
   view.append(pageHead('Экспорт CSV', { parent: '/menu' }),
-    h('div', { class: 'muted' }, inTelegram ? 'Откроется окно «Поделиться»: сохраните файл в «Файлы» или отправьте себе.' : 'Файл скачается в браузере.'),
+    h('div', { class: 'footnote' }, inTelegram ? 'Откроется окно «Поделиться»: сохраните файл в «Файлы» или отправьте себе.' : 'Файл скачается в браузере.'),
     h('div', { class: 'list tiles' }, kinds.map(([k, ic, col, t]) => h('button', { class: 'row', type: 'button', onclick: () => exportKind(k) },
       tile(ic, col), h('span', { class: 'grow row-title' }, t), icon('download', 20)))));
 }
@@ -62,5 +62,5 @@ function about(view) {
       h('div', { class: 'row static' }, tile('info-circle', 'blue'), h('span', { class: 'grow' }, 'Версия'), h('span', { class: 'muted' }, '2.0')),
       h('div', { class: 'row static' }, tile('device-mobile', 'teal'), h('span', { class: 'grow' }, 'Telegram'), h('span', { class: 'muted' }, tg && tg.version ? tg.version : 'не обнаружен')),
       h('div', { class: 'row static' }, tile('package', 'orange'), h('span', { class: 'grow' }, 'Данные'), h('span', { class: 'muted' }, isMock() ? 'демо' : 'ваши'))),
-    h('div', { class: 'muted small center' }, 'Калории и КБЖУ по фото оценочные: смотрите на диапазон, а не на одно число.'));
+    h('div', { class: 'footnote' }, 'Калории и КБЖУ по фото оценочные: смотрите на диапазон, а не на одно число.'));
 }

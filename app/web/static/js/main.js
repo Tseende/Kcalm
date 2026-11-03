@@ -134,7 +134,6 @@ async function boot() {
       tg.ready();
       tg.expand();
       const v = (x) => tg.isVersionAtLeast && tg.isVersionAtLeast(x);
-      try { if (v('6.1')) { tg.setHeaderColor('secondary_bg_color'); tg.setBackgroundColor('secondary_bg_color'); } } catch (e) { /* old client */ }
       try { if (v('7.7')) tg.disableVerticalSwipes(); } catch (e) { /* old client */ }
       try { if (v('8.0') && !tg.isFullscreen) tg.requestFullscreen(); } catch (e) { /* старый клиент или десктоп */ }
     }
@@ -144,7 +143,15 @@ async function boot() {
   const syncFs = () => document.documentElement.classList.toggle('fs', !!(tg && tg.isFullscreen));
   syncFs();
   try { if (tg && tg.onEvent) tg.onEvent('fullscreenChanged', syncFs); } catch (e) { /* старый клиент */ }
-  const applyScheme = () => { if (inTelegram && tg && tg.colorScheme) { document.documentElement.classList.toggle('scheme-dark', tg.colorScheme === 'dark'); document.documentElement.classList.toggle('scheme-light', tg.colorScheme !== 'dark'); } };
+  const applyScheme = () => {
+    if (!(inTelegram && tg && tg.colorScheme)) return;
+    const dark = tg.colorScheme === 'dark';
+    document.documentElement.classList.toggle('scheme-dark', dark);
+    document.documentElement.classList.toggle('scheme-light', !dark);
+    // Шапка и фон Telegram под фон приложения (системный серый iOS), а не под тему клиента.
+    const bg = dark ? '#000000' : '#f2f2f7';
+    try { if (tg.isVersionAtLeast && tg.isVersionAtLeast('6.1')) { tg.setHeaderColor(bg); tg.setBackgroundColor(bg); } } catch (e) { /* old client */ }
+  };
   applyScheme();
   try { if (tg && tg.onEvent) tg.onEvent('themeChanged', applyScheme); } catch (e) { /* old client */ }
   const onScroll = () => document.body.classList.toggle('scrolled', window.scrollY > 4);

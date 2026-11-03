@@ -1,7 +1,7 @@
 // Drinks: water plus a catalog with calories. Water goes to /water, everything else to /drinks (saved as a meal).
 import { api } from '../api.js';
 import {
-  h, toast, haptic, nav, mainButton, pageHead, field, numInput, numVal, fmtN, TILE, errorState, skeletonCards,
+  h, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, fmtN, TILE, errorState, skeletonCards,
 } from '../ui.js';
 import { drinkPic } from '../pics.js';
 
@@ -119,7 +119,7 @@ export default async function render(root, ctx) {
     h('div', { class: 'drink-grid' }, cards),
     h('div', { class: 'drink-label' }, 'Объём'),
     sizes,
-    field('Свой объём, мл', ml),
+    group([frow('Свой объём, мл', ml)]),
     sugarBox,
     summary,
     h('p', { class: 'muted small drink-note' }, 'Калории напитков ориентировочные. Для точных значений добавьте продукт по этикетке. Чай и кофе засчитываются в воду.'));

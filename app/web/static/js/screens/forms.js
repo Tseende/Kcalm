@@ -1,7 +1,7 @@
 // Simple add forms: water, weight, sleep, activity
 import { api } from '../api.js';
 import {
-  h, toast, haptic, nav, mainButton, pageHead, field, numInput, numVal, segmented, fmtN, todayISO,
+  h, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, segmented, fmtN, todayISO,
 } from '../ui.js';
 
 export default async function render(root, ctx) {
@@ -40,7 +40,7 @@ function water() {
   const chips = [150, 200, 250, 300, 500].map((v) => h('button', { type: 'button', class: 'chip', onclick: () => { ml.value = v; } }, v + ' мл'));
   return {
     title: 'Вода',
-    body: [h('div', { class: 'chips wrap' }, chips), field('Количество, мл', ml)],
+    body: [h('div', { class: 'chips wrap' }, chips), group([frow('Количество, мл', ml)])],
     async submit() {
       const v = numVal(ml);
       if (!v || v < 10 || v > 5000) return invalid('Укажите объём от 10 до 5000 мл');
@@ -55,7 +55,7 @@ function weight() {
   api.me().then((m) => { if (m.weight && m.weight.latest && !w.value) w.placeholder = fmtN(m.weight.latest); }).catch(() => {});
   return {
     title: 'Вес',
-    body: [field('Вес, кг', w, 'Лучше взвешиваться утром, натощак')],
+    body: [group([frow('Вес, кг', w)], 'Лучше взвешиваться утром, натощак.')],
     async submit() {
       const v = numVal(w);
       if (!v || v < 25 || v > 400) return invalid('Введите вес от 25 до 400 кг');
@@ -72,13 +72,14 @@ function sleep() {
   const start = h('input', { type: 'time', value: '23:30', 'aria-label': 'Лёг' });
   const end = h('input', { type: 'time', value: '07:10', 'aria-label': 'Встал' });
   const score = numInput({ min: 0, max: 100, step: 1, placeholder: 'необязательно', inputmode: 'numeric', 'aria-label': 'Оценка сна' });
-  const durBox = h('div', { class: 'grid2' }, field('Часы', hh), field('Минуты', mm));
-  const rangeBox = h('div', { class: 'grid2', hidden: true }, field('Лёг', start), field('Встал', end));
+  const durBox = group([frow('Часы', hh), frow('Минуты', mm)]);
+  const rangeBox = group([frow('Лёг', start), frow('Встал', end)]);
+  rangeBox.hidden = true;
   return {
     title: 'Сон',
     body: [
       segmented([['dur', 'Длительность'], ['range', 'Лёг и встал']], mode, (v) => { mode = v; durBox.hidden = v !== 'dur'; rangeBox.hidden = v !== 'range'; }, 'Способ ввода'),
-      durBox, rangeBox, field('Оценка сна, 0–100', score, 'Из часов или приложения, если есть'),
+      durBox, rangeBox, group([frow('Оценка, 0–100', score)], 'Из часов или приложения, если есть.'),
     ],
     async submit() {
       const payload = { date: todayISO() };
@@ -103,12 +104,12 @@ function activity() {
   const steps = numInput({ min: 0, max: 100000, step: 100, inputmode: 'numeric', placeholder: '8000', 'aria-label': 'Шаги' });
   const kcal = numInput({ min: 0, max: 5000, step: 10, inputmode: 'numeric', placeholder: '350', 'aria-label': 'Активные ккал' });
   const mins = numInput({ min: 0, max: 1440, step: 5, inputmode: 'numeric', placeholder: '45', 'aria-label': 'Минуты активности' });
-  const workout = h('input', { type: 'text', placeholder: 'бег 30 мин, силовая 45 мин', maxLength: 200, 'aria-label': 'Тренировка' });
+  const workout = h('input', { type: 'text', placeholder: 'Бег, силовая…', maxLength: 200, 'aria-label': 'Тренировка' });
   return {
     title: 'Активность',
     body: [
-      field('Шаги', steps), h('div', { class: 'grid2' }, field('Активные ккал', kcal), field('Активные минуты', mins)),
-      field('Тренировка', workout),
+      group([frow('Шаги', steps), frow('Активные ккал', kcal), frow('Активные минуты', mins)]),
+      group([frow('Тренировка', workout)]),
     ],
     async submit() {
       const payload = { date: todayISO() };

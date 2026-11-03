@@ -1,6 +1,6 @@
 // Product add/edit form (also reused by the label screen)
 import { api } from '../api.js';
-import { h, toast, haptic, nav, mainButton, pageHead, field, numInput, numVal, confirmDialog, errorState } from '../ui.js';
+import { h, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, confirmDialog, errorState } from '../ui.js';
 
 const val = (v) => (v === null || v === undefined ? '' : v);
 
@@ -16,12 +16,11 @@ export function productForm(p = {}) {
   const un = h('input', { type: 'text', value: val(p.unit_name), maxLength: 30, placeholder: 'пачка, шт, ломтик', 'aria-label': 'Название единицы' });
   const ug = numInput({ value: val(p.unit_grams), min: 1, max: 5000, step: 1, placeholder: 'г в единице', 'aria-label': 'Грамм в единице' });
   const el = h('div', { class: 'stack' },
-    field('Название', name), field('Бренд', brand),
+    group([frow('Название', name), frow('Бренд', brand)]),
     h('div', { class: 'section-title' }, h('span', null, 'На 100 г')),
-    h('div', { class: 'grid2' }, field('Ккал', kcal), field('Белки, г', pr), field('Жиры, г', fat), field('Углеводы, г', carb)),
+    group([frow('Калории, ккал', kcal), frow('Белки, г', pr), frow('Жиры, г', fat), frow('Углеводы, г', carb)]),
     h('div', { class: 'section-title' }, h('span', null, 'Порция')),
-    field('Порция по умолчанию, г', dg, 'Подставляется, когда вес не указан'),
-    h('div', { class: 'grid2' }, field('Единица', un), field('Грамм в ней', ug)));
+    group([frow('По умолчанию, г', dg), frow('Единица', un), frow('Грамм в ней', ug)], 'Подставляется, когда вес не указан.'));
 
   function collect() {
     const n = name.value.trim();

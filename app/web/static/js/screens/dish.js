@@ -1,7 +1,7 @@
 // Dish add/edit form
 import { api } from '../api.js';
 import {
-  h, icon, toast, haptic, nav, mainButton, pageHead, field, numInput, numVal, toggle, confirmDialog, errorState,
+  h, icon, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, toggle, confirmDialog, errorState,
   photoImg, compressImage, DISH_KINDS, dishKind,
 } from '../ui.js';
 
@@ -75,12 +75,12 @@ export default async function render(root, ctx) {
   view.append(...[pageHead(isNew ? 'Новая посуда' : 'Посуда', { parent: '/menu/dishes' }),
     h('form', { class: 'stack', onsubmit: (e) => { e.preventDefault(); save(); } },
       h('div', { class: 'hint-card small' }, 'Размер посуды помогает точнее оценить порцию. Достаточно диаметра, а для глубоких тарелок и кружек добавьте объём.'),
-      preview, field('Название', name), field('Тип', kind),
-      h('div', { class: 'grid2' }, field('Диаметр, см', diam), field('Глубина, см', depth)),
-      field('Объём, мл', vol),
-      h('div', { class: 'card row-between' },
-        h('div', null, h('div', { class: 'row-title' }, 'По умолчанию'), h('div', { class: 'muted small' }, 'Подставлять при добавлении фото')),
-        toggle(isDefault, (c) => { isDefault = c; }, 'Посуда по умолчанию')),
+      preview,
+      group([frow('Название', name), frow('Тип', kind)]),
+      group([frow('Диаметр, см', diam), frow('Глубина, см', depth), frow('Объём, мл', vol)]),
+      group([h('div', { class: 'frow' },
+        h('span', { class: 'grow' }, h('span', { class: 'row-title' }, 'По умолчанию'), h('span', { class: 'row-sub' }, 'Подставлять при добавлении фото')),
+        toggle(isDefault, (c) => { isDefault = c; }, 'Посуда по умолчанию'))]),
       fileInput, h('button', { type: 'submit', hidden: true })),
     isNew ? null : h('button', { class: 'btn btn-danger-ghost btn-block', type: 'button', onclick: remove }, 'Удалить посуду')].filter(Boolean));
   mainButton.show('Сохранить', save);
