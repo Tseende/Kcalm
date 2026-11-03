@@ -17,21 +17,27 @@ export function productForm(p = {}) {
   const un = h('input', { type: 'text', value: val(p.unit_name), maxLength: 30, placeholder: 'пачка, шт, ломтик', 'aria-label': 'Название единицы' });
   const ug = numInput({ value: val(p.unit_grams), min: 1, max: 5000, step: 1, placeholder: 'г в единице', 'aria-label': 'Грамм в единице' });
   let iconVal = FOOD_ICONS.includes(p.icon) ? p.icon : null;
+  const titleIcon = h('div', { class: 'section-title' }, h('span', null, 'Иконка'));
   const iconGrid = h('div', { class: 'icon-grid', role: 'radiogroup', 'aria-label': 'Иконка' });
-  const iconPrev = h('div', { class: 'icon-prev' });
+  const iconPrev = h('button', { type: 'button', class: 'icon-prev', 'aria-expanded': 'false', onclick: () => { iconOpen = !iconOpen; paintIcon(); } });
+  let iconOpen = false;
   function paintIcon() {
-    iconPrev.replaceChildren(foodPic(name.value, 72, iconVal) || h('span', { class: 'pic', style: { width: '72px', height: '72px' } }, icon('package', 32)));
+    iconPrev.setAttribute('aria-expanded', String(iconOpen));
+    iconPrev.replaceChildren(foodPic(name.value, 72, iconVal) || h('span', { class: 'pic', style: { width: '72px', height: '72px' } }, icon('package', 32)),
+      h('span', { class: 'icon-prev-lbl' }, iconOpen ? 'Свернуть' : 'Изменить иконку'));
+    iconGrid.hidden = !iconOpen;
+    titleIcon.hidden = !iconOpen;
     iconGrid.replaceChildren(h('button', { type: 'button', class: 'icon-opt auto' + (iconVal ? '' : ' on'), role: 'radio', 'aria-checked': String(!iconVal),
-      onclick: () => { iconVal = null; haptic('light'); paintIcon(); } }, 'Авто'),
+      onclick: () => { iconVal = null; iconOpen = false; haptic('light'); paintIcon(); } }, 'Авто'),
     ...FOOD_ICONS.map((k) => h('button', { type: 'button', class: 'icon-opt' + (iconVal === k ? ' on' : ''), role: 'radio', 'aria-checked': String(iconVal === k),
-      onclick: () => { iconVal = k; haptic('light'); paintIcon(); } }, foodPic('', 40, k))));
+      onclick: () => { iconVal = k; iconOpen = false; haptic('light'); paintIcon(); } }, foodPic('', 40, k))));
   }
   name.addEventListener('input', () => { if (!iconVal) paintIcon(); });
   paintIcon();
   const el = h('div', { class: 'stack' },
     iconPrev,
     group([frow('Название', name), frow('Бренд', brand)]),
-    h('div', { class: 'section-title' }, h('span', null, 'Иконка')),
+    titleIcon,
     iconGrid,
     h('div', { class: 'section-title' }, h('span', null, 'На 100 г')),
     group([frow('Калории, ккал', kcal), frow('Белки, г', pr), frow('Жиры, г', fat), frow('Углеводы, г', carb)]),

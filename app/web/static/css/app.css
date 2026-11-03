@@ -581,7 +581,10 @@ html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
 .chip .pic { border-radius: 7px; }
 
 /* выбор иконки продукта */
-.icon-prev { display: flex; justify-content: center; }
+.icon-prev { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 0 auto; background: none; border: 0; padding: 0; font: inherit; -webkit-tap-highlight-color: transparent; }
+.icon-prev:active { opacity: .6; }
+.icon-prev-lbl { font-size: 15px; color: var(--c-btn); }
+.icon-grid[hidden], .section-title[hidden] { display: none; }
 .icon-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
 .icon-opt { display: grid; place-items: center; aspect-ratio: 1; border-radius: 14px; background: var(--c-card); border: 2px solid transparent; min-width: 0; font-size: 13px; color: var(--c-btn); }
 .icon-opt.on { border-color: var(--c-btn); }
