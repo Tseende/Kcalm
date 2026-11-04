@@ -631,6 +631,31 @@ def edit_item_grams(conn: sqlite3.Connection, item_id: int, new_grams: float) ->
     conn.commit()
 
 
+def apply_product_to_item(conn: sqlite3.Connection, item_id: int, name: str, kcal_100g: float,
+                          protein_100g: float, fat_100g: float, carbs_100g: float) -> None:
+    """Позиция уточнена по упаковке (штрихкод): название и КБЖУ на 100 г из продукта, граммы прежние."""
+    item = conn.execute("SELECT * FROM meal_items WHERE id=?", (item_id,)).fetchone()
+    if not item:
+        return
+    scale = item["grams"] / 100.0
+    kcal = max(0, round(kcal_100g * scale / 5) * 5)
+    conn.execute(
+        """UPDATE meal_items SET name_ru=?, kcal=?, protein_g=?, fat_g=?, carbs_g=?,
+           kcal_100g=?, protein_100g=?, fat_100g=?, carbs_100g=?, food_ref_id=NULL,
+           source='barcode', confidence=0.95, edited_by_user=1 WHERE id=?""",
+        (name, kcal, round(protein_100g * scale, 1), round(fat_100g * scale, 1),
+         round(carbs_100g * scale, 1), kcal_100g, protein_100g, fat_100g, carbs_100g, item_id))
+    _resum_meal(conn, item["meal_id"])
+    conn.execute("INSERT INTO meal_edits (meal_item_id, field, old_value, new_value) "
+                 "VALUES (?,?,?,?)", (item_id, "barcode", item["name_ru"], name))
+    conn.execute(
+        """INSERT INTO audit_events (user_id, entity_type, entity_id, event_type,
+           before_json, after_json) VALUES (?, 'meal_item', ?, 'apply_barcode', ?, ?)""",
+        (None, item_id, json.dumps({"name": item["name_ru"], "kcal": item["kcal"]}),
+         json.dumps({"name": name, "kcal": kcal})))
+    conn.commit()
+
+
 def delete_item(conn: sqlite3.Connection, item_id: int) -> None:
     item = conn.execute("SELECT meal_id FROM meal_items WHERE id=?", (item_id,)).fetchone()
     if not item:

@@ -1,6 +1,7 @@
 // Meal detail
 import { api } from '../api.js';
-import { mealPic } from '../pics.js';
+import { mealIcon, mealPic } from '../pics.js';
+import { scanBarcode, decodeFile, validBarcode } from '../scanner.js';
 import {
   h, icon, toast, haptic, nav, sheet, confirmDialog, pageHead, sectionTitle, skeletonCards, errorState, photoImg,
   fmtN, fmtKcal, longDate, mealType, MEAL_TYPES, dishKind, numVal, busyOverlay,
@@ -54,10 +55,12 @@ export default async function render(root, ctx) {
     let it = initial;
     let timer;
     const input = h('input', { type: 'number', inputmode: 'decimal', min: 1, step: 10, value: it.grams, class: 'g-input', 'aria-label': 'Граммы: ' + it.name });
+    const nameEl = h('span', { class: 'item-title' });
     const kcalEl = h('div', { class: 'item-kcal' });
     const macEl = h('div', { class: 'muted small' });
     const flag = h('span', { class: 'edited', title: 'Изменено вручную' }, icon('pencil', 14));
     function paint() {
+      nameEl.textContent = it.name;
       kcalEl.replaceChildren(fmtKcal(it.kcal), h('small', null, ' ккал'));
       macEl.textContent = `Б ${fmtN(it.protein)} · Ж ${fmtN(it.fat)} · У ${fmtN(it.carbs)}`;
       flag.hidden = !it.edited;
@@ -86,19 +89,63 @@ export default async function render(root, ctx) {
     async function saveProduct() {
       try { await api.post('/items/' + it.id + '/save_product', {}); haptic('success'); toast('Сохранено в «Мои продукты»', 'ok'); } catch (e) { toast(e.message, 'error'); }
     }
+    // Уточнение по упаковке: штрихкод → Open Food Facts → название и КБЖУ на 100 г, граммы остаются.
+    async function applyCode(raw) {
+      const code = String(raw || '').replace(/\D/g, '');
+      if (!validBarcode(code)) { toast('Штрихкод не подходит: проверьте цифры', 'error'); return; }
+      const stop = busyOverlay('Ищу продукт…', 'Open Food Facts');
+      try {
+        const m = await api.post('/items/' + it.id + '/barcode', { code });
+        stop();
+        haptic('success');
+        onMeal(m);
+        toast('Уточнено по упаковке: ' + (m.items.find((i) => i.id === it.id)?.name || ''), 'ok');
+      } catch (e) {
+        stop();
+        toast(e.status === 404 ? 'В базе такого штрихкода нет. Оставил как есть' : e.message, 'error');
+      }
+    }
+    function typeCode() {
+      const inp = h('input', { type: 'text', inputMode: 'numeric', maxLength: 14, placeholder: '13 цифр под штрихкодом', autocomplete: 'off', 'aria-label': 'Штрихкод' });
+      const go = () => { const v = inp.value; s.close(); applyCode(v); };
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+      const s = sheet({ title: 'Штрихкод с упаковки', content: h('div', { class: 'stack' }, inp,
+        h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: go }, 'Найти')) });
+      setTimeout(() => inp.focus(), 250);
+    }
+    const shot = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, onchange: async () => {
+      const f = shot.files[0];
+      shot.value = '';
+      if (!f) return;
+      const stop = busyOverlay('Читаю штрихкод…');
+      let code = null;
+      try { code = await decodeFile(f); } catch (e) { /* скажем ниже */ }
+      stop();
+      if (code) applyCode(code); else { toast('Штрихкод на фото не нашёл. Введите цифры', 'error'); typeCode(); }
+    } });
+    async function scan() {
+      haptic('light');
+      const r = await scanBarcode();
+      if (!r) return;
+      if (r.code) { applyCode(r.code); return; }
+      if (r.manual) { typeCode(); return; }
+      toast(r.error === 'load' ? 'Сканер не загрузился' : 'Нет доступа к камере. Сфотографируйте штрихкод', 'error');
+      if (r.error === 'camera') shot.click();
+    }
     async function remove() {
       if (!(await confirmDialog(`Удалить «${it.name}»?`))) return;
       try { onMeal(await api.del('/items/' + it.id)); } catch (e) { toast(e.message, 'error'); }
     }
     const el = h('div', { class: 'item' },
-      h('div', { class: 'row-between top' }, h('div', { class: 'item-name' }, it.name, ' ', flag), kcalEl),
+      h('div', { class: 'row-between top' }, h('div', { class: 'item-name' }, nameEl, ' ', flag), kcalEl),
       macEl,
       h('div', { class: 'item-ctl' },
         h('div', { class: 'stepper' },
           h('button', { type: 'button', class: 'step', 'aria-label': 'Уменьшить на 10 грамм', onclick: () => step(-10) }, icon('minus', 18)),
           h('span', { class: 'g-field' }, input, h('span', { class: 'g-unit' }, 'г')),
           h('button', { type: 'button', class: 'step', 'aria-label': 'Увеличить на 10 грамм', onclick: () => step(10) }, icon('plus', 18))),
-        h('div', { class: 'item-actions' },
+        h('div', { class: 'item-actions' }, shot,
+          h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Уточнить по штрихкоду упаковки', title: 'Сканер штрихкода', onclick: scan }, icon('barcode', 20)),
           h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Сохранить в мои продукты', title: 'В мои продукты', onclick: saveProduct }, icon('save', 20)),
           h('button', { type: 'button', class: 'icon-btn danger', 'aria-label': 'Удалить позицию', onclick: remove }, icon('trash', 20)))));
     paint();
@@ -111,7 +158,7 @@ export default async function render(root, ctx) {
 
   function carousel() {
     if (!meal.photos || !meal.photos.length) {
-      return h('div', { class: 'photo-ph', 'aria-hidden': 'true' }, (mealPic(meal.type, 64) || icon(mealType(meal.type).icon, 44)), h('span', { class: 'muted small' }, meal.source === 'text' ? 'Описание текстом' : 'Без фото'));
+      return h('div', { class: 'photo-ph', 'aria-hidden': 'true' }, (mealIcon(meal, 64) || icon(mealType(meal.type).icon, 44)), h('span', { class: 'muted small' }, meal.source === 'text' ? 'Описание текстом' : 'Без фото'));
     }
     const track = h('div', { class: 'carousel', tabindex: 0, 'aria-label': 'Фото приёма' }, meal.photos.map((p, i) => {
       const dish = p.dish_id && dishNames[p.dish_id];

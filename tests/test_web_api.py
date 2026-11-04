@@ -501,6 +501,38 @@ async def test_item_patch_recalculates_and_delete(client, fake_food):
     assert (await client.delete(f"/api/items/{item_id}", headers=H)).status == 404
 
 
+async def test_item_barcode_replaces_per100_keeps_grams(client, db, fake_food, monkeypatch):
+    from app.adapters import off
+    meal = await (await post_meal(client, jpeg())).json()
+    item = meal["items"][0]
+
+    async def fake_fetch(code, transport=None):
+        return {"name": "Сосиски куриные", "brand": "Папа может", "kcal_100g": 200,
+                "protein_100g": 10.0, "fat_100g": 15.0, "carbs_100g": 2.0, "serving_g": None}
+    monkeypatch.setattr(off, "fetch_barcode", fake_fetch)
+    code = ean13("460700489001")
+    assert off.valid_barcode(code)
+    for bad_code in ("123", "abc", "", "4607004890009"):
+        assert (await client.post(f"/api/items/{item['id']}/barcode", json={"code": bad_code},
+                                  headers=H)).status == 400
+    resp = await client.post(f"/api/items/{item['id']}/barcode", json={"code": code}, headers=H)
+    assert resp.status == 200
+    after = (await resp.json())["items"][0]
+    assert after["name"] == "Сосиски куриные Папа может" and after["grams"] == item["grams"]
+    assert after["per100"] == {"kcal": 200, "protein": 10.0, "fat": 15.0, "carbs": 2.0}
+    assert after["kcal"] == pytest.approx(200 * item["grams"] / 100, abs=3) and after["edited"] is True
+    # граммы после уточнения считаются уже от продукта с упаковки
+    again = (await (await client.patch(f"/api/items/{item['id']}", json={"grams": 50},
+                                       headers=H)).json())["items"][0]
+    assert again["kcal"] == pytest.approx(100, abs=3)
+
+    async def nothing(code, transport=None):
+        return None
+    monkeypatch.setattr(off, "fetch_barcode", nothing)
+    missing = await client.post(f"/api/items/{item['id']}/barcode", json={"code": code}, headers=H)
+    assert missing.status == 404
+
+
 async def test_ownership_returns_404(client, db, user_id, fake_food):
     add_user(db, 1002)
     meal = await (await post_meal(client, jpeg("own"))).json()
@@ -515,6 +547,7 @@ async def test_ownership_returns_404(client, db, user_id, fake_food):
         client.post(f"/api/meals/{meal['id']}/refine", json={"comment": "x"}, headers=other),
         client.patch(f"/api/items/{item_id}", json={"grams": 10}, headers=other),
         client.delete(f"/api/items/{item_id}", headers=other),
+        client.post(f"/api/items/{item_id}/barcode", json={"code": ean13("460700489001")}, headers=other),
         client.get(photo_url, headers=other),
         client.patch(f"/api/dishes/{dish['id']}", json={"name": "чужая"}, headers=other),
         client.delete(f"/api/dishes/{dish['id']}", headers=other),

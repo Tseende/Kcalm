@@ -2,7 +2,7 @@
 import { api } from '../api.js';
 import { macroRings } from '../charts.js';
 import { weekGoalBlock } from './weekgoal.js';
-import { mealPic } from '../pics.js';
+import { mealIcon, mealPic } from '../pics.js';
 import {
   h, icon, tile, toast, haptic, nav, skeletonCards, emptyState, errorState, sectionTitle,
   todayISO, addDays, dateLabel, longDate, fmtN, fmtKcal, fmtDur, mealType, macroLine,
@@ -192,7 +192,7 @@ export default async function render(root, ctx) {
 
   function mealRow(m) {
     const mt = mealType(m.type);
-    const fallback = () => mealPic(m.type, 56) || tile(mt.icon, mt.color, 56);
+    const fallback = () => mealIcon(m, 56) || mealPic(m.type, 56) || tile(mt.icon, mt.color, 56);
     // В списке всегда иконка типа приёма; само фото открывается на экране приёма (здесь только счётчик).
     const n = (m.photos || []).length;
     const thumb = h('div', { class: 'thumb' }, fallback(),

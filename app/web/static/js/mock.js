@@ -43,12 +43,16 @@ const FOODS = {
   banana: ['Банан', 89, 1.1, 0.3, 22.8],
   borscht: ['Борщ', 49, 2.1, 2.4, 5],
   oil: ['Масло оливковое', 884, 0, 100, 0],
+  americano: ['Американо', 0.4, 0.1, 0, 0],
+  juice: ['Сок', 45, 0.5, 0.1, 10.5],
+  wine: ['Вино красное', 85, 0.1, 0, 2.6],
+  sausage: ['куриные сосиски', 220, 12, 18, 2],
 };
 const TEMPLATES = {
   breakfast: [[['oats', 250], ['banana', 120]], [['egg', 110], ['bread', 60], ['tomato', 100]], [['cottage', 200], ['apple', 150]]],
   lunch: [[['chicken', 150], ['buckwheat', 180], ['tomato', 150]], [['salmon', 140], ['rice', 160], ['tomato', 120]], [['borscht', 300], ['bread', 40]]],
   dinner: [[['salmon', 150], ['tomato', 200]], [['chicken', 130], ['rice', 100], ['tomato', 150]], [['cottage', 220], ['banana', 100]]],
-  snack: [[['apple', 180]], [['cottage', 150]], [['banana', 110]]],
+  snack: [[['apple', 180]], [['cottage', 150]], [['banana', 110]], [['americano', 200]], [['juice', 250]], [['wine', 150]]],
 };
 const TIMES = { breakfast: ['08:05', '08:40', '09:10'], lunch: ['13:00', '13:20', '14:05'], dinner: ['19:00', '19:35', '20:10'], snack: ['11:15', '16:45', '17:20'] };
 
@@ -113,7 +117,8 @@ function init() {
     if (i === 0) {
       makeMeal(d, 'breakfast', 1, true, '08:15');
       makeMeal(d, 'lunch', 0, true, '13:20');
-      makeMeal(d, 'snack', 1, false, '16:45');
+      makeMeal(d, 'snack', 4, false, '11:09');
+      makeMeal(d, 'snack', 3, false, '14:12');
     } else if (rnd() > 0.04) {
       makeMeal(d, 'breakfast', Math.floor(rnd() * 3), rnd() > 0.3);
       makeMeal(d, 'lunch', Math.floor(rnd() * 3), rnd() > 0.3);
@@ -315,6 +320,15 @@ const routes = [
     const x = itemMeal(+m[1]); if (!x) throw notFound();
     const it = x.items.find((i) => i.id === +m[1]);
     it.grams = b.grams; it.edited = true; calcItem(it);
+    return recalcMeal(x);
+  }],
+  ['POST', /^\/items\/(\d+)\/barcode$/, async (m, q, b) => {
+    await sleep(400);
+    const x = itemMeal(+m[1]); if (!x) throw notFound();
+    if (String(b.code).endsWith('0000')) throw err(404, 'not_found', 'В базе такого штрихкода нет');
+    const it = x.items.find((i) => i.id === +m[1]);
+    it.name = 'Сосиски куриные, Папа может'; it.per100 = { kcal: 214, protein: 11.5, fat: 18.3, carbs: 1.6 };
+    it.edited = true; calcItem(it);
     return recalcMeal(x);
   }],
   ['DELETE', /^\/items\/(\d+)$/, (m) => {

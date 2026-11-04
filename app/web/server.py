@@ -604,6 +604,26 @@ async def api_item_patch(request: web.Request) -> web.Response:
     return _meal_response(db, user, item["meal_id"])
 
 
+@routes.post("/api/items/{id}/barcode")
+async def api_item_barcode(request: web.Request) -> web.Response:
+    """Уточнить позицию по упаковке: штрихкод → Open Food Facts, граммы остаются прежними."""
+    db, user, _ = ctx(request)
+    item = _item_or_404(db, user, path_id(request))
+    code = str((await read_json(request)).get("code") or "").strip()
+    if not code.isdigit() or not off.valid_barcode(code):
+        raise bad("Штрихкод не подходит: проверьте цифры (8, 12 или 13).", "bad_barcode")
+    result = await call(service("products", "barcode_draft"), db, user, code)
+    if result is None:
+        raise ApiError(404, "not_found", "В Open Food Facts такого штрихкода нет. "
+                                         "Оставил позицию как была.")
+    draft, _existing = result
+    name = " ".join(filter(None, [draft.get("name"), draft.get("brand")]))[:60] or item["name_ru"]
+    repo.apply_product_to_item(db, item["id"], name, float(draft["kcal"]),
+                               float(draft["protein"] or 0), float(draft["fat"] or 0),
+                               float(draft["carbs"] or 0))
+    return _meal_response(db, user, item["meal_id"])
+
+
 @routes.delete("/api/items/{id}")
 async def api_item_delete(request: web.Request) -> web.Response:
     db, user, _ = ctx(request)

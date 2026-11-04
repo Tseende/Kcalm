@@ -165,3 +165,43 @@ export function dishPic(kind, size = 48) {
 export function mealPic(type, size = 48) {
   return ['breakfast', 'lunch', 'dinner', 'snack'].includes(type) ? pic(`img/meal/${type}.webp?v=3`, size) : null;
 }
+
+// Напитки по названию позиции. Порядок важен: частные случаи раньше общих.
+const DRINK_RE = [
+  ['cola_zero', /кола\s+(зеро|zero|без\s+сахара)|(coca|pepsi|пепси)[^а-яё]*(zero|зеро|max)|zero\s+cola/],
+  ['cola', /(^|[^а-яё])кола(?![а-яё])|кока-?кол|пепси|coca|pepsi/],
+  ['fanta', /фанта|fanta|спрайт|sprite|лимонад|газировк|тархун|буратино|сода\s+вода/],
+  ['energy', /энергетик|red\s*bull|ред\s*бул|burn|адреналин|monster|монстр/],
+  ['flat_white', /флэт\s*уайт|флет\s*уайт|flat\s*white/],
+  ['cappuccino', /капучино|cappuccino/],
+  ['latte', /латте|latte|раф(?![а-яё])|макиато|мокко|флэт|кофе\s+с\s+молок|кофе\s+со\s+сливк/],
+  ['americano', /американо|эспрессо|espresso|americano|(^|[^а-яё])кофе(?![а-яё])/],
+  ['tea', /(^|[^а-яё])ча[йя](?![а-яё])|матча|ройбуш|каркаде|пуэр/],
+  ['smoothie', /смузи|smoothie/],
+  ['shake', /коктейл|шейк|shake/],
+  ['beer', /(^|[^а-яё])пив[оаеу](?![а-яё])|сидр|lager|лагер/],
+  ['wine', /(^|[^а-яё])вин[оаеу](?![а-яё])|шампанск|просекко|игристое|вермут|мартини/],
+  ['juice', /(^|[^а-яё])сок(?![а-яё])|сока|соку|соком|соки(?![а-яё])|нектар|морс|компот|кисел|фреш/],
+  ['water', /(^|[^а-яё])вод[аыуе](?![а-яё])|минералк|боржоми|эссентуки|газированн[а-яё]*\s+вод/],
+];
+
+export function drinkPicName(name) {
+  const t = String(name || '').toLowerCase().replace(/ё/g, 'е');
+  for (const [id, re] of DRINK_RE) if (re.test(t)) return id;
+  return null;
+}
+
+/**
+ * Иконка приёма по содержимому: берём самую калорийную позицию, у которой есть картинка
+ * (американо → кофе, сок → сок, яблоко → яблоко). Нет совпадений: иконка типа приёма.
+ */
+export function mealIcon(meal, size = 56) {
+  const items = [...(meal.items || [])].sort((a, b) => (b.kcal || 0) - (a.kcal || 0));
+  for (const it of items) {
+    const d = drinkPicName(it.name);
+    if (d) return drinkPic(d, size);
+    const f = foodPicName(it.name);
+    if (f) return pic(`img/food/${f}.webp?v=3`, size);
+  }
+  return mealPic(meal.type, size);
+}
