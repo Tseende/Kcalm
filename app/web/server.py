@@ -19,6 +19,7 @@ from pathlib import Path
 
 from aiohttp import web
 
+from app.adapters import off
 from app.config import Config, get_config
 from app.domain import dishes as dishdom
 from app.domain import drinks as drinksdom
@@ -384,13 +385,17 @@ def _meal_or_404(db, user, meal_id: int):
 
 
 def _meal_response(db, user, meal_id: int, status: int = 200) -> web.Response:
-    return ok(meal_json(db, repo.get_meal(db, user["id"], meal_id)), status)
+    data = meal_json(db, repo.get_meal(db, user["id"], meal_id))
+    fav = repo.favorite_for_meal(db, user["id"], meal_id)      # звезда на экране приёма
+    data["favorite_id"] = fav["id"] if fav else None
+    return ok(data, status)
 
 
 @routes.get("/api/meals/{id}")
 async def api_meal_get(request: web.Request) -> web.Response:
     db, user, _ = ctx(request)
-    return ok(meal_json(db, _meal_or_404(db, user, path_id(request))))
+    meal = _meal_or_404(db, user, path_id(request))
+    return _meal_response(db, user, meal["id"])
 
 
 @routes.post("/api/meals")
@@ -489,14 +494,58 @@ def _short_title(names: list[str]) -> str:
 
 @routes.get("/api/frequent")
 async def api_frequent(request: web.Request) -> web.Response:
-    """Частые блюда за 60 дней для записи в одно нажатие. Разовые блюда не предлагаем."""
+    """Избранные блюда, затем частые за 60 дней: запись в одно нажатие. Разовые блюда не предлагаем."""
     db, user, _ = ctx(request)
+    try:
+        limit = max(1, min(30, int(request.query.get("limit", 8))))
+    except ValueError:
+        limit = 8
     today = now_local(user).strftime("%Y-%m-%d")
-    items = [{"meal_id": f["meal_id"], "title": _short_title(f["names"]),
-              "names": f["names"], "kcal": int(f["kcal"]), "count": f["count"]}
-             for f in repo.frequent_meals(db, user["id"], limit=8, today=today)
-             if f["count"] >= 2]
+    favorites = repo.list_favorites(db, user["id"], limit=limit)
+    items = [{"meal_id": f["meal_id"], "favorite_id": f["id"], "title": _short_title(f["names"]),
+              "names": f["names"], "kcal": int(f["kcal"]), "count": 0} for f in favorites]
+    have = {repo.meal_signature(f["names"]) for f in favorites}
+    for f in repo.frequent_meals(db, user["id"], limit=limit + len(have), today=today):
+        if len(items) >= limit:
+            break
+        if f["count"] < 2 or repo.meal_signature(f["names"]) in have:
+            continue
+        items.append({"meal_id": f["meal_id"], "favorite_id": None, "title": _short_title(f["names"]),
+                      "names": f["names"], "kcal": int(f["kcal"]), "count": f["count"]})
     return ok({"items": items})
+
+
+@routes.post("/api/favorites")
+async def api_favorite_add(request: web.Request) -> web.Response:
+    """Приём пищи → избранное (повтор того же состава не двоится)."""
+    db, user, _ = ctx(request)
+    data = await read_json(request)
+    try:
+        meal_id = int(data.get("meal_id"))
+    except (TypeError, ValueError):
+        raise bad("Не указан приём пищи.", "bad_field") from None
+    fav_id = repo.add_favorite(db, user["id"], meal_id)
+    if fav_id is None:
+        raise ApiError(404, "not_found", "Приём пищи не найден или в нём нет позиций.")
+    return ok({"id": fav_id}, 201)
+
+
+@routes.delete("/api/favorites/{id}")
+async def api_favorite_delete(request: web.Request) -> web.Response:
+    db, user, _ = ctx(request)
+    if not repo.remove_favorite(db, user["id"], path_id(request)):
+        raise ApiError(404, "not_found", "Избранное не найдено.")
+    return web.Response(status=204)
+
+
+@routes.post("/api/favorites/{id}/repeat")
+async def api_favorite_repeat(request: web.Request) -> web.Response:
+    db, user, _ = ctx(request)
+    meal_id = repo.favorite_meal_id(db, user["id"], path_id(request))
+    new_id = meals_svc.repeat_meal(db, user, meal_id, allow_deleted=True) if meal_id else None
+    if new_id is None:
+        raise ApiError(404, "not_found", "Избранное не найдено.")
+    return ok({"id": new_id, "kcal": int(repo.get_meal(db, user["id"], new_id)["kcal_total"])}, 201)
 
 
 @routes.post("/api/meals/{id}/repeat")
@@ -647,22 +696,43 @@ async def api_product_delete(request: web.Request) -> web.Response:
     return web.Response(status=204)
 
 
+MAX_LABEL_PHOTOS = 4
+
+
 @routes.post("/api/products/label")
 async def api_product_label(request: web.Request) -> web.Response:
+    """1–4 фото одного товара (лицевая сторона, таблица КБЖУ, штрихкод) → черновик продукта."""
     db, user, config = ctx(request)
     fn = service("products", "parse_label")
     form = await read_form(request, config.max_media_bytes)
     photos = form.files.get("photo", [])
-    if len(photos) != 1:
-        raise bad("Нужно одно фото этикетки.", "bad_photo")
+    if not 1 <= len(photos) <= MAX_LABEL_PHOTOS:
+        raise bad(f"Нужно от 1 до {MAX_LABEL_PHOTOS} фото одного товара.", "bad_photo")
     require_images(photos)
     try:
-        draft, confidence, notes = await call(fn, db, user, base64.b64encode(photos[0]).decode())
+        draft, confidence, notes = await call(fn, db, user, [base64.b64encode(p).decode() for p in photos])
     except llm.LLMError:
         raise ApiError(502, "llm_unavailable",
                        "Нет связи с моделью. Попробуйте ещё раз чуть позже.") from None
+    draft, notes = await call(service("products", "enrich_with_off"), draft, notes)
     return ok({"draft": {**product_json(draft), "id": None}, "confidence": confidence,
                "notes": notes})
+
+
+@routes.get("/api/products/barcode/{code}")
+async def api_product_barcode(request: web.Request) -> web.Response:
+    """Штрихкод → черновик из Open Food Facts (поле existing_id: такой продукт у вас уже есть)."""
+    db, user, _ = ctx(request)
+    code = request.match_info["code"].strip()
+    if not code.isdigit() or not off.valid_barcode(code):
+        raise bad("Штрихкод не подходит: проверьте цифры (8, 12 или 13).", "bad_barcode")
+    result = await call(service("products", "barcode_draft"), db, user, code)
+    if result is None:
+        raise ApiError(404, "not_found", "В Open Food Facts такого штрихкода нет. "
+                                         "Сфотографируйте этикетку или введите вручную.")
+    draft, existing_id = result
+    return ok({"draft": {**product_json(draft), "id": None}, "existing_id": existing_id,
+               "source": "off"})
 
 
 # ------------------------------------------------------------------ посуда

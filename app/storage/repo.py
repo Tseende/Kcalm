@@ -332,10 +332,13 @@ def frequent_meals(conn: sqlite3.Connection, user_id: int, limit: int = 6,
 
 
 def repeat_meal(conn: sqlite3.Connection, user_id: int, meal_id: int, eaten_utc: str,
-                local_date: str, local_time: str, meal_type: str) -> int | None:
-    """Записать ещё раз такой же приём пищи (состав и граммы как в образце) на новое время."""
+                local_date: str, local_time: str, meal_type: str,
+                allow_deleted: bool = False) -> int | None:
+    """Записать ещё раз такой же приём пищи (состав и граммы как в образце) на новое время.
+
+    allow_deleted: образец избранного живёт, даже если исходную запись убрали из дневника."""
     src = get_meal(conn, user_id, meal_id)
-    if not src or src["deleted_at"]:
+    if not src or (src["deleted_at"] and not allow_deleted):
         return None
     cur = conn.execute(
         """INSERT INTO meals (user_id, eaten_at_utc, local_date, local_time, meal_type,
@@ -354,6 +357,73 @@ def repeat_meal(conn: sqlite3.Connection, user_id: int, meal_id: int, eaten_utc:
     sync_meal_water(conn, new_id)
     conn.commit()
     return new_id
+
+
+# ------------------------------------------------------------------ избранные блюда
+
+def meal_signature(names: list[str]) -> str:
+    """Подпись состава: одинаковый набор названий (в любом порядке и регистре) — одно блюдо."""
+    return "|".join(sorted(n.strip().lower() for n in names))
+
+
+def _meal_names(conn: sqlite3.Connection, meal_id: int) -> list[str]:
+    return [r["name_ru"].strip() for r in conn.execute(
+        "SELECT name_ru FROM meal_items WHERE meal_id=? ORDER BY id", (meal_id,))]
+
+
+def favorite_for_meal(conn: sqlite3.Connection, user_id: int, meal_id: int) -> sqlite3.Row | None:
+    """Избранное с тем же составом, что у приёма (или None)."""
+    names = _meal_names(conn, meal_id)
+    if not names:
+        return None
+    return conn.execute("SELECT * FROM favorite_meals WHERE user_id=? AND sig=?",
+                        (user_id, meal_signature(names))).fetchone()
+
+
+def add_favorite(conn: sqlite3.Connection, user_id: int, meal_id: int) -> int | None:
+    """Приём → избранное. Повтор состава не двоит запись. None — приёма нет или в нём нет позиций."""
+    meal = get_meal(conn, user_id, meal_id)
+    if not meal or meal["deleted_at"]:
+        return None
+    names = _meal_names(conn, meal_id)
+    if not names:
+        return None
+    sig = meal_signature(names)
+    cur = conn.execute("INSERT OR IGNORE INTO favorite_meals (user_id, meal_id, sig) VALUES (?,?,?)",
+                       (user_id, meal_id, sig))
+    conn.commit()
+    if cur.rowcount:
+        return cur.lastrowid
+    return conn.execute("SELECT id FROM favorite_meals WHERE user_id=? AND sig=?",
+                        (user_id, sig)).fetchone()["id"]
+
+
+def list_favorites(conn: sqlite3.Connection, user_id: int, limit: int = 30) -> list[dict]:
+    """Избранное, новое сверху: {id, meal_id, kcal, names}."""
+    rows = conn.execute(
+        """SELECT f.id, f.meal_id, m.kcal_total FROM favorite_meals f
+           JOIN meals m ON m.id = f.meal_id WHERE f.user_id=? ORDER BY f.id DESC LIMIT ?""",
+        (user_id, limit)).fetchall()
+    out = []
+    for r in rows:
+        names = _meal_names(conn, r["meal_id"])
+        if names:
+            out.append({"id": r["id"], "meal_id": r["meal_id"], "kcal": r["kcal_total"],
+                        "names": names})
+    return out
+
+
+def favorite_meal_id(conn: sqlite3.Connection, user_id: int, favorite_id: int) -> int | None:
+    row = conn.execute("SELECT meal_id FROM favorite_meals WHERE id=? AND user_id=?",
+                       (favorite_id, user_id)).fetchone()
+    return row["meal_id"] if row else None
+
+
+def remove_favorite(conn: sqlite3.Connection, user_id: int, favorite_id: int) -> bool:
+    cur = conn.execute("DELETE FROM favorite_meals WHERE id=? AND user_id=?",
+                       (favorite_id, user_id))
+    conn.commit()
+    return cur.rowcount > 0
 
 
 def add_meal_photos(conn: sqlite3.Connection, meal_id: int, paths: list[str],

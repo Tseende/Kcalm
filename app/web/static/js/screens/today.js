@@ -157,7 +157,7 @@ export default async function render(root, ctx) {
       row.replaceChildren(...items.map((f) => {
         const b = h('button', { class: 'often-chip', type: 'button', title: f.names.join(', '),
           'aria-label': `Записать: ${f.names.join(', ')}, ${f.kcal} ккал`, onclick: () => repeat(f, b) },
-        h('span', { class: 'often-name' }, f.title), h('span', { class: 'often-kcal' }, fmtKcal(f.kcal)));
+        f.favorite_id ? h('span', { class: 'often-star' }, icon('star', 13)) : null, h('span', { class: 'often-name' }, f.title), h('span', { class: 'often-kcal' }, fmtKcal(f.kcal)));
         return b;
       }));
     };
@@ -172,7 +172,7 @@ export default async function render(root, ctx) {
   async function repeat(f, btn) {
     btn.disabled = true;
     try {
-      const r = await api.post(`/meals/${f.meal_id}/repeat`);
+      const r = await api.post(f.favorite_id ? `/favorites/${f.favorite_id}/repeat` : `/meals/${f.meal_id}/repeat`);
       haptic('success');
       toast(`+${fmtKcal(r.kcal)} ккал · ${f.title}`, 'ok', { undo: () => api.del('/meals/' + r.id) });
       load({ quiet: true });

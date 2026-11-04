@@ -68,7 +68,12 @@ Single source of truth for the frontend (`app/web/static/`) and the backend
 | POST | /api/products | Product fields without id | `201 Product` |
 | PATCH | /api/products/{id} | partial Product | `Product` |
 | DELETE | /api/products/{id} | — | `204` |
-| POST | /api/products/label | multipart `photo` | `{"draft":Product-without-id,"confidence":0.9,"notes":["..."]}` (not saved) |
+| POST | /api/products/label | multipart `photo` (1–4 files, one product) | `{"draft":Product-without-id,"confidence":0.9,"notes":["..."]}` (not saved). A barcode read from the photo is checked in Open Food Facts to fill gaps. |
+| GET | /api/products/barcode/{code} | | `{"draft":Product-without-id,"existing_id":null\|id,"source":"off"}`; 400 `bad_barcode` (wrong checksum), 404 not found. Open Food Facts first, then own cache. |
+| GET | /api/frequent | `?limit=` | `{"items":[{"meal_id","favorite_id":null\|id,"title","names","kcal","count"}]}`: favorites first, then meals eaten ≥2 times |
+| POST | /api/favorites | `{"meal_id"}` | 201 `{"id"}` (same composition is not duplicated) |
+| DELETE | /api/favorites/{id} | | 204 / 404 |
+| POST | /api/favorites/{id}/repeat | | 201 `{"id","kcal"}`: logs the meal again even if the source was deleted |
 | GET | /api/dishes | — | `{"dishes":[Dish]}` |
 | POST | /api/dishes | multipart: fields of Dish + optional `photo` | `201 Dish` |
 | PATCH | /api/dishes/{id} | JSON partial Dish | `Dish` |

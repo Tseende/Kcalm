@@ -25,11 +25,57 @@ export default async function render(root, ctx) {
 
   const camera = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, onchange: () => addFiles(camera) });
   const gallery = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, onchange: () => addFiles(gallery) });
-  const textTa = h('textarea', { rows: 3, placeholder: 'Например: овсянка на молоке 250 г, банан, кофе без сахара', oninput: sync });
+  const textTa = h('textarea', { rows: 3, placeholder: 'Например: овсянка на молоке 250 г, банан, кофе без сахара', oninput: () => { sync(); if (quickPaint) quickPaint(); } });
   const textLabel = h('span', { class: 'field-label' }, 'Что съели');
   const clearDraft = draft('meal-text', textTa);
   const dishList = h('div', { class: 'stack' });
   const capture = h('div', { class: 'capture' });
+  const quick = h('div', { class: 'stack-sm', hidden: true });
+
+  // Избранное и частые: один тап записывает приём заново, звезда добавляет/убирает из избранного.
+  async function loadQuick() {
+    let items = [];
+    try { items = (await api.get('/frequent', { limit: 20 })).items || []; } catch (e) { return; }
+    if (!ctx.alive()) return;
+    const paintQuick = () => {
+      quick.hidden = !items.length || allPhotos().length > 0 || !!textTa.value.trim();
+      const rows = items.map((f) => {
+        const star = h('button', {
+          class: 'quick-star' + (f.favorite_id ? ' on' : ''), type: 'button',
+          'aria-label': f.favorite_id ? 'Убрать из избранного' : 'В избранное', 'aria-pressed': String(!!f.favorite_id),
+          onclick: async (ev) => {
+            ev.stopPropagation();
+            try {
+              if (f.favorite_id) { await api.del('/favorites/' + f.favorite_id); f.favorite_id = null; }
+              else f.favorite_id = (await api.post('/favorites', { meal_id: f.meal_id })).id;
+              haptic('light');
+              items.sort((a, b) => (b.favorite_id ? 1 : 0) - (a.favorite_id ? 1 : 0));
+              paintQuick();
+            } catch (e) { toast(e.message, 'error'); }
+          },
+        }, icon('star', 20));
+        const row = h('div', { class: 'row' },
+          h('button', {
+            class: 'row-btn grow', type: 'button', title: f.names.join(', '),
+            onclick: async () => {
+              row.classList.add('busy');
+              try {
+                const r = await api.post(f.favorite_id ? `/favorites/${f.favorite_id}/repeat` : `/meals/${f.meal_id}/repeat`);
+                haptic('success');
+                mainButton.hide();
+                nav.replace('/meal/' + r.id);
+              } catch (e) { row.classList.remove('busy'); toast(e.message, 'error'); }
+            },
+          }, h('span', { class: 'grow' }, h('span', { class: 'row-title' }, f.title), h('span', { class: 'row-sub' }, `${f.kcal} ккал`))),
+          star);
+        return row;
+      });
+      quick.replaceChildren(h('div', { class: 'section-label' }, 'Избранное и частые'), h('div', { class: 'list quick-list' }, rows));
+    };
+    quickPaint = paintQuick;
+    paintQuick();
+  }
+  let quickPaint = null;
 
   async function addFiles(input) {
     const files = [...input.files];
@@ -114,6 +160,7 @@ export default async function render(root, ctx) {
     const filled = groups.filter((g) => g.photos.length);
     dishList.replaceChildren(...filled.map((g, gi) => groupCard(g, gi)));
     paintCapture(filled);
+    if (quickPaint) quickPaint();
     sync();
   }
 
@@ -201,12 +248,13 @@ export default async function render(root, ctx) {
   view.append(
     pageHead('Приём пищи', { parent: '/today' }),
     h('div', { class: 'stack' },
-      dishList, capture, noDishHint || document.createDocumentFragment(),
+      quick, dishList, capture, noDishHint || document.createDocumentFragment(),
       h('label', { class: 'field' }, textLabel, textTa),
       camera, gallery));
 
   mainButton.show('Сохранить приём', submit, { disabled: true });
   lastDisabled = true;
   paint();
+  loadQuick();
   return () => allPhotos().forEach((p) => URL.revokeObjectURL(p.url));
 }

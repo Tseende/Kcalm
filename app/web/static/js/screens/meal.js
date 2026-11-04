@@ -180,8 +180,26 @@ export default async function render(root, ctx) {
       sectionTitle('Позиции'),
       itemsBox,
       h('div', { class: 'stack-sm actions' },
+        h('button', { class: 'btn btn-secondary btn-block' + (meal.favorite_id ? ' star-on' : ''), type: 'button',
+          'aria-pressed': String(!!meal.favorite_id), onclick: toggleFavorite },
+        icon('star', 18), meal.favorite_id ? 'В избранном' : 'В избранное'),
         h('button', { class: 'btn btn-secondary btn-block', type: 'button', onclick: refine }, icon('pencil', 18), 'Уточнить'),
         h('button', { class: 'btn btn-danger-ghost btn-block', type: 'button', onclick: removeMeal }, icon('trash', 18), 'Удалить приём'))].filter(Boolean));
+  }
+
+  async function toggleFavorite() {
+    try {
+      if (meal.favorite_id) {
+        await api.del('/favorites/' + meal.favorite_id);
+        meal.favorite_id = null;
+        toast('Убрано из избранного');
+      } else {
+        meal.favorite_id = (await api.post('/favorites', { meal_id: meal.id })).id;
+        toast('Добавлено в избранное. Теперь оно под рукой при добавлении приёма', 'ok');
+      }
+      haptic('light');
+      draw();
+    } catch (e) { toast(e.message, 'error'); }
   }
 
   draw();

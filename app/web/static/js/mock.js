@@ -227,6 +227,7 @@ const WG_KINDS = {
   water: { icon: '💧', title: 'Вода в норме', hint: 'Стакан после пробуждения, перед едой и в 16:00. Чай и кофе тоже считаются.' },
   late: { icon: '🌙', title: 'Без поздней еды', hint: 'Ужин на час раньше и с белком, так вечером меньше тянет.' },
 };
+const mockFavs = {}; // meal_id -> favorite_id
 let weekGoal = null;
 function weekGoalMock() {
   const recap = { week_start: '2026-10-26', good: ['Белок держится у цели', 'Воды хватает'], goal: { kind: 'water', icon: '💧', title: 'Вода в норме', done: 5, target: 4, achieved: true } };
@@ -251,7 +252,7 @@ const routes = [
   })],
   ['GET', /^\/day$/, (m, q) => getDay(q.date || todayISO())],
   ['GET', /^\/stats$/, (m, q) => getStats(q.range || 'week')],
-  ['GET', /^\/meals\/(\d+)$/, (m) => meals.get(+m[1]) || (() => { throw notFound(); })()],
+  ['GET', /^\/meals\/(\d+)$/, (m) => { const x = meals.get(+m[1]); if (!x) throw notFound(); x.favorite_id = mockFavs[x.id] || null; return x; }],
   ['POST', /^\/meals$/, async (m, q, b) => {
     await sleep(1800);
     const f = new FormLike(b);
@@ -308,6 +309,11 @@ const routes = [
       confidence: 0.86, notes: ['Значения указаны на 100 мл, принята плотность 1 г/мл.', 'Вес упаковки не найден.'],
     };
   }],
+  ['GET', /^\/products\/barcode\/(\d+)$/, async (m) => {
+    await sleep(700);
+    if (m[1] === '0000000000000') throw notFound();
+    return { source: 'off', existing_id: null, draft: { name: 'Кефир 2,5%', brand: 'Простоквашино', kcal: 53, protein: 2.9, fat: 2.5, carbs: 4, default_grams: 250, unit_name: 'стакан', unit_grams: 250, barcode: m[1] } };
+  }],
   ['GET', /^\/dishes$/, () => ({ dishes: dishes.map(dishOut) })],
   ['POST', /^\/dishes$/, (m, q, b) => {
     const f = new FormLike(b);
@@ -363,10 +369,14 @@ const routes = [
   }],
   ['POST', /^\/activity$/, (m, q, b) => { const bd = body.get(b.date || todayISO()); if (bd) { if (b.steps) bd.steps = b.steps; if (b.active_kcal) bd.active_kcal = b.active_kcal; } return { ok: true }; }],
   ['GET', /^\/frequent$/, () => ({ items: [
-    { meal_id: 1, title: 'Овсянка с бананом +1', names: ['Овсянка с бананом', 'Кофе с молоком'], kcal: 410, count: 9 },
-    { meal_id: 2, title: 'Гречка +1', names: ['Гречка', 'Куриная грудка'], kcal: 520, count: 6 },
-    { meal_id: 3, title: 'Творог 5%', names: ['Творог 5%'], kcal: 180, count: 4 },
-    { meal_id: 4, title: 'Капучино', names: ['Капучино'], kcal: 98, count: 3 }] })],
+    { meal_id: 1, favorite_id: mockFavs[1] || null, title: 'Овсянка с бананом +1', names: ['Овсянка с бананом', 'Кофе с молоком'], kcal: 410, count: 9 },
+    { meal_id: 2, favorite_id: mockFavs[2] || null, title: 'Гречка +1', names: ['Гречка', 'Куриная грудка'], kcal: 520, count: 6 },
+    { meal_id: 3, favorite_id: mockFavs[3] || null, title: 'Творог 5%', names: ['Творог 5%'], kcal: 180, count: 4 },
+    { meal_id: 4, favorite_id: mockFavs[4] || null, title: 'Капучино', names: ['Капучино'], kcal: 98, count: 3 }]
+    .sort((a, b) => (b.favorite_id ? 1 : 0) - (a.favorite_id ? 1 : 0)) })],
+  ['POST', /^\/favorites$/, (m, q, b) => { mockFavs[b.meal_id] = 100 + Number(b.meal_id); return { id: mockFavs[b.meal_id] }; }],
+  ['DELETE', /^\/favorites\/(\d+)$/, (m) => { for (const k of Object.keys(mockFavs)) if (mockFavs[k] === Number(m[1])) delete mockFavs[k]; return null; }],
+  ['POST', /^\/favorites\/(\d+)\/repeat$/, () => ({ id: 9001, kcal: 410 })],
   ['POST', /^\/meals\/(\d+)\/repeat$/, () => ({ id: 9001, kcal: 410 })],
   ['GET', /^\/week-goal$/, () => weekGoalMock()],
   ['PUT', /^\/week-goal$/, (m, q, b) => { weekGoal = { kind: b.kind, target: b.target }; return weekGoalMock(); }],

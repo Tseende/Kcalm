@@ -14,6 +14,7 @@ export function productForm(p = {}) {
   const fat = numInput({ value: val(p.fat), min: 0, max: 100, step: 0.1, 'aria-label': 'Жиры на 100 г' });
   const carb = numInput({ value: val(p.carbs), min: 0, max: 100, step: 0.1, 'aria-label': 'Углеводы на 100 г' });
   const dg = numInput({ value: val(p.default_grams), min: 1, max: 5000, step: 1, placeholder: 'например, 150', 'aria-label': 'Порция по умолчанию' });
+  const barcode = h('input', { type: 'text', inputMode: 'numeric', value: val(p.barcode), maxLength: 14, placeholder: 'Необязательно', autocomplete: 'off', 'aria-label': 'Штрихкод' });
   const un = h('input', { type: 'text', value: val(p.unit_name), maxLength: 30, placeholder: 'пачка, шт, ломтик', 'aria-label': 'Название единицы' });
   const ug = numInput({ value: val(p.unit_grams), min: 1, max: 5000, step: 1, placeholder: 'г в единице', 'aria-label': 'Грамм в единице' });
   let iconVal = FOOD_ICONS.includes(p.icon) ? p.icon : null;
@@ -38,7 +39,7 @@ export function productForm(p = {}) {
   paintIcon();
   const el = h('div', { class: 'stack' },
     iconPrev,
-    group([frow('Название', name), frow('Бренд', brand)]),
+    group([frow('Название', name), frow('Бренд', brand), frow('Штрихкод', barcode)]),
     titleIcon,
     iconGrid,
     h('div', { class: 'section-title' }, h('span', null, 'На 100 г')),
@@ -54,9 +55,11 @@ export function productForm(p = {}) {
     const macros = [numVal(pr), numVal(fat), numVal(carb)];
     if (macros.some((m) => m !== null && (m < 0 || m > 100))) { toast('Белки, жиры и углеводы на 100 г: от 0 до 100', 'error'); return null; }
     if (macros.reduce((a, m) => a + (m || 0), 0) > 100.5) { toast('Сумма Б+Ж+У не может быть больше 100 г', 'error'); return null; }
+    const bc = barcode.value.replace(/\D/g, '');
+    if (bc && ![8, 12, 13, 14].includes(bc.length)) { toast('Штрихкод: 8, 12 или 13 цифр', 'error'); barcode.focus(); return null; }
     const grams = (inp) => { const v = numVal(inp); return v && v > 0 ? Math.round(v) : null; };
     return {
-      name: n, brand: brand.value.trim() || null, kcal: Math.round(k),
+      name: n, brand: brand.value.trim() || null, barcode: bc || null, kcal: Math.round(k),
       protein: macros[0] ?? 0, fat: macros[1] ?? 0, carbs: macros[2] ?? 0,
       default_grams: grams(dg), unit_name: un.value.trim() || null, unit_grams: grams(ug), icon: iconVal,
     };

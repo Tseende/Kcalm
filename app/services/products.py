@@ -9,6 +9,7 @@ import logging
 import re
 import sqlite3
 
+from app.adapters import off
 from app.config import get_config
 from app.domain import products as dom
 from app.domain.matching import normalize
@@ -21,7 +22,7 @@ from app.storage import repo
 log = logging.getLogger(__name__)
 
 DRAFT_KEYS = ("name", "brand", "kcal", "protein", "fat", "carbs", "default_grams",
-              "unit_name", "unit_grams")
+              "unit_name", "unit_grams", "barcode")
 
 
 def _num(value, lo: float, hi: float) -> float | None:
@@ -82,9 +83,13 @@ def label_draft(data: dict) -> tuple[dict, float, list[str]]:
         unit_name, unit_grams = "упаковка", package_g
     elif serving_g:
         unit_name, unit_grams = "порция", serving_g
+    barcode = re.sub(r"\D", "", str(data.get("barcode") or ""))
+    if barcode and not off.valid_barcode(barcode):
+        notes.append("штрихкод прочитан с ошибкой, проверьте цифры")
+        barcode = ""
     draft = {"name": _text(data.get("name")), "brand": _text(data.get("brand"), 40),
              **values, "default_grams": serving_g, "unit_name": unit_name,
-             "unit_grams": unit_grams}
+             "unit_grams": unit_grams, "barcode": barcode or None}
     llm_note = _text(data.get("notes"), 200)
     if llm_note:
         notes.append(llm_note)
@@ -99,16 +104,81 @@ def _empty_draft() -> dict:
     return {k: None for k in DRAFT_KEYS}
 
 
-async def parse_label(db: sqlite3.Connection, user, image_b64: str
+async def parse_label(db: sqlite3.Connection, user, image_b64: str | list[str]
                       ) -> tuple[dict, float, list[str]]:
-    """Фото этикетки → (черновик, уверенность 0..1, заметки). Ничего не сохраняет."""
+    """Фото этикетки (одно или несколько фото одного товара) → (черновик, уверенность 0..1, заметки).
+    Ничего не сохраняет."""
+    images = [image_b64] if isinstance(image_b64, str) else list(image_b64)
     content = [{"type": "text", "text": load_prompt("label")},
-               {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}}]
+               *({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
+                 for b64 in images)]
     data, _model = await llm.chat_json(
         "label_parse", [{"role": "user", "content": content}],
         model=get_config().model_vision, temperature=0.0,
         user_id=user["id"] if user else None, db=db)
     return label_draft(data)
+
+
+# ------------------------------------------------------------------ Open Food Facts
+
+_NUTRIENTS = ("kcal", "protein", "fat", "carbs")
+
+
+def _off_draft(found: dict, code: str) -> dict:
+    """Продукт OFF → черновик на 100 г (как у этикетки)."""
+    serving = found.get("serving_g")
+    return {"name": _text(found.get("name")), "brand": _text(found.get("brand"), 40),
+            "kcal": round(found["kcal_100g"]), "protein": found["protein_100g"],
+            "fat": found["fat_100g"], "carbs": found["carbs_100g"],
+            "default_grams": serving, "unit_name": "порция" if serving else None,
+            "unit_grams": serving, "barcode": code}
+
+
+async def enrich_with_off(draft: dict, notes: list[str], transport=None) -> tuple[dict, list[str]]:
+    """Штрихкод с фото → Open Food Facts: дополняет пробелы и сверяет калории.
+
+    Числа с упаковки главнее: база краудсорсная. OFF берём целиком только когда на фото
+    КБЖУ прочиталось не полностью. Сбой сети ничего не ломает."""
+    code = draft.get("barcode")
+    if not code:
+        return draft, notes
+    found = await off.fetch_barcode(code, transport=transport)
+    if not found:
+        return draft, notes
+    ref = _off_draft(found, code)
+    out, notes = dict(draft), list(notes)
+    if any(out.get(k) is None for k in _NUTRIENTS):
+        for k in _NUTRIENTS:
+            out[k] = ref[k]
+        notes.append("КБЖУ не читалось с фото, взял из Open Food Facts: проверьте")
+    elif ref["kcal"] and abs(out["kcal"] - ref["kcal"]) / ref["kcal"] > 0.2:
+        notes.append(f"На фото {out['kcal']} ккал, в Open Food Facts {ref['kcal']}: проверьте упаковку")
+    for k in ("name", "brand", "default_grams", "unit_name", "unit_grams"):
+        if not out.get(k) and ref.get(k):
+            out[k] = ref[k]
+    return out, notes
+
+
+async def barcode_draft(db: sqlite3.Connection, user, code: str, transport=None
+                        ) -> tuple[dict, int | None] | None:
+    """Штрихкод → (черновик, id своего продукта с этим кодом | None) или None, если нигде нет.
+
+    Сначала Open Food Facts; при сбое сети берём локальный кэш прошлых находок."""
+    found = await off.fetch_barcode(code, transport=transport)
+    if found:
+        draft = _off_draft(found, code)
+    else:
+        cached = repo.food_by_barcode(db, code, user["id"] if user else None)
+        if cached is None:
+            return None
+        draft = {"name": _text(cached["name_ru"]), "brand": _text(cached["brand"], 40),
+                 "kcal": round(cached["kcal_100g"]), "protein": cached["protein_100g"],
+                 "fat": cached["fat_100g"], "carbs": cached["carbs_100g"],
+                 "default_grams": cached["default_grams"], "unit_name": cached["unit_name"],
+                 "unit_grams": cached["unit_grams"], "barcode": code}
+    own = db.execute("SELECT id FROM foods WHERE barcode=? AND owner_user_id=? AND deleted_at IS NULL",
+                     (code, user["id"])).fetchone()
+    return draft, (own["id"] if own else None)
 
 
 # ------------------------------------------------------------------ текст

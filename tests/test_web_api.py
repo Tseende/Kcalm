@@ -367,7 +367,7 @@ async def test_meal_upload_photo(client, db, user_id, fake_food):
     assert resp.status == 201
     meal = await resp.json()
     assert set(meal) == {"id", "date", "time", "type", "source", "kcal", "kcal_low", "kcal_high",
-                         "protein", "fat", "carbs", "confidence", "photos", "items", "comment"}
+                         "protein", "fat", "carbs", "confidence", "photos", "items", "comment", "favorite_id"}
     assert meal["source"] == "combo" and meal["comment"] == "гречка на обед"
     assert meal["date"] == TODAY and meal["time"] == "13:00"          # «в обед» из подписи главнее
     assert meal["type"] == "lunch"
@@ -839,18 +839,20 @@ async def test_products_endpoints(client, monkeypatch, fake_food):
 
     async def label(db, user, image_b64):  # noqa: ANN001
         import base64
-        assert base64.b64decode(image_b64) == jpeg("lab")
+        assert [base64.b64decode(b) for b in image_b64] == [jpeg("lab"), jpeg("lab2")]
         return ({"name": "Творог", "brand": None, "kcal": 121, "protein": 17, "fat": 5,
                  "carbs": 1.8, "default_grams": None, "unit_name": None, "unit_grams": None},
                 0.9, ["вес пачки не виден"])
 
     monkeypatch.setattr(productsvc, "parse_label", label)
-    lab = await client.post("/api/products/label", data=photo_form(jpeg("lab")), headers=H)
+    lab = await client.post("/api/products/label", data=photo_form(jpeg("lab"), jpeg("lab2")), headers=H)
     assert lab.status == 200
     body = await lab.json()
     assert body["draft"]["name"] == "Творог" and body["draft"]["id"] is None
     assert body["confidence"] == 0.9 and body["notes"] == ["вес пачки не виден"]
     assert (await client.post("/api/products/label", data=photo_form(), headers=H)).status == 400
+    five = photo_form(*[jpeg(str(i)) for i in range(5)])
+    assert (await client.post("/api/products/label", data=five, headers=H)).status == 400
 
     meal = await (await post_meal(client, jpeg())).json()
     saved = await client.post(f"/api/items/{meal['items'][0]['id']}/save_product", headers=H,
@@ -927,3 +929,134 @@ async def test_screens_upload_and_confirm(client, db, user_id, monkeypatch):
     assert miss.status == 404
     declined = await client.post("/api/screens/9999/confirm", json={"apply": False}, headers=H)
     assert declined.status == 200 and (await declined.json()) == {"applied": False}
+
+
+# ------------------------------------------------------------------ избранное
+
+async def _two_colas(client):
+    for _ in range(2):
+        await client.post("/api/drinks", json={"drink": "cola", "ml": 330}, headers=H)
+    items = (await (await client.get("/api/frequent", headers=H)).json())["items"]
+    return items[0]["meal_id"]
+
+
+async def test_favorites_flow(client):
+    meal_id = await _two_colas(client)
+    added = await client.post("/api/favorites", json={"meal_id": meal_id}, headers=H)
+    assert added.status == 201
+    fav_id = (await added.json())["id"]
+    again = await client.post("/api/favorites", json={"meal_id": meal_id}, headers=H)
+    assert (await again.json())["id"] == fav_id                       # тот же состав не двоится
+
+    items = (await (await client.get("/api/frequent", headers=H)).json())["items"]
+    assert [(i["favorite_id"], i["title"]) for i in items] == [(fav_id, "Кола")]   # частое не дублирует избранное
+
+    meal = await (await client.get(f"/api/meals/{meal_id}", headers=H)).json()
+    assert meal["favorite_id"] == fav_id
+
+    rep = await client.post(f"/api/favorites/{fav_id}/repeat", headers=H)
+    assert rep.status == 201 and (await rep.json())["kcal"] == 140
+
+    # исходную запись убрали из дневника: избранное всё равно записывается
+    assert (await client.delete(f"/api/meals/{meal_id}", headers=H)).status == 204
+    assert (await client.post(f"/api/favorites/{fav_id}/repeat", headers=H)).status == 201
+
+    assert (await client.delete(f"/api/favorites/{fav_id}", headers=H)).status == 204
+    assert (await client.delete(f"/api/favorites/{fav_id}", headers=H)).status == 404
+    assert (await client.post(f"/api/favorites/{fav_id}/repeat", headers=H)).status == 404
+
+
+async def test_favorites_validation_and_isolation(client, db):
+    assert (await client.post("/api/favorites", json={"meal_id": 424242}, headers=H)).status == 404
+    assert (await client.post("/api/favorites", json={}, headers=H)).status == 400
+    meal_id = await _two_colas(client)
+    other = add_user(db, 1002)
+    assert repo.add_favorite(db, other, meal_id) is None              # чужой приём в избранное не взять
+    fav_id = (await (await client.post("/api/favorites", json={"meal_id": meal_id}, headers=H)).json())["id"]
+    assert repo.list_favorites(db, other) == []
+    assert repo.remove_favorite(db, other, fav_id) is False
+    assert repo.favorite_meal_id(db, other, fav_id) is None
+
+
+# ------------------------------------------------------------------ штрихкод и Open Food Facts
+
+def ean13(body12: str) -> str:
+    total = sum(int(d) * (3 if i % 2 else 1) for i, d in enumerate(body12))
+    return body12 + str((10 - total % 10) % 10)
+
+
+OFF_FOUND = {"code": "x", "name": "Кефир 2,5%", "brand": "Простоквашино", "kcal_100g": 53.0,
+             "protein_100g": 2.9, "fat_100g": 2.5, "carbs_100g": 4.0, "serving_g": 250.0}
+
+
+async def test_barcode_endpoint(client, db, user_id, monkeypatch):
+    from app.adapters import off
+    code = ean13("460700489000")
+
+    async def fake_fetch(c, transport=None):  # noqa: ANN001
+        return dict(OFF_FOUND, code=c) if c == code else None
+
+    monkeypatch.setattr(off, "fetch_barcode", fake_fetch)
+    assert (await client.get("/api/products/barcode/123", headers=H)).status == 400
+    assert (await client.get("/api/products/barcode/4607004890009", headers=H)).status == 400   # контрольная цифра
+    assert (await client.get(f"/api/products/barcode/{ean13('460700489001')}", headers=H)).status == 404
+
+    resp = await client.get(f"/api/products/barcode/{code}", headers=H)
+    assert resp.status == 200
+    body = await resp.json()
+    assert body["source"] == "off" and body["existing_id"] is None
+    d = body["draft"]
+    assert (d["name"], d["brand"], d["kcal"], d["barcode"], d["unit_grams"]) == \
+        ("Кефир 2,5%", "Простоквашино", 53, code, 250)
+
+    pid = repo.create_product(db, user_id, "Мой кефир", 50, 3, 2.5, 4, barcode=code)
+    again = await (await client.get(f"/api/products/barcode/{code}", headers=H)).json()
+    assert again["existing_id"] == pid                                  # такой продукт у вас уже есть
+
+
+async def test_barcode_falls_back_to_local_cache_when_off_down(client, db, user_id, monkeypatch):
+    from app.adapters import off
+    code = ean13("460700489002")
+    repo.create_product(db, user_id, "Сырок", 330, 8, 24, 20, barcode=code)
+
+    async def down(c, transport=None):  # noqa: ANN001
+        return None
+
+    monkeypatch.setattr(off, "fetch_barcode", down)
+    resp = await client.get(f"/api/products/barcode/{code}", headers=H)
+    assert resp.status == 200 and (await resp.json())["draft"]["name"] == "Сырок"
+
+
+def test_label_draft_reads_barcode_and_rejects_bad_checksum():
+    from app.services import products as productsvc
+    code = ean13("460700489000")
+    draft, _, notes = productsvc.label_draft({"name": "X", "per_100g": {"kcal": 50, "protein": 1, "fat": 1, "carbs": 9},
+                                              "barcode": f"{code[:1]} {code[1:]}", "confidence": 0.9})
+    assert draft["barcode"] == code and notes == []
+    draft, _, notes = productsvc.label_draft({"name": "X", "per_100g": {"kcal": 50, "protein": 1, "fat": 1, "carbs": 9},
+                                              "barcode": "4607004890009", "confidence": 0.9})
+    assert draft["barcode"] is None and any("штрихкод" in n for n in notes)
+
+
+async def test_enrich_with_off(monkeypatch):
+    from app.adapters import off
+    from app.services import products as productsvc
+    code = ean13("460700489000")
+
+    async def fake_fetch(c, transport=None):  # noqa: ANN001
+        return dict(OFF_FOUND, code=c)
+
+    monkeypatch.setattr(off, "fetch_barcode", fake_fetch)
+    # на фото только штрихкод: всё берём из OFF
+    empty = {"name": None, "brand": None, "kcal": None, "protein": None, "fat": None, "carbs": None,
+             "default_grams": None, "unit_name": None, "unit_grams": None, "barcode": code}
+    out, notes = await productsvc.enrich_with_off(empty, [])
+    assert (out["name"], out["kcal"], out["fat"]) == ("Кефир 2,5%", 53, 2.5) and any("Open Food Facts" in n for n in notes)
+    # числа с упаковки главнее; сильное расхождение — только заметка
+    label = dict(empty, name="Кефир", kcal=80, protein=3, fat=3, carbs=5)
+    out, notes = await productsvc.enrich_with_off(label, [])
+    assert out["kcal"] == 80 and out["name"] == "Кефир" and out["brand"] == "Простоквашино"
+    assert any("80" in n and "53" in n for n in notes)
+    # нет штрихкода: ничего не меняется и в сеть не ходим
+    same, same_notes = await productsvc.enrich_with_off(dict(label, barcode=None), ["a"])
+    assert same["kcal"] == 80 and same_notes == ["a"]

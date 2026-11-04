@@ -764,3 +764,19 @@ html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
 /* цели/о приложении: иконка повторяет подпись, убираем */
 .row.static > .ticon { display: none; }
 .row.static:has(.ticon) { padding-left: 16px; }
+
+/* избранное */
+.star-on .ico svg { fill: currentColor; }
+.star-on { color: #ff9500; }
+.often-star { color: #ff9500; display: inline-flex; }
+.often-star .ico svg { fill: currentColor; }
+.quick-list { display: flex; flex-direction: column; }
+.quick-star { flex: none; width: 40px; height: 40px; display: grid; place-items: center; color: var(--c-hint); }
+.quick-star.on { color: #ff9500; }
+.quick-star.on .ico svg { fill: currentColor; }
+.barcode-row { display: flex; gap: 8px; }
+.barcode-row input { flex: 1; min-width: 0; }
+.quick-list .row { align-items: center; padding-block: 4px; }
+.quick-list .row-btn { appearance: none; background: none; border: 0; padding: 6px 0; margin: 0; font: inherit; color: inherit; text-align: left; display: flex; flex-direction: column; min-width: 0; cursor: pointer; }
+.quick-list .row.busy { opacity: .5; pointer-events: none; }
+.quick-star { appearance: none; background: none; border: 0; padding: 0; cursor: pointer; }

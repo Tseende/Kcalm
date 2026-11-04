@@ -29,7 +29,7 @@ export default async function render(root, ctx) {
       h('button', { class: 'row', type: 'button', onclick: () => go('/menu/product/new') }, tile('edit', 'blue'),
         h('span', { class: 'grow' }, h('span', { class: 'row-title' }, 'Вручную'), h('span', { class: 'row-sub' }, 'Ввести название и КБЖУ на 100 г'))),
       h('button', { class: 'row', type: 'button', onclick: () => go('/add/label') }, tile('camera', 'green'),
-        h('span', { class: 'grow' }, h('span', { class: 'row-title' }, 'По этикетке'), h('span', { class: 'row-sub' }, 'Сфотографировать упаковку')))) });
+        h('span', { class: 'grow' }, h('span', { class: 'row-title' }, 'По этикетке или штрихкоду'), h('span', { class: 'row-sub' }, 'Несколько фото упаковки или поиск в Open Food Facts')))) });
   }
 
   function macro(cls, letter, v) {
