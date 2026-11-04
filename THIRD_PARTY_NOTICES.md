@@ -60,3 +60,8 @@
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
   SOFTWARE.
   ```
+
+## @zxing/library 0.21.3
+
+Used for camera barcode scanning in the Mini App (`app/web/static/vendor/zxing.min.js`, unmodified UMD build).
+Apache License 2.0, https://github.com/zxing-js/library (full text: https://www.apache.org/licenses/LICENSE-2.0).

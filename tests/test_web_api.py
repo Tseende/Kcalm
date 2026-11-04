@@ -316,7 +316,8 @@ async def test_day_shape_and_content(client, db, user_id, fake_food):
     assert resp.status == 200
     day = await resp.json()
     assert set(day) == {"date", "targets", "totals", "remaining_kcal", "water_ml", "meals",
-                        "sleep", "activity", "weight"}
+                        "sleep", "activity", "weight", "weight_last"}
+    assert day["weight_last"] == {"kg": 82.4, "date": TODAY}
     assert day["date"] == TODAY and day["water_ml"] == 250
     assert day["totals"]["kcal"] == meal["kcal"] > 0
     assert day["remaining_kcal"] == 1650 - meal["kcal"]
@@ -328,6 +329,7 @@ async def test_day_shape_and_content(client, db, user_id, fake_food):
 
 async def test_day_empty_and_params(client):
     day = await (await client.get("/api/day?date=2026-05-01", headers=H)).json()
+    assert day["weight_last"] is None or day["weight_last"]["date"] <= "2026-05-01"
     assert day["meals"] == [] and day["sleep"] is None and day["activity"] is None
     assert day["weight"] is None and day["totals"]["kcal"] == 0
     assert (await client.get("/api/day?date=вчера", headers=H)).status == 400

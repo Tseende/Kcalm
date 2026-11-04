@@ -2,6 +2,7 @@
 import { api, isMock, onMockEnabled, tg, inTelegram } from './api.js';
 import { initKeyboard } from './keyboard.js';
 import { h, $, icon, tile, sheet, nav, mainButton, backButton, emptyState, errorState, haptic } from './ui.js';
+import { mealPic, drinkPic } from './pics.js';
 
 const R = (re, load, opts = {}) => ({ re: new RegExp('^' + re + '$'), load, ...opts });
 const routes = [
@@ -56,20 +57,29 @@ function setActiveTab(tab) {
 
 function openAddSheet() {
   haptic('light');
-  const actions = [
-    ['tools-kitchen-2', 'orange', 'Приём пищи', 'Фото тарелки или описание текстом', '/add/meal', true],
-    ['droplet', 'teal', 'Напитки', 'Вода, чай, кофе, газировка', '/add/drink'],
-    ['tag', 'pink', 'По этикетке', 'Фото таблицы КБЖУ', '/add/label'],
-    ['scale', 'purple', 'Вес', 'Утреннее взвешивание', '/add/weight'],
-    ['bed', 'indigo', 'Сон', 'Часы сна и оценка', '/add/sleep'],
-    ['run', 'green', 'Активность', 'Шаги, калории, тренировка', '/add/activity'],
-    ['device-mobile', 'blue', 'Скриншот', 'Сон, шаги или весы', '/add/screen'],
-  ];
-  const s = sheet({ title: 'Добавить', content: h('div', { class: 'add-grid' }, actions.map(([ic, col, t, sub, path, wide]) =>
-    h('button', { class: 'add-card' + (wide ? ' wide' : ''), type: 'button', onclick: () => { s.close(); nav.go(path); } },
-      tile(ic, col, wide ? 48 : 42),
-      h('span', { class: 'grow' }, h('span', { class: 'row-title' }, t), h('span', { class: 'row-sub muted' }, sub)),
-      wide ? icon('next', 18) : null))) });
+  const go = (path) => { s.close(); nav.go(path); };
+  const card = (ic, col, title, sub, path, visual) => h('button', { class: 'add-card', type: 'button', onclick: () => go(path) },
+    visual || tile(ic, col, 42),
+    h('span', { class: 'add-text' }, h('span', { class: 'row-title' }, title), h('span', { class: 'row-sub muted' }, sub)));
+  const hero = h('button', { class: 'add-hero', type: 'button', onclick: () => go('/add/meal') },
+    h('span', { class: 'add-hero-text' },
+      h('span', { class: 'add-hero-title' }, 'Приём пищи'),
+      h('span', { class: 'add-hero-sub' }, 'Фото тарелки или описание текстом'),
+      h('span', { class: 'add-hero-cta' }, icon('camera', 16), 'Добавить')),
+    h('span', { class: 'add-hero-pics', 'aria-hidden': 'true' },
+      ['dinner', 'lunch', 'breakfast'].map((t, i) => h('span', { class: 'add-hero-pic p' + i }, mealPic(t, 64)))));
+  const s = sheet({ title: 'Добавить', content: h('div', { class: 'add-sheet' },
+    hero,
+    h('div', { class: 'add-label' }, 'Еда'),
+    h('div', { class: 'add-grid' },
+      card('droplet', 'teal', 'Напитки', 'Вода, чай, кофе', '/add/drink', h('span', { class: 'add-pic' }, drinkPic('cappuccino', 44))),
+      card('barcode', 'red', 'Продукт', 'Штрихкод или этикетка', '/add/label')),
+    h('div', { class: 'add-label' }, 'Здоровье'),
+    h('div', { class: 'add-grid' },
+      card('scale', 'purple', 'Вес', 'Утреннее взвешивание', '/add/weight'),
+      card('bed', 'indigo', 'Сон', 'Часы сна и оценка', '/add/sleep'),
+      card('run', 'green', 'Активность', 'Шаги и тренировка', '/add/activity'),
+      card('device-mobile', 'blue', 'Скриншот', 'Сон, шаги или весы', '/add/screen'))) });
 }
 
 function match(path) {

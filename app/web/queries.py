@@ -66,6 +66,15 @@ def day_weight(db: sqlite3.Connection, user_id: int, local_date: str) -> float |
     return float(rows[-1]["weight_kg"]) if rows else None
 
 
+def last_weight(db: sqlite3.Connection, user_id: int, local_date: str) -> dict | None:
+    """Последний замер веса не позже указанного дня: вес не нужно вносить каждый день."""
+    row = db.execute(
+        """SELECT local_date, weight_kg FROM body_measurements
+           WHERE user_id=? AND local_date<=? AND weight_kg IS NOT NULL
+           ORDER BY local_date DESC, id DESC LIMIT 1""", (user_id, local_date)).fetchone()
+    return {"kg": float(row["weight_kg"]), "date": row["local_date"]} if row else None
+
+
 def day_sleep(db: sqlite3.Connection, user_id: int, wake_date: str) -> dict | None:
     for row in repo.sleep_series(db, user_id, wake_date, wake_date):
         if row["duration_min"] is not None or row["score"] is not None:

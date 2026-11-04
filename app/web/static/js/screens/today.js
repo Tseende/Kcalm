@@ -4,7 +4,7 @@ import { macroRings } from '../charts.js';
 import { weekGoalBlock } from './weekgoal.js';
 import { mealPic } from '../pics.js';
 import {
-  h, icon, tile, toast, haptic, nav, skeletonCards, emptyState, errorState, sectionTitle, photoImg,
+  h, icon, tile, toast, haptic, nav, skeletonCards, emptyState, errorState, sectionTitle,
   todayISO, addDays, dateLabel, longDate, fmtN, fmtKcal, fmtDur, mealType, macroLine,
 } from '../ui.js';
 
@@ -131,12 +131,17 @@ export default async function render(root, ctx) {
     const mini = (ic, color, title, value, sub, path) => h('button', { class: 'mini', type: 'button', onclick: () => nav.go(path), 'aria-label': `${title}: ${value}` },
       h('span', { class: 'mini-ico', 'aria-hidden': 'true' }, icon(ic, 22)),
       h('div', { class: 'mini-val' + (value === '—' ? ' is-empty' : '') }, value), h('div', { class: 'mini-sub' + (value === '—' ? ' is-act' : '') }, sub));
+    const wl = day.weight_last || (day.weight != null ? { kg: day.weight, date: day.date } : null);
+    const ago = (iso) => {
+      const n = Math.round((new Date(day.date) - new Date(iso)) / 86400000);
+      return n <= 0 ? 'вес сегодня' : n === 1 ? 'вес вчера' : n < 5 ? `${n} дня назад` : `${n} дн. назад`;
+    };
     const sleepOk = !!day.sleep;
     const stepsOk = day.activity && day.activity.steps != null;
     const miniRow = h('div', { class: 'card mini-group' },
       mini('bed', 'var(--c-sleep)', 'Сон', sleepOk ? fmtDur(day.sleep.duration_min) : '—', sleepOk ? (day.sleep.score ? 'оценка ' + day.sleep.score : 'сон') : 'записать сон', '/add/sleep'),
       mini('walk', 'var(--c-steps)', 'Шаги', stepsOk ? fmtKcal(day.activity.steps) : '—', stepsOk ? 'шагов' : 'записать шаги', '/add/activity'),
-      mini('scale', '#af52de', 'Вес', day.weight != null ? fmtN(day.weight) + ' кг' : '—', day.weight != null ? 'вес' : 'записать вес', '/add/weight'));
+      mini('scale', '#af52de', 'Вес', wl ? fmtN(wl.kg) + ' кг' : '—', wl ? ago(wl.date) : 'записать вес', '/add/weight'));
 
     // meals
     const mealsList = day.meals.length
@@ -188,13 +193,10 @@ export default async function render(root, ctx) {
   function mealRow(m) {
     const mt = mealType(m.type);
     const fallback = () => mealPic(m.type, 56) || tile(mt.icon, mt.color, 56);
-    let thumb;
-    if (m.photos && m.photos.length) {
-      const img = photoImg(m.photos[0].url, 'thumb-photo', 'Фото приёма');
-      img.addEventListener('load', () => img.classList.add('loaded'));
-      thumb = h('div', { class: 'thumb' }, fallback(), img,
-        m.photos.length > 1 ? h('span', { class: 'thumb-count' }, icon('photo', 10), String(m.photos.length)) : null);
-    } else thumb = fallback();
+    // В списке всегда иконка типа приёма; само фото открывается на экране приёма (здесь только счётчик).
+    const n = (m.photos || []).length;
+    const thumb = h('div', { class: 'thumb' }, fallback(),
+      n ? h('span', { class: 'thumb-count' }, icon('photo', 10), String(n)) : null);
     const names = (m.items || []).map((i) => i.name).slice(0, 3).join(', ');
     return h('button', { class: 'row meal-row', type: 'button', onclick: () => nav.go('/meal/' + m.id), 'aria-label': `${mt.label} ${m.time}, ${m.kcal} ккал` },
       thumb,

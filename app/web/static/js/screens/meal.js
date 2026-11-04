@@ -96,7 +96,7 @@ export default async function render(root, ctx) {
       h('div', { class: 'item-ctl' },
         h('div', { class: 'stepper' },
           h('button', { type: 'button', class: 'step', 'aria-label': 'Уменьшить на 10 грамм', onclick: () => step(-10) }, icon('minus', 18)),
-          input, h('span', { class: 'muted' }, 'г'),
+          h('span', { class: 'g-field' }, input, h('span', { class: 'g-unit' }, 'г')),
           h('button', { type: 'button', class: 'step', 'aria-label': 'Увеличить на 10 грамм', onclick: () => step(10) }, icon('plus', 18))),
         h('div', { class: 'item-actions' },
           h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Сохранить в мои продукты', title: 'В мои продукты', onclick: saveProduct }, icon('save', 20)),
@@ -179,12 +179,12 @@ export default async function render(root, ctx) {
       meal.comment ? h('div', { class: 'card comment' }, h('div', { class: 'muted small' }, 'Комментарий'), h('div', null, meal.comment)) : null,
       sectionTitle('Позиции'),
       itemsBox,
-      h('div', { class: 'stack-sm actions' },
-        h('button', { class: 'btn btn-secondary btn-block' + (meal.favorite_id ? ' star-on' : ''), type: 'button',
-          'aria-pressed': String(!!meal.favorite_id), onclick: toggleFavorite },
-        icon('star', 18), meal.favorite_id ? 'В избранном' : 'В избранное'),
-        h('button', { class: 'btn btn-secondary btn-block', type: 'button', onclick: refine }, icon('pencil', 18), 'Уточнить'),
-        h('button', { class: 'btn btn-danger-ghost btn-block', type: 'button', onclick: removeMeal }, icon('trash', 18), 'Удалить приём'))].filter(Boolean));
+      h('div', { class: 'meal-actions' },
+        h('button', { class: 'act' + (meal.favorite_id ? ' star-on' : ''), type: 'button',
+          'aria-pressed': String(!!meal.favorite_id), 'aria-label': meal.favorite_id ? 'Убрать из избранного' : 'В избранное',
+          title: meal.favorite_id ? 'В избранном' : 'В избранное', onclick: toggleFavorite }, icon('star', 24)),
+        h('button', { class: 'act', type: 'button', 'aria-label': 'Уточнить', title: 'Уточнить', onclick: refine }, icon('pencil', 24)),
+        h('button', { class: 'act danger', type: 'button', 'aria-label': 'Удалить приём', title: 'Удалить приём', onclick: removeMeal }, icon('trash', 24)))].filter(Boolean));
   }
 
   async function toggleFavorite() {

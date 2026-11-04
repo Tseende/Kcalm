@@ -172,6 +172,7 @@ function getDay(date) {
     sleep: b.sleep_min ? { duration_min: b.sleep_min, score: b.score } : null,
     activity: b.steps ? { steps: b.steps, active_kcal: b.active_kcal } : null,
     weight: b.weight ?? null,
+    weight_last: b.weight != null ? { kg: b.weight, date } : { kg: 82.4, date: iso(addDays(date, -3)) },
   };
 }
 

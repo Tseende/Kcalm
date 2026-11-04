@@ -363,6 +363,7 @@ async def api_day(request: web.Request) -> web.Response:
         "sleep": q.day_sleep(db, uid, key),
         "activity": q.day_activity(db, uid, key),
         "weight": q.day_weight(db, uid, key),
+        "weight_last": q.last_weight(db, uid, key),
     })
 
 
