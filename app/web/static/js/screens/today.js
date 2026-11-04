@@ -51,11 +51,11 @@ export default async function render(root, ctx) {
     const remaining = day.remaining_kcal;
     const over = remaining < 0;
 
-    // hero: three concentric rings (protein / fat / carbs), calories in the middle, numbers below
+    // hero: three concentric rings (carbs / protein / fat), calories in the middle, numbers below
     const P = day.totals.protein; const F = day.totals.fat; const C = day.totals.carbs;
     const ringBox = h('div', { class: 'ring-box' },
-      macroRings({ size: 208, stroke: 15, gap: 5, animate: firstPaint, label: `Белки ${fmtN(P)} из ${fmtN(t.protein)} г, жиры ${fmtN(F)} из ${fmtN(t.fat)} г, углеводы ${fmtN(C)} из ${fmtN(t.carbs)} г`,
-        items: [{ value: P, max: t.protein, color: 'var(--c-p)' }, { value: F, max: t.fat, color: 'var(--c-f)' }, { value: C, max: t.carbs, color: 'var(--c-c)' }] }),
+      macroRings({ size: 208, stroke: 15, gap: 5, animate: firstPaint, label: `Углеводы ${fmtN(C)} из ${fmtN(t.carbs)} г, белки ${fmtN(P)} из ${fmtN(t.protein)} г, жиры ${fmtN(F)} из ${fmtN(t.fat)} г`,
+        items: [{ value: C, max: t.carbs, color: 'var(--c-c)' }, { value: P, max: t.protein, color: 'var(--c-p)' }, { value: F, max: t.fat, color: 'var(--c-f)' }] }),
       h('div', { class: 'ring-center' },
         h('div', { class: 'ring-cap' }, over ? 'сверх нормы' : 'осталось'),
         h('div', { class: 'ring-num' + (over ? ' over' : '') }, fmtKcal(Math.abs(remaining))),
@@ -75,10 +75,10 @@ export default async function render(root, ctx) {
         h('div', { class: 'macro-val' }, fmtN(val), h('small', null, ` / ${fmtN(target)}`)),
         h('div', { class: 'macro-left' }, isOver ? `+${fmtN(-left)} г сверх` : `ещё ${fmtN(left)} г`));
     };
-    const macroRow = h('div', { class: 'macros', role: 'group', 'aria-label': 'Белки, жиры, углеводы' },
+    const macroRow = h('div', { class: 'macros', role: 'group', 'aria-label': 'Углеводы, белки, жиры' },
+      macro('Углеводы', C, t.carbs, 'bar-c'),
       macro('Белки', P, t.protein, 'bar-p'),
-      macro('Жиры', F, t.fat, 'bar-f'),
-      macro('Углеводы', C, t.carbs, 'bar-c'));
+      macro('Жиры', F, t.fat, 'bar-f'));
 
     // soft one-line hint instead of a verdict (today only, once something is logged)
     const proteinLeft = Math.round(t.protein - day.totals.protein);
@@ -94,10 +94,14 @@ export default async function render(root, ctx) {
     // water
     let waterMl = day.water_ml;
     const waterNum = h('div', { class: 'water-num' });
+    const waterSub = h('div', { class: 'water-sub' });
     const waterBar = h('div', { class: 'bar bar-w', role: 'progressbar', 'aria-label': 'Вода', 'aria-valuemax': t.water_ml }, h('i'));
     const undoBtn = h('button', { class: 'water-undo', type: 'button', 'aria-label': 'Отменить последнюю добавленную воду', title: 'Отменить', onclick: undoWater }, icon('undo', 20));
     function paintWater() {
-      waterNum.replaceChildren(h('b', null, fmtKcal(waterMl)), h('span', { class: 'muted' }, ` из ${fmtKcal(t.water_ml)} мл`));
+      waterNum.replaceChildren(h('b', null, fmtKcal(waterMl)), h('span', { class: 'muted' }, ` / ${fmtKcal(t.water_ml)} мл`));
+      const left = t.water_ml - waterMl;
+      waterSub.textContent = left > 0 ? `ещё ${fmtKcal(left)} мл до нормы` : 'норма выполнена';
+      waterSub.classList.toggle('done', left <= 0);
       waterBar.firstChild.style.width = Math.min(100, (waterMl / t.water_ml) * 100) + '%';
       waterBar.setAttribute('aria-valuenow', waterMl);
       undoBtn.disabled = !waterUndo.length || curDate !== todayISO();
@@ -122,9 +126,9 @@ export default async function render(root, ctx) {
       } catch (e) { waterUndo.push(id); toast(e.message, 'error'); }
     }
     const waterCard = h('section', { class: 'card stack-sm water-card', 'aria-label': 'Вода' },
-      h('div', { class: 'row-between' }, h('div', { class: 'water-head' }, h('span', { class: 'water-ico', 'aria-hidden': 'true' }, icon('droplet', 18)), h('span', null, 'Вода')), waterNum),
+      h('div', { class: 'row-between' }, h('div', { class: 'water-head' }, h('span', { class: 'water-ico', 'aria-hidden': 'true' }, icon('droplet', 20)), h('div', null, h('div', { class: 'water-title' }, 'Вода'), waterSub)), waterNum),
       waterBar,
-      h('div', { class: 'quick' }, [200, 300, 500].map((ml) => h('button', { class: 'btn btn-tonal', type: 'button', onclick: () => addWater(ml) }, '+' + ml, h('small', null, ' мл'))), undoBtn));
+      h('div', { class: 'quick' }, [200, 300, 500].map((ml) => h('button', { class: 'btn btn-tonal', type: 'button', onclick: () => addWater(ml) }, h('b', null, '+' + ml), h('small', null, 'мл'))), undoBtn));
     paintWater();
 
     // health strip: one grouped card, line icons, empty states are actions

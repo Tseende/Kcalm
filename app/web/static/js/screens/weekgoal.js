@@ -1,6 +1,6 @@
 // Weekly mini-goal card: pick one habit for the week, progress is counted from the diary.
 import { api } from '../api.js';
-import { h, icon, glyph, toast, haptic, nav, sectionTitle, skeletonCards } from '../ui.js';
+import { h, icon, glyph, toast, haptic, nav, sectionTitle } from '../ui.js';
 
 const days = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'день' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'дня' : 'дней');
 
@@ -100,7 +100,7 @@ export function weekGoalBlock(ctx, { withRecap = false, compact = false } = {}) 
   function draw(data, fresh = false) {
     const kids = [];
     if (compact) {
-      if (data.goal || data.options.length) kids.push(strip(data));
+      if (data.goal) kids.push(strip(data)); // без выбранной цели на «Сегодня» ничего не показываем: выбор живёт в «Анализе»
     } else if (data.goal) kids.push(goalCard(data.goal));
     else if (data.options.length) kids.push(optionsCard(data.options));
     if (fresh && data.goal && data.goal.achieved && kids[0]) celebrateOnce(data.goal, data.week_start, kids[0]);
@@ -111,7 +111,7 @@ export function weekGoalBlock(ctx, { withRecap = false, compact = false } = {}) 
   if (lastData) {                                     // last known state first: no jump on reload
     recap = lastData.recap;
     draw(lastData);
-  } else if (compact) box.append(skeletonCards(1, 58)); // first open: hold the strip's place
+  }
   api.get('/week-goal').then((d) => {
     lastData = d;
     if (!ctx.alive() || !box.isConnected) return;

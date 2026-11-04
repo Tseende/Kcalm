@@ -1,6 +1,6 @@
 // Product add/edit form (also reused by the label screen)
 import { api } from '../api.js';
-import { foodPic, FOOD_ICONS, FOOD_GROUPS } from '../pics.js';
+import { foodPic, foodGroupOf, FOOD_ICONS, FOOD_GROUPS } from '../pics.js';
 import { h, icon, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, confirmDialog, errorState } from '../ui.js';
 
 const val = (v) => (v === null || v === undefined ? '' : v);
@@ -18,30 +18,49 @@ export function productForm(p = {}) {
   const un = h('input', { type: 'text', value: val(p.unit_name), maxLength: 30, placeholder: 'пачка, шт, ломтик', 'aria-label': 'Название единицы' });
   const ug = numInput({ value: val(p.unit_grams), min: 1, max: 5000, step: 1, placeholder: 'г в единице', 'aria-label': 'Грамм в единице' });
   let iconVal = FOOD_ICONS.includes(p.icon) ? p.icon : null;
-  const titleIcon = h('div', { class: 'section-title' }, h('span', null, 'Иконка'));
-  const iconGrid = h('div', { class: 'icon-groups', role: 'radiogroup', 'aria-label': 'Иконка' });
-  const iconPrev = h('button', { type: 'button', class: 'icon-prev', 'aria-expanded': 'false', onclick: () => { iconOpen = !iconOpen; paintIcon(); } });
-  let iconOpen = false;
+  const iconPrev = h('button', { type: 'button', class: 'icon-prev', 'aria-haspopup': 'dialog', onclick: openIconPage });
   function paintIcon() {
-    iconPrev.setAttribute('aria-expanded', String(iconOpen));
     iconPrev.replaceChildren(foodPic(name.value, 72, iconVal) || h('span', { class: 'pic', style: { width: '72px', height: '72px' } }, icon('package', 32)),
-      h('span', { class: 'icon-prev-lbl' }, iconOpen ? 'Свернуть' : 'Изменить иконку'));
-    iconGrid.hidden = !iconOpen;
-    titleIcon.hidden = !iconOpen;
+      h('span', { class: 'icon-prev-lbl' }, 'Изменить иконку'));
+  }
+  // Выбор иконки открывается отдельной страницей поверх формы: введённые поля не теряются.
+  function openIconPage() {
+    let openGroup = null;
+    const g0 = foodGroupOf(name.value, iconVal);
+    if (g0 !== 'Другое') openGroup = g0;
+    const body = h('div', { class: 'screen icon-page-body', role: 'radiogroup', 'aria-label': 'Иконка' });
+    const close = () => { page.remove(); document.removeEventListener('keydown', onKey); };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    const pick = (k) => { iconVal = k; haptic('light'); paintIcon(); close(); };
     const opt = (k) => h('button', { type: 'button', class: 'icon-opt' + (iconVal === k ? ' on' : ''), role: 'radio', 'aria-checked': String(iconVal === k),
-      onclick: () => { iconVal = k; iconOpen = false; haptic('light'); paintIcon(); } }, foodPic('', 40, k));
-    iconGrid.replaceChildren(
-      h('div', { class: 'icon-grid' }, h('button', { type: 'button', class: 'icon-opt auto' + (iconVal ? '' : ' on'), role: 'radio', 'aria-checked': String(!iconVal),
-        onclick: () => { iconVal = null; iconOpen = false; haptic('light'); paintIcon(); } }, 'Авто')),
-      ...FOOD_GROUPS.flatMap(([title, keys]) => [h('div', { class: 'icon-group-title' }, title), h('div', { class: 'icon-grid' }, keys.map(opt))]));
+      onclick: () => pick(k) }, foodPic('', 40, k));
+    function paint() {
+      body.replaceChildren(
+        h('div', { class: 'icon-grid' }, h('button', { type: 'button', class: 'icon-opt auto' + (iconVal ? '' : ' on'), role: 'radio', 'aria-checked': String(!iconVal),
+          onclick: () => pick(null) }, 'Авто')),
+        h('div', { class: 'icon-groups' }, FOOD_GROUPS.filter(([, keys]) => keys.length).map(([title, keys]) => {
+          const on = openGroup === title;
+          return h('div', { class: 'icon-group' + (on ? ' open' : '') },
+            h('button', { type: 'button', class: 'icon-group-head', 'aria-expanded': String(on),
+              onclick: () => { openGroup = on ? null : title; paint(); } },
+            h('span', { class: 'grow' }, title), h('span', { class: 'icon-group-n' }, String(keys.length)), icon('next', 16)),
+            on ? h('div', { class: 'icon-grid' }, keys.map(opt)) : null);
+        })));
+    }
+    const page = h('div', { class: 'icon-page', role: 'dialog', 'aria-label': 'Выбор иконки' },
+      h('header', { class: 'page-head' },
+        h('div', { class: 'ph-side' }, h('button', { class: 'back-btn', type: 'button', 'aria-label': 'Назад', onclick: close }, icon('back', 24), h('span', null, 'Назад'))),
+        h('h1', null, 'Иконка'), h('div', { class: 'ph-side end' })),
+      body);
+    paint();
+    document.addEventListener('keydown', onKey);
+    document.body.append(page);
   }
   name.addEventListener('input', () => { if (!iconVal) paintIcon(); });
   paintIcon();
   const el = h('div', { class: 'stack' },
     iconPrev,
     group([frow('Название', name), frow('Бренд', brand), frow('Штрихкод', barcode)]),
-    titleIcon,
-    iconGrid,
     h('div', { class: 'section-title' }, h('span', null, 'На 100 г')),
     group([frow('Калории, ккал', kcal), frow('Белки, г', pr), frow('Жиры, г', fat), frow('Углеводы, г', carb)]),
     h('div', { class: 'section-title' }, h('span', null, 'Порция')),

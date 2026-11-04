@@ -598,7 +598,13 @@ html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
 .icon-opt .pic { box-shadow: none; background: transparent; }
 
 .icon-groups { display: flex; flex-direction: column; gap: 8px; }
-.icon-group-title { margin: 10px 4px 0; font-size: 13px; color: var(--c-hint); }
+.icon-group { background: var(--c-card); border-radius: var(--r-card); overflow: hidden; }
+.icon-group-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 13px 14px; background: none; border: 0; font: inherit; font-size: 16px; color: var(--c-text); text-align: left; }
+.icon-group-head svg { color: var(--c-hint); transition: transform .2s; }
+.icon-group.open .icon-group-head svg { transform: rotate(90deg); }
+.icon-group-n { font-size: 14px; color: var(--c-hint); }
+.icon-group .icon-grid { padding: 0 10px 12px; }
+.icon-group .icon-opt { background: var(--c-bg, transparent); }
 
 .prod-list { --sep-l: 76px; }
 .prod-row { padding-top: 10px; padding-bottom: 10px; gap: 14px; }
@@ -947,3 +953,24 @@ input.time-in[type="time"] { width: 104px; flex: none; min-height: 36px; padding
 .avatar { overflow: hidden; }
 .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .target-note { margin: 8px 16px 0; line-height: 1.4; }
+
+/* страница выбора иконки */
+.icon-page { position: fixed; inset: 0; z-index: 900; background: var(--c-bg); overflow-y: auto; padding-top: var(--safe-t); animation: push .24s cubic-bezier(.2, .8, .2, 1); }
+.icon-page-body { padding-bottom: 32px; }
+.icon-page .page-head { margin: 0; background: var(--c-bg); }
+.today .mini { align-items: center; text-align: center; }
+
+/* вода: заголовок с подсказкой, цельная шкала, плитки-кнопки */
+.today .water-head { align-items: center; gap: 10px; }
+.today .water-ico { width: 36px; height: 36px; border-radius: 50%; align-items: center; justify-content: center; background: color-mix(in srgb, var(--c-water) 16%, transparent); }
+.today .water-title { font-size: 16px; font-weight: 600; line-height: 1.2; }
+.today .water-sub { font-size: 12px; color: var(--c-hint); line-height: 1.3; }
+.today .water-sub.done { color: var(--c-water); }
+.today .water-card .water-num { white-space: nowrap; }
+.today .water-card .bar-w { height: 10px; -webkit-mask: none; mask: none; border-radius: 99px; background: color-mix(in srgb, var(--c-text) 9%, transparent); }
+.today .water-card .bar-w i { border-radius: 99px; background: linear-gradient(90deg, color-mix(in srgb, var(--c-water) 70%, #fff), var(--c-water)); transition: width .35s cubic-bezier(.2,.8,.2,1); }
+.today .water-card .quick .btn-tonal { flex-direction: row; gap: 4px; min-height: 36px; border-radius: 99px; background: color-mix(in srgb, var(--c-text) 7%, transparent); }
+.today .water-card .quick .btn-tonal b { font-size: 15px; font-weight: 600; }
+.today .water-card .quick .btn-tonal small { font-size: 12px; color: var(--c-hint); }
+.today .water-card .quick .btn-tonal:active { background: color-mix(in srgb, var(--c-water) 20%, transparent); }
+.today .water-undo { width: 36px; height: 36px; border-radius: 50%; }
