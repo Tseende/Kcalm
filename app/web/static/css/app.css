@@ -944,3 +944,6 @@ input.time-in[type="time"] { width: 104px; flex: none; min-height: 36px; padding
 .an-chip.bad { background: color-mix(in srgb, var(--c-red) 14%, transparent); } .an-chip.bad::before { background: var(--c-red); }
 .add-hero-pic .pic { background: none !important; border-radius: 0 !important; box-shadow: none !important; overflow: visible !important; }
 .add-hero-text { max-width: 46%; }
+.avatar { overflow: hidden; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.target-note { margin: 8px 16px 0; line-height: 1.4; }

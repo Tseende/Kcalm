@@ -71,7 +71,6 @@ export default async function render(root, ctx) {
   }
 
   // --- данные профиля
-  const sex = segmented([['male', 'Мужской'], ['female', 'Женский']], cur.sex, (v) => { cur.sex = v; changed(); }, 'Пол');
   const num = (key, props) => {
     const el = numInput({ value: cur[key] ?? '', ...props });
     el.addEventListener('input', () => { cur[key] = numVal(el); if (key === 'birth_year') ageNote(); changed(); });
@@ -122,9 +121,9 @@ export default async function render(root, ctx) {
 
   box.replaceChildren(
     targetCard,
+    h('div', { class: 'muted small target-note' }, 'Расход считается по формуле Института медицины США (IOM, 2005) с учётом пола, возраста, роста, веса и активности. Из него вычитается дефицит по выбранному темпу, у цели он плавно убывает. Ниже безопасного минимума норма не опускается.'),
     h('div', { class: 'section-label' }, 'О вас'),
-    h('div', { class: 'stack-sm' }, sex),
-    group([frow('Год рождения', year), frow('Рост, см', height), h('div', { class: 'frow static' }, h('span', { class: 'frow-label' }, 'Вес сейчас'), h('b', null, cur.weight_kg ? `${fmtN(cur.weight_kg)} кг` : '—')), frow('Цель, кг', goal)]),
+    group([h('div', { class: 'frow static' }, h('span', { class: 'frow-label' }, 'Пол'), h('b', null, cur.sex === 'female' ? 'Женский' : 'Мужской')), frow('Год рождения', year), frow('Рост, см', height), h('div', { class: 'frow static' }, h('span', { class: 'frow-label' }, 'Вес сейчас'), h('b', null, cur.weight_kg ? `${fmtN(cur.weight_kg)} кг` : '—')), frow('Цель, кг', goal)]),
     ageHint,
     h('div', { class: 'section-label' }, 'Активность'), act, actHint,
     h('div', { class: 'section-label' }, 'Темп снижения, кг в неделю'), rate, rateHint,

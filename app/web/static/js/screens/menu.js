@@ -1,6 +1,19 @@
 // Screen 5: Menu
-import { api } from '../api.js';
+import { api, tg } from '../api.js';
 import { h, icon, tile, nav, pageHead, fmtN } from '../ui.js';
+
+// Фото из Telegram (если пользователь его разрешил), иначе первая буква имени
+function avatarEl(name) {
+  const letter = name.slice(0, 1).toUpperCase();
+  const url = tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.photo_url;
+  const box = h('div', { class: 'avatar', 'aria-hidden': 'true' }, letter);
+  if (url) {
+    const img = h('img', { src: url, alt: '', referrerpolicy: 'no-referrer' });
+    img.onload = () => box.replaceChildren(img);
+    img.onerror = () => { /* оставляем букву */ };
+  }
+  return box;
+}
 
 export default async function render(root, ctx) {
   const view = h('div', { class: 'screen' });
@@ -18,7 +31,7 @@ export default async function render(root, ctx) {
   const w = me && me.weight;
   view.append(...[
     pageHead('Меню', { back: false }),
-    name ? h('button', { class: 'card profile row-btn', type: 'button', onclick: () => nav.go('/menu/profile') }, h('div', { class: 'avatar', 'aria-hidden': 'true' }, name.slice(0, 1).toUpperCase()),
+    name ? h('button', { class: 'card profile row-btn', type: 'button', onclick: () => nav.go('/menu/profile') }, avatarEl(name),
       h('div', { class: 'grow' }, h('div', { class: 'row-title' }, name), h('div', { class: 'muted small' }, w && w.latest ? `Вес ${fmtN(w.latest)} кг` + (me.user.goal_weight_kg ? `, цель ${fmtN(me.user.goal_weight_kg)} кг` : '') : 'Профиль и цели')), icon('next', 18)) : null,
     h('div', { class: 'list tiles' },
       item('target', 'red', 'Профиль и цели', 'Возраст, рост, вес, норма калорий', '/menu/profile'),
