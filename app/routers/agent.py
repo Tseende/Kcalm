@@ -15,6 +15,7 @@ from app.domain import intents
 from app.routers import commands, dishes, menu, products, support, tracking
 from app.services import assistant
 from app.services import food as foodsvc
+from app.storage import repo
 from app.textutil import esc
 
 log = logging.getLogger(__name__)
@@ -53,7 +54,7 @@ async def run_intent(msg: Message, db: sqlite3.Connection, intent: intents.Inten
     elif name == "help":
         await msg.answer(esc(assistant.HELP_TEXT))
     elif name == "greeting":
-        await msg.answer(esc(assistant.GREETING))
+        await msg.answer(esc(assistant.greeting(repo.get_user_by_tg(db, msg.from_user.id))))
     elif name == "thanks":
         await msg.answer(assistant.THANKS)
 

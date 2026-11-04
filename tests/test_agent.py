@@ -238,3 +238,30 @@ async def test_rate_limit_counts_each_message_once(db, monkeypatch):
     for _ in range(5):
         await send(dp, bot, "гречка 150 г")
     assert len(middleware._hits[1]) - before == 5
+
+
+def test_greeting_matches_sex_without_brackets(db):
+    uid = repo.create_user(db, 1, tz="Europe/Minsk")
+    repo.update_user(db, uid, sex="female", onboarded=1)
+    g = assistant.greeting(repo.get_user_by_tg(db, 1))
+    assert "съела" in g and "(а)" not in g
+    repo.update_user(db, uid, sex="male")
+    assert "съел," in assistant.greeting(repo.get_user_by_tg(db, 1))
+
+
+@pytest.mark.asyncio
+async def test_bot_followup_sees_previous_turn_and_retries_rejected_reply(db, monkeypatch):
+    uid = repo.create_user(db, 1, tz="Europe/Minsk")
+    repo.update_user(db, uid, sex="male", onboarded=1)
+    user = repo.get_user_by_tg(db, 1)
+    assistant._RECENT.clear()
+    seen = []
+    replies = iter(["В авокадо 9999 ккал", "Всегда на связи.", "Потому что связь была."])
+
+    async def fake(purpose, messages, **k):
+        seen.append(messages)
+        return {"reply": next(replies)}, "m"
+    monkeypatch.setattr(assistant.llm, "chat_json", fake)
+    assert "Всегда на связи" in await assistant.answer(db, user, "ты не спишь?")   # 1-й ответ отклонён, 2-й принят
+    await assistant.answer(db, user, "почему")
+    assert any("Всегда на связи" in str(m["content"]) for m in seen[-1])          # предыдущий ход в истории

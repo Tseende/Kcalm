@@ -9,8 +9,10 @@ import json
 import logging
 import re
 import sqlite3
+import time
 from datetime import date, timedelta
 
+from app.config import get_config
 from app.domain import craving as craving_dom
 from app.domain import safety as safety_dom
 from app.domain.matching import normalize
@@ -40,7 +42,13 @@ HELP_TEXT = (
     "Итоги дня и недели, графики, посуда, свои продукты и настройки в приложении: /app."
 )
 
-GREETING = "Привет! Я на связи. Напиши, что съел(а), или спроси что-нибудь. Что я умею: «что ты умеешь»."
+GREETING = "Привет! Я на связи. Напиши, что съел, или спроси что-нибудь. Что я умею: «что ты умеешь»."
+
+
+def greeting(user) -> str:
+    """Приветствие в нужном роде: пол известен из профиля, «съел(а)» не нужно."""
+    verb = "съела" if user["sex"] == "female" else "съел"
+    return GREETING.replace("съел,", verb + ",")
 THANKS = "Всегда пожалуйста 💛"
 
 
@@ -143,6 +151,8 @@ def snapshot(db: sqlite3.Connection, user, today: date | None = None) -> dict:
     }
 
 
+FALLBACK_SOFT = ("Сейчас не получается ответить на это точно, спроси чуть иначе: «что я сегодня ел?», "
+                 "«как вес?», «как прошла неделя?». Или просто записывай еду.")
 FALLBACK = ("Сейчас не получается ответить на это умно: нет связи с моделью. Базовое работает: "
             "«что я сегодня ел?», «как вес?», «как прошла неделя?». Или просто записывай еду.")
 
@@ -165,6 +175,26 @@ def _history_messages(history: list[dict] | None) -> list[dict]:
 
 _NUM_RE = re.compile(r"\d+(?:[.,]\d+)?")
 
+# Бот не передаёт историю чата, поэтому «почему» без контекста не понять. Держим последние реплики
+# в памяти процесса (на перезапуске теряются, это только контекст диалога).
+_RECENT: dict[int, list[tuple[float, dict]]] = {}
+RECENT_TTL_S = 30 * 60
+RECENT_KEEP = 6
+
+
+def _recent(user_id: int) -> list[dict]:
+    now = time.monotonic()
+    items = [(t, m) for t, m in _RECENT.get(user_id, []) if now - t < RECENT_TTL_S]
+    _RECENT[user_id] = items
+    return [m for _, m in items]
+
+
+def _remember(user_id: int, question: str, reply: str) -> None:
+    items = _RECENT.setdefault(user_id, [])
+    now = time.monotonic()
+    items += [(now, {"role": "user", "text": question}), (now, {"role": "assistant", "text": reply})]
+    del items[:-RECENT_KEEP]
+
 
 async def answer(db: sqlite3.Connection, user, question: str, focus: str | None = None,
                  history: list[dict] | None = None) -> str:
@@ -179,29 +209,44 @@ async def answer(db: sqlite3.Connection, user, question: str, focus: str | None 
         return esc(craving_dom.PURGING_TEXT)
 
     ctx = snapshot(db, user)
+    remembered = history is None
+    if remembered:
+        history = _recent(user["id"])
+    # числа из фокуса (приём пищи) и из уже показанных реплик тоже законны в ответе
+    known = {**ctx, "extra": [float(n.replace(",", ".")) for n in _NUM_RE.findall(
+        " ".join([focus or ""] + [str(m.get("text") or "") for m in history or []]))]}
     # статичный префикс (system) первым, затем история, свежие данные и вопрос в конце: так
     # кэш промпта у провайдера продолжает работать
-    messages = [
+    base = [
         {"role": "system", "content": foodsvc.load_prompt("assistant")},
         *_history_messages(history),
         {"role": "user", "content": json.dumps(
             {"data": ctx, **({"focus": focus} if focus else {}), "question": question},
             ensure_ascii=False)},
     ]
-    try:
-        data, _ = await llm.chat_json("assistant", messages, temperature=0.4,
-                                      user_id=user["id"], db=db)
-    except llm.LLMError:
-        log.warning("assistant: LLM недоступен", exc_info=True)
-        return esc(FALLBACK)
-    reply = str(data.get("reply") or "").strip()
-    # числа из фокуса (приём пищи) и из уже показанных реплик тоже законны в ответе
-    known = {**ctx, "extra": [float(n.replace(",", ".")) for n in _NUM_RE.findall(
-        " ".join([focus or ""] + [str(m.get("text") or "") for m in history or []]))]}
-    if not reply or len(reply) > 1500 or craving_dom.violates_policy(reply) \
-            or check_numbers(reply, known):
-        log.warning("assistant: ответ модели отклонён проверкой")
-        return esc(FALLBACK)
+    reply = ""
+    for attempt in (1, 2):
+        messages = base if attempt == 1 else base + [
+            {"role": "assistant", "content": json.dumps({"reply": reply}, ensure_ascii=False)},
+            {"role": "user", "content": "Ответ не прошёл проверку: убери все числа, которых нет в data, "
+                                        "и всё, что похоже на оценку тела или компенсацию. Ответь короче."}]
+        try:
+            data, _ = await llm.chat_json("assistant", messages, temperature=0.4,
+                                          model=get_config().model_dialog or None,
+                                          user_id=user["id"], db=db)
+        except llm.LLMError:
+            log.warning("assistant: LLM недоступен", exc_info=True)
+            return esc(FALLBACK)
+        reply = str(data.get("reply") or "").strip()
+        if reply and len(reply) <= 1500 and not craving_dom.violates_policy(reply) \
+                and not check_numbers(reply, known):
+            break
+        log.warning("assistant: ответ модели отклонён проверкой (попытка %s)", attempt)
+        reply = reply or "…"
+    else:
+        return esc(FALLBACK_SOFT)
     if any(f in ctx["flags"] for f in ("risk_language", "very_low_intake", "repeated_overate")):
         reply += "\n\n" + safety_dom.CARE_PROFESSIONAL
+    if remembered:
+        _remember(user["id"], question, reply)
     return esc(reply)

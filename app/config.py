@@ -28,7 +28,7 @@ class Config(BaseSettings):
     model_text_provider: str = "DeepSeek"   # закрепить провайдера (без тихого перехода к другому); пусто — не закреплять
     model_text_reasoning: bool = False   # «думающий» режим текстовой модели: медленнее и дороже
     rich_messages: bool = True        # таблицы и абзацы через sendRichMessage (Bot API 10.1+); false = обычный текст
-    model_dialog: str = ""            # разговор о тяге и срывах; пусто — та же, что model_text
+    model_dialog: str = "openai/gpt-6-luna"   # чат: разговор о тяге и срывах и ответы помощника; пусто — model_text
     model_asr: str = "google/gemini-2.5-flash"   # расшифровка голоса: нужна модель с аудио
     usda_api_key: str = "DEMO_KEY"
     picooc_user: str = ""
