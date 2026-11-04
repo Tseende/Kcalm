@@ -20,7 +20,10 @@ const routes = [
   R('/menu/product/(new|\\d+)', () => import('./screens/product.js'), { keys: ['id'], parent: '/menu/products' }),
   R('/menu/dishes', () => import('./screens/dishes.js'), { parent: '/menu' }),
   R('/menu/dish/(new|\\d+)', () => import('./screens/dish.js'), { keys: ['id'], parent: '/menu/dishes' }),
-  R('/menu/(goals|export|about)', () => import('./screens/info.js'), { keys: ['page'], parent: '/menu' }),
+  R('/menu/profile', () => import('./screens/profile.js'), { parent: '/menu' }),
+  R('/menu/reminders', () => import('./screens/reminders.js'), { parent: '/menu' }),
+  R('/menu/favorites', () => import('./screens/favorites.js'), { parent: '/menu' }),
+  R('/menu/(goals|export|about|appearance|help)', () => import('./screens/info.js'), { keys: ['page'], parent: '/menu' }),
 ];
 
 const TABS = [
@@ -154,15 +157,22 @@ async function boot() {
   syncFs();
   try { if (tg && tg.onEvent) tg.onEvent('fullscreenChanged', syncFs); } catch (e) { /* старый клиент */ }
   const applyScheme = () => {
-    if (!(inTelegram && tg && tg.colorScheme)) return;
-    const dark = tg.colorScheme === 'dark';
+    let pref = null;
+    try { pref = localStorage.getItem('theme'); } catch (e) { /* без хранилища */ }
+    const forced = pref === 'dark' || pref === 'light';
+    if (!forced && !(inTelegram && tg && tg.colorScheme)) {
+      document.documentElement.classList.remove('scheme-dark', 'scheme-light');
+      return;
+    }
+    const dark = forced ? pref === 'dark' : tg.colorScheme === 'dark';
     document.documentElement.classList.toggle('scheme-dark', dark);
     document.documentElement.classList.toggle('scheme-light', !dark);
     // Шапка и фон Telegram под фон приложения (системный серый iOS), а не под тему клиента.
     const bg = dark ? '#000000' : '#f2f2f7';
-    try { if (tg.isVersionAtLeast && tg.isVersionAtLeast('6.1')) { tg.setHeaderColor(bg); tg.setBackgroundColor(bg); } } catch (e) { /* old client */ }
+    try { if (tg && tg.isVersionAtLeast && tg.isVersionAtLeast('6.1')) { tg.setHeaderColor(bg); tg.setBackgroundColor(bg); } } catch (e) { /* old client */ }
   };
   applyScheme();
+  window.addEventListener('app:theme', applyScheme);
   try { if (tg && tg.onEvent) tg.onEvent('themeChanged', applyScheme); } catch (e) { /* old client */ }
   const onScroll = () => document.body.classList.toggle('scrolled', window.scrollY > 4);
   window.addEventListener('scroll', onScroll, { passive: true });

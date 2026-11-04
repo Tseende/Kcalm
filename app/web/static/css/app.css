@@ -892,3 +892,17 @@ html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .prod-row .macs { flex-wrap: nowrap; overflow: hidden; }
 .prod-kcal span { white-space: nowrap; font-size: 12px; color: var(--c-hint); }
+
+/* ---------- профиль, напоминания, избранное ---------- */
+.card.profile.row-btn { width: 100%; text-align: left; display: flex; align-items: center; gap: 14px; }
+.target-card { display: flex; flex-direction: column; gap: 10px; }
+.target-kcal { font-size: 15px; color: var(--c-hint); } .target-kcal b { font-size: 34px; font-weight: 700; color: var(--c-text, inherit); font-variant-numeric: tabular-nums; }
+.target-macs { margin-top: 0; font-size: 13px; gap: 6px 14px; }
+.frow.static { display: flex; align-items: center; justify-content: space-between; }
+input.time-in[type="time"] { width: 104px; flex: none; min-height: 36px; padding: 4px 8px; border-radius: 8px; background: color-mix(in srgb, var(--c-hint) 14%, transparent); font-size: 16px; font-variant-numeric: tabular-nums; }
+.time-in:disabled { opacity: .4; }
+.rem-list .row { gap: 12px; }
+.row-sub.wrap { white-space: normal; }
+.fav-text { min-width: 0; } .fav-text .row-title, .fav-text .row-sub { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rem-list .grow { min-width: 0; } .rem-list .row-title, .rem-list .row-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rem-list .time-in { padding-right: 4px; }

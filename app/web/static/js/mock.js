@@ -86,6 +86,16 @@ function recalcMeal(m) {
 }
 
 const TARGETS = { kcal: 1650, protein: 110, fat: 55, carbs: 170, water_ml: 2100 };
+const prof = { sex: 'male', birth_year: 1990, height_cm: 178, goal_weight_kg: 76, activity: 2, rate_kg_week: 0.5, tz: 'Europe/Moscow', eating_cutoff: '21:00' };
+const mockProfile = () => ({ ...prof, age: new Date().getFullYear() - prof.birth_year, weight_kg: 82.4 });
+const rems = [
+  { kind: 'morning', title: 'Утро', sub: 'План на день', time: '08:30', enabled: true },
+  { kind: 'midday', title: 'День', sub: 'Как идёт питание', time: '13:30', enabled: true },
+  { kind: 'evening', title: 'Вечер', sub: 'Итоги дня', time: '21:30', enabled: true },
+  { kind: 'weekly', title: 'Итоги недели', sub: 'По воскресеньям', time: '19:00', enabled: true },
+  { kind: 'water', title: 'Вода', sub: 'Напомнить выпить воды', time: '16:00', enabled: false },
+  { kind: 'weigh', title: 'Взвешивание', sub: 'Записать вес', time: '07:30', enabled: true },
+];
 const meals = new Map();
 const water = new Map(); // date -> [{id, ml}]
 const body = new Map(); // date -> {weight, sleep_min, score, steps, active_kcal}
@@ -287,6 +297,26 @@ const routes = [
     user: { tg_id: 1, first_name: 'Жан', sex: 'm', height_cm: 178, goal_weight_kg: 76, tz: 'Europe/Moscow', eating_cutoff: '21:00' },
     targets: TARGETS, weight: { latest: 82.4, trend: body.get(todayISO()).trend, start: 88.0 },
   })],
+  ['GET', /^\/profile$/, () => ({ profile: mockProfile(), targets: TARGETS, first_name: 'Жан' })],
+  ['PATCH', /^\/profile$/, (m, q, b) => {
+    const old = TARGETS.kcal;
+    const { recalc, ...rest } = b || {};
+    Object.assign(prof, rest);
+    const affects = recalc || ['sex', 'birth_year', 'height_cm', 'goal_weight_kg', 'activity', 'rate_kg_week'].some((k) => k in rest);
+    if (affects) {
+      const age = new Date().getFullYear() - (prof.birth_year || 1990);
+      const bmr = 10 * 82.4 + 6.25 * prof.height_cm - 5 * age + (prof.sex === 'male' ? 5 : -161);
+      TARGETS.kcal = Math.round((bmr * [1.2, 1.375, 1.55, 1.725][prof.activity - 1] - prof.rate_kg_week * 1100) / 10) * 10;
+    }
+    return { profile: mockProfile(), targets: TARGETS, result: { changed: true, target: affects ? { old, new: TARGETS.kcal, notes: [] } : null } };
+  }],
+  ['PUT', /^\/targets$/, (m, q, b) => {
+    Object.assign(TARGETS, { kcal: b.kcal, protein: b.protein, fat: b.fat, carbs: b.carbs });
+    return { profile: mockProfile(), targets: TARGETS, result: { kcal: b.kcal, raised: false } };
+  }],
+  ['GET', /^\/reminders$/, () => ({ reminders: rems })],
+  ['PUT', /^\/reminders\/(\w+)$/, (m, q, b) => { Object.assign(rems.find((r) => r.kind === m[1]), b); return { reminders: rems }; }],
+  ['DELETE', /^\/me$/, (m, q, b) => { if (!b || b.confirm !== 'УДАЛИТЬ') throw Object.assign(new Error('Для удаления нужно подтверждение.'), { status: 400 }); return { deleted: true }; }],
   ['GET', /^\/day$/, (m, q) => getDay(q.date || todayISO())],
   ['GET', /^\/stats$/, (m, q) => getStats(q.range || 'week')],
   ['GET', /^\/meals\/(\d+)$/, (m) => { const x = meals.get(+m[1]); if (!x) throw notFound(); x.favorite_id = mockFavs[x.id] || null; return x; }],

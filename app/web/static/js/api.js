@@ -106,7 +106,7 @@ export const api = {
   post: (path, body, opts) => request('POST', path, { body: body === undefined ? {} : body, ...opts }),
   put: (path, body) => request('PUT', path, { body }),
   patch: (path, body) => request('PATCH', path, { body }),
-  del: (path) => request('DELETE', path),
+  del: (path, body) => request('DELETE', path, { body }),
   _me: null,
   async me(force) {
     if (!api._me || force) api._me = await api.get('/me');

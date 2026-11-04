@@ -18,13 +18,19 @@ export default async function render(root, ctx) {
   const w = me && me.weight;
   view.append(...[
     pageHead('Меню', { back: false }),
-    name ? h('div', { class: 'card profile' }, h('div', { class: 'avatar', 'aria-hidden': 'true' }, name.slice(0, 1).toUpperCase()),
-      h('div', null, h('div', { class: 'row-title' }, name), h('div', { class: 'muted small' }, w && w.latest ? `Вес ${fmtN(w.latest)} кг` + (me.user.goal_weight_kg ? `, цель ${fmtN(me.user.goal_weight_kg)} кг` : '') : 'Дневник питания'))) : null,
+    name ? h('button', { class: 'card profile row-btn', type: 'button', onclick: () => nav.go('/menu/profile') }, h('div', { class: 'avatar', 'aria-hidden': 'true' }, name.slice(0, 1).toUpperCase()),
+      h('div', { class: 'grow' }, h('div', { class: 'row-title' }, name), h('div', { class: 'muted small' }, w && w.latest ? `Вес ${fmtN(w.latest)} кг` + (me.user.goal_weight_kg ? `, цель ${fmtN(me.user.goal_weight_kg)} кг` : '') : 'Профиль и цели')), icon('next', 18)) : null,
     h('div', { class: 'list tiles' },
-      item('package', 'orange', 'Мои продукты', 'Свои продукты с КБЖУ', '/menu/products'),
-      item('soup', 'teal', 'Моя посуда', 'Помогает оценивать порции', '/menu/dishes')),
+      item('target', 'red', 'Профиль и цели', 'Возраст, рост, вес, норма калорий', '/menu/profile'),
+      item('bell', 'purple', 'Напоминания', 'Вода, вес, итоги дня', '/menu/reminders')),
     h('div', { class: 'list tiles' },
-      item('target', 'red', 'Цели', 'Норма калорий, БЖУ и воды', '/menu/goals'),
-      item('file-export', 'green', 'Экспорт CSV', 'Приёмы, вес, вода, сон, активность', '/menu/export')),
-    h('div', { class: 'list tiles' }, item('info-circle', 'blue', 'О приложении', null, '/menu/about'))].filter(Boolean));
+      item('package', 'orange', 'Мои продукты', 'Свои продукты и напитки', '/menu/products'),
+      item('soup', 'teal', 'Моя посуда', 'Помогает оценивать порции', '/menu/dishes'),
+      item('star', 'yellow', 'Избранное', 'Приёмы в одно касание', '/menu/favorites')),
+    h('div', { class: 'list tiles' },
+      item('moon', 'indigo', 'Внешний вид', 'Тема: светлая или тёмная', '/menu/appearance'),
+      item('file-export', 'green', 'Данные', 'Экспорт CSV и удаление', '/menu/export')),
+    h('div', { class: 'list tiles' },
+      item('help-circle', 'blue', 'Помощь', 'Как пользоваться', '/menu/help'),
+      item('info-circle', 'gray', 'О приложении', null, '/menu/about'))].filter(Boolean));
 }

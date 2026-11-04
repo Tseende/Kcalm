@@ -30,11 +30,12 @@ from app.llm import client as llm
 from app.services import dishes as dishsvc
 from app.services import food as foodsvc
 from app.services import meals as meals_svc
+from app.services import profile as profilesvc
 from app.services import screens as screens_svc
 from app.services import water as watersvc
 from app.services import weekgoal as weekgoalsvc
 from app.storage import photos, repo
-from app.timeutils import validate_hhmm
+from app.timeutils import validate_hhmm, validate_timezone
 from app.web import analysis
 from app.web import period as period_analysis
 from app.web import queries as q
@@ -346,6 +347,109 @@ async def api_me(request: web.Request) -> web.Response:
         "targets": targets_json(db, user),
         "weight": q.weight_summary(db, user, today),
     })
+
+
+def _profile_response(db, user, extra: dict | None = None) -> web.Response:
+    fresh = repo.get_user_by_tg(db, user["tg_id"])
+    today = now_local(fresh).date()
+    return ok({"profile": profilesvc.profile_json(db, fresh, today),
+               "targets": targets_json(db, fresh), **(extra or {})})
+
+
+@routes.get("/api/profile")
+async def api_profile_get(request: web.Request) -> web.Response:
+    db, user, _ = ctx(request)
+    return _profile_response(db, user, {"first_name": request["first_name"]})
+
+
+@routes.patch("/api/profile")
+async def api_profile_patch(request: web.Request) -> web.Response:
+    """Профиль целиком или частично. Рост, возраст, пол, цель, активность и темп пересчитывают норму."""
+    db, user, _ = ctx(request)
+    data = await read_json(request)
+    clean: dict = {}
+    if data.get("sex") is not None:
+        if data["sex"] not in ("male", "female"):
+            raise bad("Пол: male или female.", "bad_field")
+        clean["sex"] = data["sex"]
+    year_now = now_local(user).year
+    by = number(data, "birth_year", year_now - 100, year_now - 10)
+    if by is not None:
+        clean["birth_year"] = int(by)
+    for key, lo, hi in (("height_cm", 120, 230), ("goal_weight_kg", 30, 250), ("rate_kg_week", 0, 0.7)):
+        v = number(data, key, lo, hi)
+        if v is not None:
+            clean[key] = v
+    act = number(data, "activity", 1, 4)
+    if act is not None:
+        clean["activity"] = int(act)
+    if data.get("eating_cutoff") is not None:
+        try:
+            clean["eating_cutoff"] = validate_hhmm(str(data["eating_cutoff"]))
+        except ValueError as exc:
+            raise bad(str(exc), "bad_time") from None
+    if data.get("tz") is not None:
+        try:
+            clean["tz"] = validate_timezone(str(data["tz"]))
+        except ValueError as exc:
+            raise bad(str(exc), "bad_tz") from None
+    if data.get("recalc") is True:
+        clean["recalc"] = True
+    try:
+        result = profilesvc.update_profile(db, user, clean, now_local(user).date())
+    except profilesvc.ProfileError as exc:
+        raise bad(str(exc), "bad_profile") from None
+    return _profile_response(db, user, {"result": result})
+
+
+@routes.put("/api/targets")
+async def api_targets_put(request: web.Request) -> web.Response:
+    """Норма вручную: калории и БЖУ. Ниже безопасного минимума калории поднимаются."""
+    db, user, _ = ctx(request)
+    data = await read_json(request)
+    kcal = number(data, "kcal", 800, 6000, required=True)
+    protein = number(data, "protein", 0, 500, required=True)
+    fat = number(data, "fat", 0, 500, required=True)
+    carbs = number(data, "carbs", 0, 900, required=True)
+    result = profilesvc.set_manual_target(db, user, now_local(user).date(), round(kcal), protein, fat, carbs)
+    return _profile_response(db, user, {"result": result})
+
+
+@routes.get("/api/reminders")
+async def api_reminders_get(request: web.Request) -> web.Response:
+    db, user, _ = ctx(request)
+    return ok({"reminders": profilesvc.reminders_json(db, user)})
+
+
+@routes.put("/api/reminders/{kind}")
+async def api_reminder_put(request: web.Request) -> web.Response:
+    db, user, _ = ctx(request)
+    data = await read_json(request)
+    time = None
+    if data.get("time") is not None:
+        try:
+            time = validate_hhmm(str(data["time"]))
+        except ValueError as exc:
+            raise bad(str(exc), "bad_time") from None
+    enabled = data.get("enabled")
+    if enabled is not None and not isinstance(enabled, bool):
+        raise bad("enabled: true или false.", "bad_field")
+    try:
+        profilesvc.set_reminder(db, user, request.match_info["kind"], time, enabled)
+    except profilesvc.ProfileError as exc:
+        raise ApiError(404, "not_found", str(exc)) from None
+    return ok({"reminders": profilesvc.reminders_json(db, user)})
+
+
+@routes.delete("/api/me")
+async def api_me_delete(request: web.Request) -> web.Response:
+    """Удалить аккаунт и все данные. Нужно подтверждение: {"confirm": "УДАЛИТЬ"}."""
+    db, user, _ = ctx(request)
+    data = await read_json(request)
+    if str(data.get("confirm") or "").strip().upper() != "УДАЛИТЬ":
+        raise bad("Для удаления нужно подтверждение.", "confirm_required")
+    profilesvc.delete_all_data(db, user)
+    return ok({"deleted": True})
 
 
 @routes.get("/api/day")
