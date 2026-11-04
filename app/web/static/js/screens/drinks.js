@@ -24,10 +24,15 @@ export default async function render(root, ctx) {
   if (!ctx.alive()) return;
 
   let cur = WATER;
+  // Переход из «Мои продукты → Напитки»: сразу выбран нужный напиток.
+  const want = sessionStorage.getItem('drink-pick');
+  sessionStorage.removeItem('drink-pick');
+  const wanted = want && catalog.find((d) => d.id === want);
+  if (wanted) cur = wanted;
   let sugar = 0;
   let busy = false;
 
-  const ml = numInput({ min: 30, max: 1500, step: 10, value: 250, inputmode: 'numeric', 'aria-label': 'Миллилитры' });
+  const ml = numInput({ min: 30, max: 1500, step: 10, value: cur.sizes[Math.min(1, cur.sizes.length - 1)], inputmode: 'numeric', 'aria-label': 'Миллилитры' });
   const sizes = h('div', { class: 'chips wrap' });
   const sugarVal = h('b', { class: 'step-val' }, '0');
   const sugarBox = h('div', { class: 'drink-sugar card' },

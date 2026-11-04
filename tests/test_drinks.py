@@ -86,3 +86,11 @@ async def test_zero_kcal_drinks_are_not_meals_for_day_analysis(client, db):
     assert facts["meals"] == 0 and facts["first_meal"] is None
     await client.post("/api/drinks", json={"drink": "cola", "ml": 330}, headers=H)   # 140 ккал
     assert insights.day_facts(db, user, TODAY)["meals"] == 1
+
+
+def test_beer_counts_alcohol_calories():
+    beer = drinks.get("beer")
+    assert 40 <= beer.kcal_100 <= 46
+    assert drinks.calculate(beer, 500).kcal_total == round(beer.kcal_100 * 5, -1) or 200 <= drinks.calculate(beer, 500).kcal_total <= 230
+    assert drinks.get("wine").kcal_100 > beer.kcal_100
+    assert {"beer", "beer0", "wine", "energy", "smoothie", "shake"} <= set(drinks.BY_ID)

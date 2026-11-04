@@ -183,8 +183,8 @@ export function foodPic(name, size = 40, icon = null) {
   return f ? pic(`img/food/${f}.webp?v=5`, size) : null;
 }
 
-const DRINKS = new Set(['cola', 'cola_zero', 'fanta', 'tea', 'americano', 'cappuccino', 'flat_white', 'latte', 'juice', 'water', 'smoothie', 'beer', 'wine', 'energy', 'shake']);
-const DRINK_ALIAS = { juice: 'juice_box' };
+const DRINKS = new Set(['cola', 'cola_zero', 'fanta', 'tea', 'americano', 'cappuccino', 'flat_white', 'latte', 'juice', 'water', 'smoothie', 'beer', 'beer0', 'wine', 'energy', 'shake']);
+const DRINK_ALIAS = { juice: 'juice_box', beer0: 'beer' };
 
 export function drinkPic(id, size = 48) {
   if (!DRINKS.has(id)) return null;

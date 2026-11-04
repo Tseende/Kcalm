@@ -1,7 +1,8 @@
 // "Мои продукты" list
 import { api } from '../api.js';
 import { foodPic, foodGroupOf, FOOD_GROUPS } from '../pics.js';
-import { h, icon, tile, nav, pageHead, sheet, skeletonCards, emptyState, errorState, debounce, fmtN, plural } from '../ui.js';
+import { h, icon, tile, nav, pageHead, sheet, skeletonCards, emptyState, errorState, debounce, fmtN, plural, segmented } from '../ui.js';
+import { drinkPic } from '../pics.js';
 
 const PALETTE = ['blue', 'green', 'orange', 'purple', 'teal', 'pink', 'red'];
 const ORDER = [...FOOD_GROUPS.map(([t]) => t), 'Другое'];
@@ -13,8 +14,11 @@ export default async function render(root, ctx) {
   chips.hidden = true;
   const search = h('input', { type: 'search', placeholder: 'Поиск по названию или бренду', 'aria-label': 'Поиск продуктов', autocomplete: 'off', oninput: debounce(() => load(), 250) });
   const addBtn = h('button', { class: 'icon-btn accent', type: 'button', 'aria-label': 'Добавить продукт', 'aria-haspopup': 'dialog', onclick: openAdd }, icon('plus'));
+  let mode = 'food'; // food — свои продукты, drinks — каталог напитков
+  const modeSeg = segmented([['food', 'Продукты'], ['drinks', 'Напитки']], mode, (v) => { mode = v; addBtn.hidden = v === 'drinks'; search.placeholder = v === 'drinks' ? 'Поиск напитка' : 'Поиск по названию или бренду'; load(); }, 'Раздел');
   view.append(
     pageHead('Мои продукты', { parent: '/menu', right: addBtn }),
+    modeSeg,
     h('div', { class: 'search' }, icon('search', 18), search),
     chips,
     list);
@@ -60,7 +64,31 @@ export default async function render(root, ctx) {
       h('div', { class: 'footnote' }, `${plural(shown.length, 'продукт', 'продукта', 'продуктов')} · значения на 100 г`));
   }
 
+  // Напитки: готовый каталог с калориями на 100 мл; тап открывает ввод напитка с этим выбором.
+  async function loadDrinks() {
+    const q = search.value.trim().toLowerCase();
+    chips.hidden = true;
+    if (!list.children.length) list.replaceChildren(skeletonCards(3, 64));
+    try {
+      const { drinks } = await api.get('/drinks');
+      if (!ctx.alive() || mode !== 'drinks') return;
+      const shown = drinks.filter((d) => !q || d.name.toLowerCase().includes(q));
+      if (!shown.length) { list.replaceChildren(emptyState('search', 'Ничего не найдено', 'Попробуйте другое название.')); return; }
+      list.replaceChildren(h('div', { class: 'list tiles prod-list' }, shown.map((d) => h('button', {
+        class: 'row prod-row', type: 'button',
+        onclick: () => { sessionStorage.setItem('drink-pick', d.id); nav.go('/add/drink'); },
+      },
+      drinkPic(d.id, 48) || h('span', { class: 'drink-emo', style: { width: '48px', height: '48px' } }, d.emoji),
+      h('span', { class: 'grow' },
+        h('span', { class: 'row-title' }, d.name),
+        h('span', { class: 'row-sub' }, d.sizes.join(' / ') + ' мл' + (d.sugar ? ' · можно с сахаром' : ''))),
+      h('span', { class: 'prod-kcal' }, h('b', null, fmtN(Math.round(d.kcal_100))), h('span', null, 'ккал / 100 мл'))))),
+      h('div', { class: 'footnote' }, 'Значения ориентировочные. Точные берите с этикетки'));
+    } catch (e) { if (ctx.alive()) errorState(list, e, loadDrinks); }
+  }
+
   async function load() {
+    if (mode === 'drinks') return loadDrinks();
     const q = search.value.trim();
     if (!list.children.length) list.replaceChildren(skeletonCards(3, 64));
     try {

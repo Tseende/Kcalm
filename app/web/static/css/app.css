@@ -885,3 +885,10 @@ html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
 .an-w-goal { font-weight: 600; }
 .an-pattern { border-left: 3px solid var(--c-accent); }
 .an-foot { text-align: center; padding: 4px 8px 12px; }
+
+/* Длинные названия в списках продуктов — в одну строку с многоточием, чтобы строки были одной высоты. */
+.prod-row .grow, .ing-list .grow, .sheet .row .grow { min-width: 0; }
+.prod-row .row-title, .prod-row .row-sub, .ing-list .row-title, .ing-list .row-sub, .sheet .row-btn .row-title, .sheet .row-btn .row-sub {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prod-row .macs { flex-wrap: nowrap; overflow: hidden; }
+.prod-kcal span { white-space: nowrap; font-size: 12px; color: var(--c-hint); }
