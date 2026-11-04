@@ -3,6 +3,22 @@ import { h } from './ui.js';
 
 // Порядок важен: сначала частные случаи («сырники» раньше «сыра»). Ключ = файл в img/food.
 const FOOD = [
+  ['hotdog', /хот-?дог/],
+  ['tacos', /(^|[^а-яё])тако(?![а-яё])/],
+  ['khachapuri', /хачапури/],
+  ['syrniki', /сырник/],
+  ['peanutbutter', /арахисов[а-яё]*\s+(паст|масл)|паст[а-яё]*\s+арахис|урбеч/],
+  ['tofu', /тофу|соев[а-яё]*\s+сыр/],
+  ['bacon', /бекон/],
+  ['ham', /ветчин/],
+  ['shashlik', /шашлык|шашлыч|кебаб|шампур/],
+  ['plov', /плов(?![а-яё])/],
+  ['noodles', /рамен|удон|фунчоз|лапш/],
+  ['crispbread', /хлебц|хрустящ[а-яё]*\s+хлеб/],
+  ['pirozhok', /пирожок|пирожк|пирог|беляш|чебурек|самс[аыуе](?![а-яё])|расстегай|кулебяк/],
+  ['donut', /пончик|донат/],
+  ['waffles', /вафл/],
+  ['garlic', /чеснок(?![а-яё])/],
   ['icecream', /мороженое|пломбир|эскимо|рожок/],
   ['herringjar', /(маринован|пряного|в\s+масл|филе|в\s+винн)[а-яё]*\s+(сельд|селёд|селед)|(сельд|селёд|селед)[а-яё]*\s+(маринован|филе|в\s+масл|в\s+винн|пряного)/],
   ['herring', /сельд|селёд|селед/],
@@ -48,7 +64,7 @@ const FOOD = [
   ['sandwich', /сэндвич|сендвич|бутерброд|тост с/],
   ['bread', /хлеб|батон|лаваш|тост|багет|лепёшк|лепешк|чиабатта|сухар|хлебц/],
   ['burger', /бургер|чизбургер/],
-  ['pizza', /пицц|хот-?дог/],
+  ['pizza', /пицц/],
   ['wrap', /шаурм|шаверм|буррито|врап|кесадиль/],
   ['sushi', /суши|ролл|сашими/],
   ['dumplings', /пельмен|вареник|манты|хинкали|равиоли|гёдза|гедза/],
@@ -56,33 +72,46 @@ const FOOD = [
   ['oatmeal', /овсян|каша|каши|мюсли|хлопья|гранола/],
   ['rice', /рис(?![а-яё])|рисов|крупа|булгур|кускус|перловк|пшён|пшен|киноа/],
   ['soup', /суп|борщ|щи(?![а-яё])|бульон|солянк|харчо|уха(?![а-яё])|окрошк/],
-  ['salad', /салат|винегрет|оливье|зелень|руккол|шпинат/],
+  ['salad', /салат|винегрет|оливье/],
+  ['greens', /зелень|зелени(?![а-яё])|укроп|петрушк|кинза|кинзу|базилик|руккол|шпинат/],
+  ['omelette', /омлет/],
   ['egg', /яйц|яичн|омлет|глазунь/],
   ['forshmak', /форшмак|паштет рыб|рыбн[а-яё]* паштет|рыбн[а-яё]* намазк/],
   ['canfish', /консерв|шпрот|сардин/],
   ['drinkyogurt', /питьев[а-яё]* йогурт|кисломолочн[а-яё]* напит|биойогурт|био-йогурт|снежок/],
   ['pancakes', /блин|оладь|панкейк|драник/],
   ['yogurt', /йогурт|скир|десерт/],
+  ['coconut', /кокос/],
   ['milk', /молок|сливк(?![а-яё]*\s*масл)/],
   ['cheese', /сыр(?![а-яё])|сыра(?![а-яё])|сыры|сыром|моцарелл|пармезан|брынз|фета|чеддер|маскарпоне|рикотт/],
   ['butter', /сливочн[а-яё]*\s+масл|масл[а-яё]*\s+сливочн|маргарин|топлён[а-яё]*\s+масл/],
   ['oil', /масл[оа]|оливков|подсолнечн|растительн/],
   ['honey', /мёд|мед(?![а-яё])|сироп/],
+  ['sugar', /^\s*(сахар|рафинад)/],
   ['chicken', /кур[ие]|курин|цыплен|индейк|птиц|наггетс|крыл[оь]/],
   ['sausage', /колбас|сосиск|сардельк|ветчин|бекон|сервелат|салями|паштет/],
   ['steak', /стейк|рёбр|ребр|отбивн|антрекот/],
   ['meat', /мясо|говядин|свинин|баранин|фарш|котлет|телятин|бифштекс|шашлык|печён|печен[ьи]/],
   ['shrimp', /креветк|краб|лангустин|мидии|морепродукт|кальмар/],
   ['salmon', /лосос|сёмг|семг|форел/],
+  ['eggplant', /баклажан/],
+  ['caviar', /(^|[^а-яё])икр[аыуе]?(?![а-яё])(?!\s*(баклажан|кабачк|овощн|грибн))/],
   ['fish', /рыб|лосос|сёмг|семг|тунец|форел|сельд|треск|минтай|скумбри|икра|шпрот/],
   ['banana', /банан/],
   ['orange', /апельсин|мандарин|грейпфрут|помело/],
   ['lemon', /лимон|лайм/],
   ['grapes', /виноград/],
-  ['watermelon', /арбуз|дын[яи]/],
+  ['melon', /(^|[^а-яё])дын[яиюе](?![а-яё])/],
+  ['watermelon', /арбуз/],
   ['strawberry', /клубник|земляник/],
   ['peach', /персик|абрикос|нектарин/],
+  ['pear', /(^|[^а-яё])груш/],
+  ['kiwi', /киви/],
+  ['pineapple', /ананас/],
+  ['mango', /манго/],
+  ['plum', /(^|[^а-яё])слив[аыуе](?![а-яё])/],
   ['apple', /яблок|груш|слив[аы]|киви|манго|ананас|хурм|фрукт/],
+  ['cherry', /(^|[^а-яё])(вишн|черешн)/],
   ['berries', /ягод|черник|малин|смородин|вишн|черешн|голубик|ежевик|клюкв/],
   ['avocado', /авокадо/],
   ['carrot', /морков/],
@@ -91,13 +120,20 @@ const FOOD = [
   ['cucumber', /огурц|огурец/],
   ['mushroom', /гриб|шампиньон|вешенк|лисичк/],
   ['corn', /кукуруз/],
+  ['peas', /горох|горошек|горошин/],
   ['beans', /фасол|горох|горошек|чечевиц|нут(?![а-яё])|бобы|эдамаме/],
   ['onion', /лук(?![а-яё])|чеснок/],
   ['broccoli', /брокколи|цветная капуст/],
   ['pumpkin', /тыкв/],
+  ['bellpepper', /болгарск[а-яё]*\s+перец|перец\s+болгарск|перец\s+(сладк|красн|желт|жёлт)|фаршированн[а-яё]*\s+перц/],
+  ['cabbage', /капуст|голубц/],
+  ['zucchini', /кабач|цукини/],
+  ['beet', /свёкл|свекл|буряк/],
+  ['radish', /редис|редьк|дайкон/],
   ['tomato', /помидор|томат|кетчуп|перец болгар/],
   ['vegetables', /овощ|капуст|кабачк|баклажан|свёкл|свекл|редис|сельдерей|батат/],
   ['chips', /чипс|снек|крекер|сухарик|попкорн|кириешк|начос/],
+  ['driedfruit', /чернослив|кураг|изюм|финик|сухофрукт|инжир/],
   ['nuts', /орех|миндал|фундук|кешью|арахис|фисташк|семечк|семена|финик|изюм|чернослив/],
 ];
 
@@ -106,16 +142,16 @@ export const FOOD_ICONS = [...new Set(FOOD.map(([file]) => file))];
 
 // Группы для выбора иконки вручную. Всё, что не попало в группу, уйдёт в «Другое».
 const GROUPS = [
-  ['Молочное и яйца', ['milk', 'kefir', 'drinkyogurt', 'yogurt', 'sourcream', 'cottage', 'curdbar', 'cheese', 'smokedcheese', 'processedcheese', 'butter', 'egg', 'icecream']],
-  ['Мясо и колбасы', ['meat', 'steak', 'mince', 'cutlet', 'chicken', 'chickenmeat', 'turkey', 'sausage', 'smokedsausage', 'salo']],
-  ['Рыба и морепродукты', ['fish', 'salmon', 'herring', 'herringjar', 'shrimp', 'canfish', 'forshmak']],
-  ['Крупы и паста', ['rice', 'buckwheat', 'oatmeal', 'pasta', 'beans']],
-  ['Хлеб и выпечка', ['bread', 'ryebread', 'toast', 'croissant', 'pancakes', 'cookies', 'cake']],
-  ['Овощи и грибы', ['tomato', 'cucumber', 'carrot', 'potato', 'onion', 'broccoli', 'pumpkin', 'corn', 'mushroom', 'avocado', 'vegetables']],
-  ['Фрукты и ягоды', ['apple', 'banana', 'orange', 'lemon', 'grapes', 'watermelon', 'strawberry', 'peach', 'berries']],
-  ['Блюда и фастфуд', ['soup', 'salad', 'sandwich', 'burger', 'pizza', 'wrap', 'sushi', 'dumplings', 'khinkali', 'fries', 'chips']],
+  ['Молочное и яйца', ['milk', 'kefir', 'drinkyogurt', 'yogurt', 'sourcream', 'cottage', 'curdbar', 'cheese', 'smokedcheese', 'processedcheese', 'butter', 'egg', 'icecream', 'omelette', 'syrniki', 'tofu']],
+  ['Мясо и колбасы', ['meat', 'steak', 'mince', 'cutlet', 'chicken', 'chickenmeat', 'turkey', 'sausage', 'smokedsausage', 'salo', 'bacon', 'ham', 'shashlik']],
+  ['Рыба и морепродукты', ['fish', 'salmon', 'herring', 'herringjar', 'shrimp', 'canfish', 'forshmak', 'caviar']],
+  ['Крупы и паста', ['rice', 'buckwheat', 'oatmeal', 'pasta', 'beans', 'peas', 'noodles']],
+  ['Хлеб и выпечка', ['bread', 'ryebread', 'toast', 'croissant', 'pancakes', 'cookies', 'cake', 'crispbread', 'pirozhok', 'donut', 'waffles']],
+  ['Овощи и грибы', ['tomato', 'cucumber', 'carrot', 'potato', 'onion', 'broccoli', 'pumpkin', 'corn', 'mushroom', 'avocado', 'vegetables', 'cabbage', 'zucchini', 'eggplant', 'beet', 'bellpepper', 'radish', 'garlic', 'greens']],
+  ['Фрукты и ягоды', ['apple', 'banana', 'orange', 'lemon', 'grapes', 'watermelon', 'strawberry', 'peach', 'berries', 'pear', 'kiwi', 'pineapple', 'mango', 'melon', 'cherry', 'plum', 'coconut', 'driedfruit']],
+  ['Блюда и фастфуд', ['soup', 'salad', 'sandwich', 'burger', 'pizza', 'wrap', 'sushi', 'dumplings', 'khinkali', 'fries', 'chips', 'hotdog', 'tacos', 'plov', 'khachapuri']],
   ['Соусы и заготовки', ['ketchup', 'mayo', 'adjika', 'lecho', 'oil', 'pickledcucumber', 'pickledtomato', 'pickledpepper', 'pickledmushroom', 'sauerkraut', 'olives', 'blackolives']],
-  ['Сладкое', ['chocolate', 'candy', 'honey', 'jamstrawberry', 'jamraspberry', 'jamcherry', 'jamapricot', 'jamcurrant', 'protein']],
+  ['Сладкое', ['chocolate', 'candy', 'honey', 'jamstrawberry', 'jamraspberry', 'jamcherry', 'jamapricot', 'jamcurrant', 'protein', 'peanutbutter', 'sugar']],
   ['Орехи и семечки', ['nuts', 'seeds']],
 ];
 export const FOOD_GROUPS = (() => {
@@ -144,7 +180,7 @@ function pic(path, size) {
 // null, если подходящей картинки нет: вызывающий код рисует обычную плитку.
 export function foodPic(name, size = 40, icon = null) {
   const f = FOOD_ICONS.includes(icon) ? icon : foodPicName(name);
-  return f ? pic(`img/food/${f}.webp?v=3`, size) : null;
+  return f ? pic(`img/food/${f}.webp?v=5`, size) : null;
 }
 
 const DRINKS = new Set(['cola', 'cola_zero', 'fanta', 'tea', 'americano', 'cappuccino', 'flat_white', 'latte', 'juice', 'water', 'smoothie', 'beer', 'wine', 'energy', 'shake']);
@@ -152,18 +188,18 @@ const DRINK_ALIAS = { juice: 'juice_box' };
 
 export function drinkPic(id, size = 48) {
   if (!DRINKS.has(id)) return null;
-  return pic(`img/drink/${DRINK_ALIAS[id] || id}.webp?v=3`, size);
+  return pic(`img/drink/${DRINK_ALIAS[id] || id}.webp?v=4`, size);
 }
 
 const DISH_PICS = { plate: 'plate', deep_plate: 'deep_plate', bowl: 'bowl', salad_bowl: 'salad_bowl', mug: 'mug', cup: 'cup', glass: 'glass', pan: 'pan', pot: 'pot', container: 'lunchbox', jar: 'jar', thermos: 'thermos' };
 
 // null для «другое»: вызывающий код рисует обычную плитку.
 export function dishPic(kind, size = 48) {
-  return DISH_PICS[kind] ? pic(`img/dish/${DISH_PICS[kind]}.webp?v=3`, size) : null;
+  return DISH_PICS[kind] ? pic(`img/dish/${DISH_PICS[kind]}.webp?v=4`, size) : null;
 }
 
 export function mealPic(type, size = 48) {
-  return ['breakfast', 'lunch', 'dinner', 'snack'].includes(type) ? pic(`img/meal/${type}.webp?v=3`, size) : null;
+  return ['breakfast', 'lunch', 'dinner', 'snack'].includes(type) ? pic(`img/meal/${type}.webp?v=4`, size) : null;
 }
 
 // Напитки по названию позиции. Порядок важен: частные случаи раньше общих.
@@ -201,7 +237,7 @@ export function mealIcon(meal, size = 56) {
     const d = drinkPicName(it.name);
     if (d) return drinkPic(d, size);
     const f = foodPicName(it.name);
-    if (f) return pic(`img/food/${f}.webp?v=3`, size);
+    if (f) return pic(`img/food/${f}.webp?v=5`, size);
   }
   return mealPic(meal.type, size);
 }

@@ -6,6 +6,7 @@
   --c-p: #007aff; --c-f: #ff9500; --c-c: #34c759; --c-water: #32ade6; --c-sleep: #5856d6; --c-steps: #34c759; --c-warn: #ff9500;
   --c-green: #34c759; --c-red: #ff3b30; --c-yellow: #ffcc00;
   --c-seg-on: #ffffff;
+  --c-pic: #fff; --c-pic-edge: rgba(0, 0, 0, .08); --pic-shadow: none;
 }
 @media (prefers-color-scheme: dark) {
   :root:not(.scheme-light) {
@@ -15,6 +16,7 @@
     --c-p: #0a84ff; --c-f: #ff9f0a; --c-c: #30d158; --c-water: #64d2ff; --c-sleep: #7d7aff; --c-steps: #30d158; --c-warn: #ff9f0a;
     --c-green: #30d158; --c-red: #ff453a; --c-yellow: #ffd60a;
     --c-seg-on: #636366;
+    --c-pic: rgba(255, 255, 255, .08); --c-pic-edge: transparent; --pic-shadow: drop-shadow(0 1px 2px rgba(0, 0, 0, .45));
   }
 }
 html.scheme-dark {
@@ -24,6 +26,7 @@ html.scheme-dark {
   --c-p: #0a84ff; --c-f: #ff9f0a; --c-c: #30d158; --c-water: #64d2ff; --c-sleep: #7d7aff; --c-steps: #30d158; --c-warn: #ff9f0a;
   --c-green: #30d158; --c-red: #ff453a; --c-yellow: #ffd60a;
   --c-seg-on: #636366;
+  --c-pic: rgba(255, 255, 255, .08); --c-pic-edge: transparent; --pic-shadow: drop-shadow(0 1px 2px rgba(0, 0, 0, .45));
 }
 :root {
   --c-accent: var(--c-btn);
@@ -551,8 +554,8 @@ html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
 .add-card.wide .ico { margin-left: auto; color: var(--c-hint); }
 
 /* картинки продуктов и напитков: светлая плитка как у иконок iOS, в обеих темах одинаково */
-.pic { display: inline-flex; align-items: center; justify-content: center; flex: none; border-radius: 22.5%; background: #fff; box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .08); overflow: hidden; }
-.pic img { width: 84%; height: 84%; object-fit: contain; display: block; }
+.pic { display: inline-flex; align-items: center; justify-content: center; flex: none; border-radius: 22.5%; background: var(--c-pic); box-shadow: inset 0 0 0 .5px var(--c-pic-edge); overflow: hidden; }
+.pic img { width: 84%; height: 84%; object-fit: contain; display: block; filter: var(--pic-shadow); }
 .row:has(.pic) { padding-left: 15px; }
 
 /* подпись под списком, как в «Настройках» iOS */
@@ -588,7 +591,7 @@ html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
 .icon-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
 .icon-opt { display: grid; place-items: center; aspect-ratio: 1; border-radius: 14px; background: var(--c-card); border: 2px solid transparent; min-width: 0; font-size: 13px; color: var(--c-btn); }
 .icon-opt.on { border-color: var(--c-btn); }
-.icon-opt .pic { box-shadow: none; }
+.icon-opt .pic { box-shadow: none; background: transparent; }
 
 .icon-groups { display: flex; flex-direction: column; gap: 8px; }
 .icon-group-title { margin: 10px 4px 0; font-size: 13px; color: var(--c-hint); }
