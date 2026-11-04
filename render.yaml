@@ -30,8 +30,8 @@ services:
         sync: false
       - key: TZ
         value: Europe/Minsk
-      - key: KEEPALIVE_WINDOW     # не засыпать днём; вне окна сервис спит и просыпается от сообщения (webhook)
-        value: "08:00-23:30"
+      - key: KEEPALIVE_HOURS      # после любого захода в приложение или сообщения боту не спим ещё столько часов; без активности сервис засыпает
+        value: "1"
       - key: MODEL_TEXT
         value: deepseek/deepseek-v4.1-flash-1017
       - key: MODEL_TEXT_PROVIDER

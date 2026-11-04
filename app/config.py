@@ -62,6 +62,7 @@ class Config(BaseSettings):
     webhook_base_url: str = ""        # https://<сервис>.onrender.com: если задан, бот работает по webhook, а не polling
     keepalive_window: str = ""        # «08:00-23:30»: в эти часы (по keepalive_tz) бот пингует сам себя, чтобы Render не усыплял
     keepalive_tz: str = "Europe/Minsk"
+    keepalive_hours: float = 0        # >0: после любой активности (приложение, сообщение боту) бот пингует себя ещё столько часов; без активности засыпает
     webhook_secret: str = ""          # секрет заголовка Telegram (A-Za-z0-9_-, до 256 символов)
     web_dev_tg_id: int = 0            # только локальная разработка: запросы с 127.0.0.1 без initData
 

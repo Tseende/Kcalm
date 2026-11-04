@@ -777,6 +777,15 @@ async def test_static_index_and_redirect(client):
     assert health.status == 200 and (await health.json()) == {"ok": True}
 
 
+async def test_activity_middleware_ignores_healthz(client, monkeypatch):
+    from app import scheduler
+    monkeypatch.setattr(scheduler, "_last_activity", None)
+    await client.get("/healthz")                    # health-check Render и самопинг не продлевают окно
+    assert scheduler._last_activity is None
+    await client.get("/app/")                       # заход в приложение продлевает
+    assert scheduler._last_activity is not None
+
+
 async def test_static_files_and_traversal(client):
     css = await client.get("/app/css/app.css")
     assert css.status == 200 and "text/css" in css.headers["Content-Type"]

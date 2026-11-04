@@ -9,6 +9,7 @@ import asyncio
 import logging
 import os
 import sqlite3
+import time
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -35,7 +36,7 @@ def build_scheduler(db: sqlite3.Connection, bot) -> AsyncIOScheduler:
         misfire_grace_time=50,
     )
     cfg_ = get_config()
-    if cfg_.keepalive_window and (cfg_.webhook_base_url or os.environ.get("RENDER_EXTERNAL_URL")):
+    if (cfg_.keepalive_window or cfg_.keepalive_hours > 0) and (cfg_.webhook_base_url or os.environ.get("RENDER_EXTERNAL_URL")):
         sched.add_job(keepalive_ping, "interval", minutes=9, id="keepalive", name="keepalive",
                       coalesce=True, max_instances=1, misfire_grace_time=60)
     if cfg_.backup_in_process and not cfg_.turso_database_url:   # в облаке данные уже в Turso
@@ -63,11 +64,28 @@ def in_keepalive_window(window: str, tz_name: str, now_utc: datetime | None = No
     return start <= now < end if start <= end else (now >= start or now < end)
 
 
+_last_activity: float | None = None   # time.monotonic() последнего реального запроса
+
+
+def touch_activity() -> None:
+    """Отметить, что кто-то пользуется ботом (его вызывает веб-сервер на каждый запрос, кроме /healthz)."""
+    global _last_activity
+    _last_activity = time.monotonic()
+
+
+def recently_active(hours: float, now: float | None = None) -> bool:
+    """Была ли активность за последние `hours` часов: окно скользит, каждое действие продлевает его."""
+    if hours <= 0 or _last_activity is None:
+        return False
+    return (now if now is not None else time.monotonic()) - _last_activity < hours * 3600
+
+
 async def keepalive_ping() -> None:
     """Запрос на собственный публичный адрес: Render считает его входящим трафиком и не усыпляет сервис."""
     import httpx
     cfg = get_config()
-    if not in_keepalive_window(cfg.keepalive_window, cfg.keepalive_tz):
+    if not (recently_active(cfg.keepalive_hours)
+            or (cfg.keepalive_window and in_keepalive_window(cfg.keepalive_window, cfg.keepalive_tz))):
         return
     base = (cfg.webhook_base_url or os.environ.get("RENDER_EXTERNAL_URL", "")).rstrip("/")
     try:

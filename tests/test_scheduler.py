@@ -147,3 +147,38 @@ async def test_cloud_precheck_failure_falls_back(cloud_db, monkeypatch):
     bot = FakeBot()
     await scheduler.dispatch_due_reminders(proxy, bot, now_utc=_utc_for_local(16, 0))
     assert len(bot.sent) == 1
+
+
+def test_keepalive_window_slides_with_activity(monkeypatch):
+    """Окно keep-alive считается от последней активности: час после заходов, потом сон."""
+    monkeypatch.setattr(scheduler, "_last_activity", None)
+    assert not scheduler.recently_active(1)                  # никто не заходил, не пингуем
+    scheduler.touch_activity()
+    t0 = scheduler._last_activity
+    assert scheduler.recently_active(1, now=t0 + 59 * 60)
+    assert not scheduler.recently_active(1, now=t0 + 61 * 60)
+    assert scheduler.recently_active(5, now=t0 + 4 * 3600)   # другая длина окна
+    assert not scheduler.recently_active(0, now=t0)          # 0 = функция выключена
+
+
+@pytest.mark.asyncio
+async def test_keepalive_ping_only_when_active(monkeypatch):
+    import httpx
+    calls: list[str] = []
+
+    class FakeClient:
+        def __init__(self, *a, **k): ...
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def get(self, url): calls.append(url)
+
+    monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
+    cfg = scheduler.get_config().model_copy(update={"keepalive_hours": 1.0, "keepalive_window": "",
+                                                    "webhook_base_url": "https://x.onrender.com"})
+    monkeypatch.setattr(scheduler, "get_config", lambda: cfg)
+    monkeypatch.setattr(scheduler, "_last_activity", None)
+    await scheduler.keepalive_ping()
+    assert calls == []                                       # нет активности: молчим, сервис уснёт
+    scheduler.touch_activity()
+    await scheduler.keepalive_ping()
+    assert calls == ["https://x.onrender.com/healthz"]

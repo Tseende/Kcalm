@@ -91,6 +91,15 @@ _HTTP_MESSAGES = {
 
 
 @web.middleware
+async def activity_middleware(request: web.Request, handler):
+    """Любой запрос, кроме health-check Render и самопинга, продлевает окно keep-alive."""
+    if request.path != "/healthz":
+        from app.scheduler import touch_activity
+        touch_activity()
+    return await handler(request)
+
+
+@web.middleware
 async def error_middleware(request: web.Request, handler):
     try:
         return await handler(request)
@@ -1192,7 +1201,7 @@ WEBHOOK_PATH = "/tg/webhook"
 def build_app(db, bot, config: Config | None = None, dp=None) -> web.Application:
     config = config or get_config()
     max_body = MAX_PHOTOS * config.max_media_bytes + 1024 * 1024
-    app = web.Application(middlewares=[error_middleware, auth_middleware],
+    app = web.Application(middlewares=[activity_middleware, error_middleware, auth_middleware],
                           client_max_size=max_body)
     app[DB], app[CONFIG], app[BOT], app[MAX_BODY] = db, config, bot, max_body
     app.add_routes(routes)
