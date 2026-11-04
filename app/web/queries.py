@@ -9,7 +9,9 @@ import io
 import sqlite3
 from datetime import date, timedelta
 
+from app.domain import analytics
 from app.domain.targets import ewma_dated, value_at_or_before
+from app.services import water as watersvc
 from app.storage import repo
 
 RANGE_DAYS = {"week": 7, "month": 30, "90d": 90}
@@ -105,20 +107,21 @@ def _avg(values: list, ndigits: int | None = 1):
     return round(mean) if ndigits is None else round(mean, ndigits)
 
 
-def stats(db: sqlite3.Connection, user: sqlite3.Row, range_name: str, today: date) -> dict:
-    """Ряды по дням за range_name (последние N дней включая сегодня) и сводка."""
-    n = RANGE_DAYS[range_name]
+def series(db: sqlite3.Connection, user: sqlite3.Row, start: date, n: int) -> list[dict]:
+    """Ряды по дням: n дней начиная со start (еда, вода, вес, сон, шаги, поздняя еда)."""
     uid = user["id"]
-    start = today - timedelta(days=n - 1)
-    f, t = start.isoformat(), today.isoformat()
+    end = start + timedelta(days=n - 1)
+    f, t = start.isoformat(), end.isoformat()
 
     meals: dict[str, dict] = {}
     for m in repo.range_meals(db, uid, f, t):
-        d = meals.setdefault(m["local_date"], {"kcal": 0, "protein": 0.0, "fat": 0.0, "carbs": 0.0})
+        d = meals.setdefault(m["local_date"], {"kcal": 0, "protein": 0.0, "fat": 0.0, "carbs": 0.0, "late": 0})
         d["kcal"] += m["kcal_total"]
         d["protein"] += m["protein_g"]
         d["fat"] += m["fat_g"]
         d["carbs"] += m["carbs_g"]
+        if analytics.is_late(m["local_time"], user["eating_cutoff"] or "21:00"):
+            d["late"] += m["kcal_total"]
     water = repo.water_by_day(db, uid, f, t)
     weights = {r["local_date"]: float(r["weight_kg"]) for r in repo.weight_series(db, uid, f, t)}
     smooth = _trend_points(db, uid, t)
@@ -143,7 +146,7 @@ def stats(db: sqlite3.Connection, user: sqlite3.Row, range_name: str, today: dat
 
     days = []
     for i in range(n):
-        d = (start + timedelta(days=i))
+        d = start + timedelta(days=i)
         key = d.isoformat()
         eaten = meals.get(key)
         trend = value_at_or_before(smooth, d.toordinal())
@@ -153,6 +156,7 @@ def stats(db: sqlite3.Connection, user: sqlite3.Row, range_name: str, today: dat
             "protein": round(eaten["protein"], 1) if eaten else None,
             "fat": round(eaten["fat"], 1) if eaten else None,
             "carbs": round(eaten["carbs"], 1) if eaten else None,
+            "late_kcal": int(eaten["late"]) if eaten else 0,
             "target_kcal": target_on(key),
             "water_ml": water.get(key),
             "weight": weights.get(key),
@@ -160,21 +164,35 @@ def stats(db: sqlite3.Connection, user: sqlite3.Row, range_name: str, today: dat
             "sleep_min": sleep.get(key),
             "steps": steps.get(key),
         })
+    return days
 
+
+def summarize(days: list[dict]) -> dict:
     logged = [d for d in days if d["kcal"] is not None]
     on_target = sum(1 for d in logged if d["target_kcal"]
                     and KCAL_BAND[0] <= d["kcal"] / d["target_kcal"] <= KCAL_BAND[1])
     measured = [d["weight"] for d in days if d["weight"] is not None]
-    summary = {
+    return {
         "avg_kcal": _avg([d["kcal"] for d in logged], None),
         "avg_protein": _avg([d["protein"] for d in logged]),
+        "avg_water": _avg([d["water_ml"] for d in days], None),
         "days_logged": len(logged),
         "days_on_target": on_target,
         "weight_change": round(measured[-1] - measured[0], 1) if len(measured) >= 2 else None,
         "avg_sleep_min": _avg([d["sleep_min"] for d in days], None),
         "avg_steps": _avg([d["steps"] for d in days], None),
     }
-    return {"range": range_name, "days": days, "summary": summary}
+
+
+def stats(db: sqlite3.Connection, user: sqlite3.Row, range_name: str, today: date) -> dict:
+    """Ряды по дням за range_name (последние N дней включая сегодня), сводка и сводка прошлого периода."""
+    n = RANGE_DAYS[range_name]
+    days = series(db, user, today - timedelta(days=n - 1), n)
+    prev = series(db, user, today - timedelta(days=2 * n - 1), n)
+    tgt = repo.current_target(db, user["id"])
+    return {"range": range_name, "days": days, "summary": summarize(days), "prev_summary": summarize(prev),
+            "goals": {"protein_g": int(tgt["protein_g"]) if tgt and tgt["protein_g"] else None,
+                      "water_ml": watersvc.goal_for(db, user), "steps": 8000, "sleep_min": 420}}
 
 
 # ------------------------------------------------------------------ CSV

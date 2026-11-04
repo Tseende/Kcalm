@@ -36,6 +36,7 @@ from app.services import weekgoal as weekgoalsvc
 from app.storage import photos, repo
 from app.timeutils import validate_hhmm
 from app.web import analysis
+from app.web import period as period_analysis
 from app.web import queries as q
 from app.web.auth import InitDataError, validate_init_data
 from app.web.serializers import dish_json, meal_json, product_json, targets_json
@@ -982,6 +983,11 @@ async def api_analysis(request: web.Request) -> web.Response:
     db, user, _ = ctx(request)
     now = now_local(user)
     raw = request.query.get("date")
+    period = request.query.get("period", "day")
+    if period != "day":
+        if period not in period_analysis.PERIODS:
+            raise bad("period: day, week или month.", "bad_period")
+        return ok(period_analysis.build(db, user, now.date(), period))
     return ok(analysis.build(db, user, parse_date(raw) if raw else now.date(), now))
 
 

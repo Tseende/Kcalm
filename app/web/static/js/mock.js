@@ -202,7 +202,37 @@ function getStats(range) {
       weight_change: trends.length > 1 ? r1(trends[trends.length - 1] - trends[0]) : null,
       avg_sleep_min: avg('sleep_min') === null ? null : Math.round(avg('sleep_min')),
       avg_steps: avg('steps') === null ? null : Math.round(avg('steps')),
+      avg_water: avg('water_ml') === null ? null : Math.round(avg('water_ml')),
     },
+    prev_summary: { avg_kcal: 1810, avg_protein: 84, days_logged: Math.max(1, logged.length - 1), days_on_target: Math.max(0, logged.length - 3), weight_change: -0.4, avg_sleep_min: 395, avg_steps: 6100, avg_water: 1500 },
+    goals: { protein_g: TARGETS.protein, water_ml: TARGETS.water_ml, steps: 8000, sleep_min: 420 },
+  };
+}
+
+function periodMock(period) {
+  const n = period === 'week' ? 7 : 30;
+  const today = new Date();
+  const pts = [];
+  for (let i = n - 1; i >= 0; i -= (n > 7 ? 3 : 1)) { const d = iso(addDays(today, -i)); pts.push({ date: d, v: r1(86.4 - (n - i) * (n > 7 ? 0.06 : 0.1)) }); }
+  return {
+    period, from: iso(addDays(today, -(n - 1))), to: iso(today), days: n, logged_days: n - 1, care: false,
+    headline: 'Есть что поправить',
+    focus: { icon: '🥩', title: 'Белок', text: 'В среднем 84 из 110 г, не хватает около 26 г в день. Добавь белок в каждый приём: яйца или творог утром, курица или рыба в обед, кефир вечером.' },
+    metrics: [
+      { key: 'kcal', label: 'Калории', value: '1 720 ккал', goal: 'норма 1 650', status: 'good', note: 'в норме 5 из 6 дн.', delta: { text: '−90 к прошлому', dir: 'good' } },
+      { key: 'protein', label: 'Белок', value: '84 г', goal: 'цель 110 г', status: 'bad', note: 'цель достигнута 1 из 6 дн.', delta: { text: '+6 г к прошлому', dir: 'good' } },
+      { key: 'water', label: 'Вода', value: '1 540 мл', goal: 'цель 2 100', status: 'ok', note: 'цель достигнута 2 из 7 дн.', delta: { text: 'как раньше', dir: 'flat' } },
+      { key: 'steps', label: 'Шаги', value: '7 120', goal: 'цель 8 000', status: 'ok', note: '3 дн. с целью', delta: { text: '+1 020 к прошлому', dir: 'good' } },
+      { key: 'sleep', label: 'Сон', value: '6 ч 20 м', goal: 'цель 7+ ч', status: 'bad', note: 'меньше 6 ч: 2 дня', delta: { text: '−15 мин к прошлому', dir: 'bad' } },
+      { key: 'logged', label: 'Дней с едой', value: `${n - 1} из ${n}`, goal: '', status: 'good', note: '', delta: null },
+    ],
+    weight: { start: 86.0, now: 85.3, change: -0.7, per_week: -0.5, weighins: 5, goal: 76, remaining: 9.3, eta_weeks: 19, expected_change: -0.6, points: pts },
+    good: ['Калории в целевом коридоре', 'Шагов стало больше на 1 020 в день', 'Тренд веса −0,7 кг за период'],
+    patterns: [{ icon: '😴', title: 'Сон и аппетит', text: 'После коротких ночей (меньше 6,5 ч) ты ешь примерно на 280 ккал больше, чем после полноценных. Недосып усиливает голод: ранний отбой сработает лучше силы воли.' }],
+    tips: [
+      { icon: '🥩', title: 'Белок', text: 'В среднем 84 из 110 г, не хватает около 26 г в день.' },
+      { icon: '😴', title: 'Сон', text: 'Сон в среднем 6 ч 20 мин. Сдвинь отбой на 30 минут раньше.' },
+    ],
   };
 }
 
@@ -382,7 +412,7 @@ const routes = [
   ['GET', /^\/week-goal$/, () => weekGoalMock()],
   ['PUT', /^\/week-goal$/, (m, q, b) => { weekGoal = { kind: b.kind, target: b.target }; return weekGoalMock(); }],
   ['DELETE', /^\/week-goal$/, () => { weekGoal = null; return weekGoalMock(); }],
-  ['GET', /^\/analysis$/, (m, q) => ({
+  ['GET', /^\/analysis$/, (m, q) => (q.period && q.period !== 'day' ? periodMock(q.period) : {
     date: q.date || todayISO(),
     closed: true,
     headline: 'В целом неплохо',

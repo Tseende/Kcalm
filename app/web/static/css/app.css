@@ -850,3 +850,31 @@ html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
 .add-hero-pic.p1 { right: 46px; }
 .add-pic { background: color-mix(in srgb, #30b0c7 16%, var(--c-card)); }
 .add-pic img, .add-pic .pic { width: 100% !important; height: 100% !important; object-fit: cover; border-radius: 12px; background: transparent !important; }
+
+/* анализ за период и статистика */
+.chip-delta { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; white-space: nowrap; background: color-mix(in srgb, var(--c-hint) 16%, transparent); color: var(--c-hint); }
+.chip-delta.good { background: color-mix(in srgb, var(--c-green) 16%, transparent); color: var(--c-green); }
+.chip-delta.bad { background: color-mix(in srgb, var(--c-red) 14%, transparent); color: var(--c-red); }
+.stat-group .tile .chip-delta { align-self: flex-start; margin-top: 4px; }
+.chart-cap { font-size: 13px; line-height: 1.35; color: var(--c-hint); padding-top: 2px; }
+.st-lines { margin: 4px 0 12px; padding-left: 18px; line-height: 1.5; }
+.st-lines li { margin: 3px 0; }
+.st-more { width: 100%; }
+.an-focus { border-radius: 20px; padding: 16px; color: #fff; background: linear-gradient(135deg, #ffae42, #ff7a2f); box-shadow: 0 8px 20px rgba(255, 122, 47, .28); }
+.an-focus-k { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; opacity: .9; font-weight: 600; }
+.an-focus-t { font-size: 19px; font-weight: 700; margin: 4px 0; }
+.an-focus-x { font-size: 15px; line-height: 1.45; }
+.an-metrics { padding: 4px 16px; }
+.an-metric { display: grid; grid-template-columns: 12px 1fr; gap: 10px; padding: 12px 0; border-bottom: .5px solid var(--c-sep); align-items: start; }
+.an-metric:last-child { border-bottom: 0; }
+.an-metric .an-dot { margin-top: 6px; }
+.an-m-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.an-m-sub { display: flex; justify-content: space-between; gap: 8px; align-items: center; margin-top: 2px; flex-wrap: wrap; }
+.an-weight { display: flex; flex-direction: column; gap: 8px; }
+.an-w-top { display: flex; justify-content: space-between; align-items: flex-start; }
+.an-w-val { font-size: 28px; font-weight: 700; letter-spacing: -.02em; }
+.an-w-right { text-align: right; }
+.an-w-now { font-size: 20px; font-weight: 600; }
+.an-w-goal { font-weight: 600; }
+.an-pattern { border-left: 3px solid var(--c-accent); }
+.an-foot { text-align: center; padding: 4px 8px 12px; }

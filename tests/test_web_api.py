@@ -644,7 +644,7 @@ async def test_stats_shape_and_values(client, db, user_id, fake_food):
     stats = await (await client.get("/api/stats?range=week", headers=H)).json()
     assert stats["range"] == "week" and len(stats["days"]) == 7
     assert [d["date"] for d in stats["days"]][0] == "2026-05-14"
-    row_keys = {"date", "kcal", "protein", "fat", "carbs", "target_kcal", "water_ml", "weight",
+    row_keys = {"date", "kcal", "protein", "fat", "carbs", "late_kcal", "target_kcal", "water_ml", "weight",
                 "weight_trend", "sleep_min", "steps"}
     assert all(set(d) == row_keys for d in stats["days"])
     by_date = {d["date"]: d for d in stats["days"]}
@@ -658,7 +658,7 @@ async def test_stats_shape_and_values(client, db, user_id, fake_food):
     summary = stats["summary"]
     assert summary == {"avg_kcal": meal["kcal"], "avg_protein": meal["protein"],
                        "days_logged": 1, "days_on_target": 0, "weight_change": -1.0,
-                       "avg_sleep_min": 480, "avg_steps": 8000}
+                       "avg_sleep_min": 480, "avg_steps": 8000, "avg_water": 300}
 
 
 async def test_stats_empty_has_nulls_and_ranges(client):
@@ -1062,3 +1062,49 @@ async def test_enrich_with_off(monkeypatch):
     # нет штрихкода: ничего не меняется и в сеть не ходим
     same, same_notes = await productsvc.enrich_with_off(dict(label, barcode=None), ["a"])
     assert same["kcal"] == 80 and same_notes == ["a"]
+
+
+# ------------------------------------------------------------------ анализ за неделю и месяц
+
+def _seed_period(db, user_id, days=14):
+    today = dt.date.fromisoformat(TODAY)
+    for i in range(days):
+        d = (today - dt.timedelta(days=i)).isoformat()
+        kcal = 2600 if i % 2 else 1700          # после коротких ночей ест больше
+        db.execute(
+            """INSERT INTO meals (user_id, eaten_at_utc, local_date, local_time, meal_type, source,
+               kcal_total, protein_g, fat_g, carbs_g, kcal_low, kcal_high, confidence, method)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (user_id, d + "T10:00:00+00:00", d, "13:00", "lunch", "text", kcal, 60, 50, 200, kcal, kcal, 0.8, "mixed"))
+        repo.save_sleep(db, user_id, d, {"duration_min": 330 if i % 2 else 480}, "screenshot", 0.9)
+        repo.save_activity(db, user_id, d, {"steps": 4000 + 100 * i}, "screenshot", 0.9)
+        repo.save_body_measurement(db, user_id, d, {"weight_kg": 90 + 0.1 * i}, "manual", 1.0)
+    db.commit()
+
+
+async def test_period_analysis_week(client, db, user_id):
+    _seed_period(db, user_id)
+    resp = await client.get("/api/analysis?period=week", headers=H)
+    assert resp.status == 200
+    a = await resp.json()
+    assert a["period"] == "week" and a["days"] == 7 and a["logged_days"] == 7
+    keys = {m["key"] for m in a["metrics"]}
+    assert {"kcal", "protein", "steps", "sleep", "logged"} <= keys
+    assert a["weight"]["change"] < 0 and a["weight"]["weighins"] == 7
+    assert any(p["title"] == "Сон и аппетит" for p in a["patterns"]) or a["tips"]
+    assert a["focus"] and a["focus"]["text"]
+    assert all("prio" not in t for t in a["tips"])
+
+
+async def test_period_analysis_month_empty_and_bad_period(client):
+    a = await (await client.get("/api/analysis?period=month", headers=H)).json()
+    assert a["days"] == 30 and a["logged_days"] == 0 and a["focus"] is None
+    bad = await client.get("/api/analysis?period=year", headers=H)
+    assert bad.status == 400
+
+
+async def test_stats_has_previous_period_and_goals(client, db, user_id):
+    _seed_period(db, user_id)
+    s = await (await client.get("/api/stats?range=week", headers=H)).json()
+    assert s["prev_summary"]["days_logged"] == 7
+    assert s["goals"]["steps"] == 8000 and s["goals"]["water_ml"] >= 1500
