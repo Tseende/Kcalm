@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import os
 import sqlite3
+import time
 from pathlib import Path
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
@@ -91,9 +92,16 @@ class LibsqlConnection:
 
     cloud = True
 
+    # Транзакция, в которой столько секунд не было запросов, — забытая (кто-то записал и не
+    # закоммитил). Turso убивает такой поток через ~10 с, а пока она открыта, даже чтение идёт
+    # в облако. Поэтому перед следующим запросом её коммитим, а не даём ей сломать запись.
+    ORPHAN_TX_SEC = 5.0
+
     def __init__(self, raw, reopen=None) -> None:
         self._raw = raw
         self._reopen = reopen      # фабрика нового соединения: Turso рвёт «простоявший» поток
+        self._last = time.monotonic()
+        self._explicit = 0         # глубина `with conn:` — там транзакцию ведёт вызывающий код
 
     # Сбои потока Hrana: запрос не выполнен, можно открыть соединение заново и повторить.
     _STALE = ("stream was idle", "rolled back", "connection closed", "stream error", "stream not found", "expired")
@@ -111,8 +119,22 @@ class LibsqlConnection:
             log.debug("close stale libsql", exc_info=True)
         log.warning("Turso: соединение пересоздано после обрыва потока")
 
+    def _close_orphan_tx(self) -> None:
+        if self._explicit or time.monotonic() - self._last < self.ORPHAN_TX_SEC \
+                or not self.in_transaction_safe():
+            return
+        try:
+            self._raw.commit()
+            log.warning("Turso: закоммичена забытая транзакция")
+        except Exception as e:  # noqa: BLE001
+            if not self._reopen or not self._is_stale(e):
+                raise
+            log.warning("Turso: забытая транзакция потеряна вместе с потоком")
+            self._reconnect()
+
     def execute(self, sql: str, params=()):
         args = params if isinstance(params, dict) else tuple(params)
+        self._close_orphan_tx()
         try:
             return _Cursor(self._raw.execute(sql, args))
         except Exception as e:  # noqa: BLE001
@@ -122,6 +144,8 @@ class LibsqlConnection:
                 raise
             self._reconnect()
             return _Cursor(self._raw.execute(sql, args))
+        finally:
+            self._last = time.monotonic()
 
     def spawn(self) -> "LibsqlConnection":
         """Отдельное соединение для фонового потока: общее соединение между потоками не делим."""
@@ -139,10 +163,18 @@ class LibsqlConnection:
             return False
 
     def executemany(self, sql: str, seq):
-        return _Cursor(self._raw.executemany(sql, [tuple(p) for p in seq]))
+        self._close_orphan_tx()
+        try:
+            return _Cursor(self._raw.executemany(sql, [tuple(p) for p in seq]))
+        finally:
+            self._last = time.monotonic()
 
     def executescript(self, script: str):
-        self._raw.executescript(script)
+        self._close_orphan_tx()
+        try:
+            self._raw.executescript(script)
+        finally:
+            self._last = time.monotonic()
 
     def commit(self) -> None:
         self._raw.commit()
@@ -164,9 +196,12 @@ class LibsqlConnection:
             log.debug("close libsql", exc_info=True)
 
     def __enter__(self):
+        self._close_orphan_tx()
+        self._explicit += 1
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
+        self._explicit -= 1
         if exc_type is None:
             self.commit()
         else:

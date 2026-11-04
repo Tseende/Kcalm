@@ -45,3 +45,67 @@ def test_other_errors_propagate():
     conn = LibsqlConnection(bad, lambda: FakeRaw())
     with pytest.raises(ValueError):
         conn.execute("SELECT * FROM x")
+
+
+class TxRaw(FakeRaw):
+    """Как libsql: запись открывает транзакцию, commit её закрывает; поток можно «убить»."""
+
+    def __init__(self, dead=False):
+        super().__init__()
+        self.dead, self.commits = dead, 0
+
+    def execute(self, sql, params=()):
+        if self.dead:
+            raise ValueError('Hrana: `api error: `status=404 Not Found, body={"error":"stream not found: x"}``')
+        if not sql.lstrip().upper().startswith(("SELECT", "PRAGMA")):
+            self.in_transaction = True
+        return super().execute(sql, params)
+
+    def commit(self):
+        if self.dead:
+            raise ValueError('Hrana: `api error: `status=404 Not Found, body={"error":"stream not found: x"}``')
+        self.commits += 1
+        self.in_transaction = False
+
+
+def _age(conn, sec=60):
+    conn._last -= sec
+
+
+def test_orphan_transaction_committed_before_next_write():
+    raw = TxRaw()
+    conn = LibsqlConnection(raw, lambda: TxRaw())
+    conn.execute("UPDATE t SET a=1 WHERE 0")          # записал и не закоммитил
+    _age(conn)
+    conn.execute("INSERT INTO t VALUES (1)")
+    assert raw.commits == 1 and conn._raw is raw      # старая транзакция закрыта, запись прошла
+
+
+def test_orphan_transaction_on_dead_stream_does_not_break_write():
+    """Было на Render: поток с забытой транзакцией умер, и запись еды падала с ошибкой."""
+    raw, fresh = TxRaw(), TxRaw()
+    conn = LibsqlConnection(raw, lambda: fresh)
+    conn.execute("UPDATE t SET a=1 WHERE 0")
+    raw.dead = True
+    _age(conn)
+    conn.execute("INSERT INTO meals VALUES (1)")
+    assert conn._raw is fresh and fresh.calls == 1
+
+
+def test_recent_transaction_left_alone():
+    raw = TxRaw()
+    conn = LibsqlConnection(raw, lambda: TxRaw())
+    conn.execute("INSERT INTO t VALUES (1)")
+    conn.execute("INSERT INTO t VALUES (2)")          # та же транзакция, без паузы
+    assert raw.commits == 0
+
+
+def test_explicit_with_block_not_committed_midway():
+    raw = TxRaw()
+    conn = LibsqlConnection(raw, lambda: TxRaw())
+    with conn:
+        conn.execute("INSERT INTO t VALUES (1)")
+        _age(conn)
+        conn.execute("INSERT INTO t VALUES (2)")
+        assert raw.commits == 0
+    assert raw.commits == 1

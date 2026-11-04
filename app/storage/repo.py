@@ -1192,14 +1192,21 @@ def due_craving_followups(conn: sqlite3.Connection) -> list[sqlite3.Row]:
 
 
 def dismiss_stale_cravings(conn: sqlite3.Connection, hours: int = 3) -> None:
-    cur = conn.execute(
-        f"""UPDATE craving_events SET outcome='dismissed', closed_utc=datetime('now')
-           WHERE id IN (SELECT c.id FROM craving_events c WHERE c.outcome='open'
-                        AND {_LAST_ACTIVITY} < datetime('now', ?))""",
+    # Сначала чтение: зовётся каждую минуту, и UPDATE «впустую» в Turso открывал транзакцию
+    # без коммита, после чего поток умирал по простою и ломал следующую запись.
+    ids = [r[0] for r in conn.execute(
+        f"""SELECT c.id FROM craving_events c WHERE c.outcome='open'
+            AND {_LAST_ACTIVITY} < datetime('now', ?)""",
         (f"-{int(hours)} hours",),
+    ).fetchall()]
+    if not ids:
+        return
+    conn.execute(
+        f"""UPDATE craving_events SET outcome='dismissed', closed_utc=datetime('now')
+           WHERE id IN ({",".join("?" * len(ids))})""",
+        ids,
     )
-    if cur.rowcount > 0:                # пустой коммит каждую минуту не нужен
-        conn.commit()
+    conn.commit()
 
 
 def craving_memory(conn: sqlite3.Connection, user_id: int, limit: int = 3) -> list[sqlite3.Row]:
