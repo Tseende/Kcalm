@@ -123,6 +123,15 @@ class LibsqlConnection:
             self._reconnect()
             return _Cursor(self._raw.execute(sql, args))
 
+    def spawn(self) -> "LibsqlConnection":
+        """Отдельное соединение для фонового потока: общее соединение между потоками не делим."""
+        raw = self._reopen()
+        try:
+            raw.sync()                      # подтянуть свежие данные реплики
+        except Exception:  # noqa: BLE001 — локальный режим без реплики
+            log.debug("spawn: sync не нужен", exc_info=True)
+        return LibsqlConnection(raw, self._reopen)
+
     def in_transaction_safe(self) -> bool:
         try:
             return bool(self._raw.in_transaction)

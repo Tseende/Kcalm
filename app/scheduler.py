@@ -97,9 +97,49 @@ async def dispatch_due_reminders(db: sqlite3.Connection, bot,
     if now_utc.tzinfo is None:
         now_utc = now_utc.replace(tzinfo=timezone.utc)
 
+    if getattr(db, "cloud", False):
+        # Облачная БД отвечает секундами, а запросы синхронные и стопорят весь event loop (и мини-апп).
+        # Поэтому «есть ли что слать» выясняем в потоке на отдельном соединении; в большинстве
+        # минут ответ «нет», и общее соединение вообще не трогаем.
+        try:
+            if not await asyncio.to_thread(_has_due_work, db, now_utc):
+                return
+        except Exception:  # noqa: BLE001 — при сбое проверки работаем как раньше
+            log.warning("предпроверка напоминаний не удалась", exc_info=True)
+
     users = db.execute("SELECT * FROM users WHERE onboarded=1").fetchall()
     await asyncio.gather(*(_dispatch_user(db, bot, user, now_utc) for user in users))
     await dispatch_craving_followups(db, bot)
+
+
+def _has_due_work(db, now_utc: datetime) -> bool:
+    """Блокирующая проверка (вызывать в потоке): есть ли напоминание, правило или эпизод к отправке."""
+    conn = db.spawn() if hasattr(db, "spawn") else db
+    try:
+        repo.dismiss_stale_cravings(conn)
+        if repo.due_craving_followups(conn):
+            return True
+        for user in conn.execute("SELECT * FROM users WHERE onboarded=1").fetchall():
+            try:
+                now = now_utc.astimezone(ZoneInfo(user["tz"] or "Europe/Minsk"))
+            except Exception:  # noqa: BLE001 — как и в _dispatch_user: плохой tz пропускаем
+                continue
+            marker = now.strftime("%Y-%m-%d %H:%M")
+            for r in conn.execute("SELECT * FROM reminders WHERE user_id=? AND enabled=1",
+                                  (user["id"],)).fetchall():
+                time_ = (minutes_before(user["eating_cutoff"], 15)
+                         if r["kind"] == "kitchen_close" else r["local_time"])
+                if _is_due(r["kind"], time_, now, r["days"]) and r["last_sent_at"] != marker:
+                    return True
+            if repo.due_rules(conn, user["id"], now.strftime("%H:%M"), now.strftime("%Y-%m-%d")):
+                return True
+        return False
+    finally:
+        if conn is not db:
+            try:
+                conn.close()
+            except Exception:  # noqa: BLE001
+                log.debug("close spawn", exc_info=True)
 
 
 async def _dispatch_user(db: sqlite3.Connection, bot, user, now_utc: datetime) -> None:

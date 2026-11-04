@@ -91,3 +91,59 @@ async def test_one_broken_user_does_not_block_others(db):
     bot = FakeBot()
     await scheduler.dispatch_due_reminders(db, bot, now_utc=_utc_for_local(16, 0))
     assert [chat for chat, _ in bot.sent] == [10]
+
+
+class _CloudProxy:
+    """Имитация облачного соединения: cloud=True и spawn() даёт независимое соединение к тому же файлу."""
+    cloud = True
+
+    def __init__(self, conn, path):
+        self._conn, self._path = conn, path
+        self.spawned = 0
+
+    def spawn(self):
+        self.spawned += 1
+        return connect(self._path)
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+
+@pytest.fixture()
+def cloud_db():
+    fd, path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    conn = connect(path)
+    migrate(conn)
+    yield _CloudProxy(conn, path), conn
+    conn.close()
+    os.unlink(path)
+
+
+@pytest.mark.asyncio
+async def test_cloud_tick_idle_skips_shared_connection(cloud_db):
+    proxy, conn = cloud_db
+    _user(conn)
+    bot = FakeBot()
+    # 12:00 — ничего не наступило: общее соединение не используется, сообщений нет
+    await scheduler.dispatch_due_reminders(proxy, bot, now_utc=_utc_for_local(12, 0))
+    assert proxy.spawned == 1 and bot.sent == []
+
+
+@pytest.mark.asyncio
+async def test_cloud_tick_sends_when_due(cloud_db):
+    proxy, conn = cloud_db
+    _user(conn)
+    bot = FakeBot()
+    await scheduler.dispatch_due_reminders(proxy, bot, now_utc=_utc_for_local(16, 0))
+    assert proxy.spawned == 1 and len(bot.sent) == 1 and "💧" in bot.sent[0][1]
+
+
+@pytest.mark.asyncio
+async def test_cloud_precheck_failure_falls_back(cloud_db, monkeypatch):
+    proxy, conn = cloud_db
+    _user(conn)
+    monkeypatch.setattr(scheduler, "_has_due_work", lambda *a: (_ for _ in ()).throw(RuntimeError("x")))
+    bot = FakeBot()
+    await scheduler.dispatch_due_reminders(proxy, bot, now_utc=_utc_for_local(16, 0))
+    assert len(bot.sent) == 1
