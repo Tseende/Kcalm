@@ -1,8 +1,9 @@
 // Add meal: dishes (each = several photos + one plate) and/or a text description. Time and meal type are set by the server (now).
 import { api } from '../api.js';
 import {
-  h, icon, tile, toast, haptic, nav, mainButton, draft, pageHead, compressImage, busyOverlay, dishKind,
+  h, icon, tile, toast, haptic, nav, mainButton, draft, pageHead, compressImage, busyOverlay, dishKind, sheet, fmtN,
 } from '../ui.js';
+import { scanBarcode, decodeFile, validBarcode } from '../scanner.js';
 import { dishInfo } from './dishes.js';
 import { dishPic } from '../pics.js';
 
@@ -13,7 +14,8 @@ export default async function render(root, ctx) {
   root.append(view);
   let dishes = [];
   // Блюдо = несколько фото (тарелка, упаковка, этикетка) + одна посуда. Блюд в приёме может быть несколько.
-  const groups = [{ photos: [], dishId: null }]; // photos: [{file, url}]
+  // note — уточнение словами (состав, готовка), ings — продукты из базы/штрихкода: [{name, brand, kcal, protein, fat, carbs}]
+  const groups = [{ photos: [], dishId: null, note: '', ings: [] }]; // photos: [{file, url}]
   const allPhotos = () => groups.flatMap((g) => g.photos);
   let target = groups[0];
   let busy = false;
@@ -128,6 +130,93 @@ export default async function render(root, ctx) {
     paint();
   }
 
+  // ---- Состав и готовка: слова, фото этикетки, штрихкод, «Мои продукты». Всё уходит модели как уточнение к блюду.
+  const addIng = (g, d) => {
+    g.ings.push({ name: d.name, brand: d.brand || null, kcal: d.kcal, protein: d.protein, fat: d.fat, carbs: d.carbs });
+    haptic('success');
+    paint();
+  };
+  async function ingByCode(g, raw) {
+    const code = String(raw || '').replace(/\D/g, '');
+    if (!validBarcode(code)) { toast('Штрихкод не подходит: проверьте цифры', 'error'); return; }
+    const stop = busyOverlay('Ищу продукт…', 'Open Food Facts');
+    try {
+      const r = await api.get('/products/barcode/' + code);
+      stop();
+      if (groups.includes(g)) addIng(g, r.draft);
+    } catch (e) {
+      stop();
+      toast(e.status === 404 ? 'В базе такого штрихкода нет. Сфотографируйте этикетку' : e.message, 'error');
+    }
+  }
+  function typeCode(g) {
+    const inp = h('input', { type: 'text', inputMode: 'numeric', maxLength: 14, placeholder: '13 цифр под штрихкодом', autocomplete: 'off', 'aria-label': 'Штрихкод' });
+    const go = () => { const v = inp.value; sh.close(); ingByCode(g, v); };
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+    const sh = sheet({ title: 'Штрихкод с упаковки', content: h('div', { class: 'stack' }, inp,
+      h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: go }, 'Найти')) });
+    setTimeout(() => inp.focus(), 250);
+  }
+  const codeShot = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, onchange: async () => {
+    const f = codeShot.files[0];
+    const g = target;
+    codeShot.value = '';
+    if (!f) return;
+    const stop = busyOverlay('Читаю штрихкод…');
+    let code = null;
+    try { code = await decodeFile(f); } catch (e) { /* скажем ниже */ }
+    stop();
+    if (code) ingByCode(g, code); else { toast('Штрихкод на фото не нашёл. Введите цифры', 'error'); typeCode(g); }
+  } });
+  async function scanIng(g) {
+    haptic('light');
+    target = g;
+    const r = await scanBarcode();
+    if (!r) return;
+    if (r.code) { ingByCode(g, r.code); return; }
+    if (r.manual) { typeCode(g); return; }
+    toast(r.error === 'load' ? 'Сканер не загрузился' : 'Нет доступа к камере. Сфотографируйте штрихкод', 'error');
+    if (r.error === 'camera') codeShot.click();
+  }
+  function myProducts(g) {
+    const list = h('div', { class: 'list' });
+    const q = h('input', { type: 'search', placeholder: 'Поиск по моим продуктам', 'aria-label': 'Поиск продукта', autocomplete: 'off' });
+    const sh = sheet({ title: 'Мои продукты', content: h('div', { class: 'stack' }, q, list) });
+    let timer = null;
+    async function load() {
+      let products = [];
+      try { products = (await api.get('/products', { q: q.value.trim() })).products || []; } catch (e) { list.replaceChildren(h('div', { class: 'hint small' }, e.message)); return; }
+      if (!products.length) { list.replaceChildren(h('div', { class: 'hint small' }, 'Ничего не нашлось. Свои продукты сохраняются из приёма или с этикетки.')); return; }
+      list.replaceChildren(...products.slice(0, 30).map((p) => h('button', {
+        type: 'button', class: 'row row-btn', onclick: () => { sh.close(); if (groups.includes(g)) addIng(g, p); },
+      }, h('span', { class: 'grow' }, h('span', { class: 'row-title' }, p.name),
+        h('span', { class: 'row-sub' }, [p.brand, `${fmtN(p.kcal)} ккал на 100 г`].filter(Boolean).join(' · '))))));
+    }
+    q.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(load, 250); });
+    load();
+  }
+  function ingBlock(g, n) {
+    const note = h('textarea', {
+      rows: 2, value: g.note, placeholder: 'Например: жарено на оливковом масле, соус на сметане, без сахара',
+      'aria-label': `Состав и готовка блюда ${n}`,
+      oninput: () => { g.note = note.value; },
+    });
+    note.value = g.note;
+    const ings = g.ings.length ? h('div', { class: 'list ing-list' }, g.ings.map((d, i) => h('div', { class: 'row' },
+      h('span', { class: 'grow' }, h('span', { class: 'row-title' }, d.name),
+        h('span', { class: 'row-sub' }, [d.brand, `${fmtN(d.kcal)} ккал · Б ${fmtN(d.protein)} · Ж ${fmtN(d.fat)} · У ${fmtN(d.carbs)} на 100 г`].filter(Boolean).join(' · '))),
+      h('button', { class: 'icon-btn', type: 'button', 'aria-label': `Убрать ${d.name}`, onclick: () => { g.ings.splice(i, 1); paint(); } }, icon('close', 18))))) : null;
+    return [
+      h('div', { class: 'section-label' }, 'Состав и готовка'),
+      note, ings,
+      h('div', { class: 'ing-actions' },
+        h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => pick(camera, g) }, icon('camera', 20), 'Этикетка'),
+        h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => scanIng(g) }, icon('barcode', 20), 'Штрихкод'),
+        h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => myProducts(g) }, icon('package', 20), 'Мои продукты')),
+      h('div', { class: 'hint small' }, 'Уточните ингредиенты словами, фото этикетки, штрихкодом или из своих продуктов'),
+    ];
+  }
+
   function groupCard(g, gi) {
     const n = gi + 1;
     const multi = groups.length > 1;
@@ -153,7 +242,8 @@ export default async function render(root, ctx) {
         h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => pick(camera, g) }, icon('camera', 20), 'Ещё фото'),
         h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => pick(gallery, g) }, icon('image', 20), 'Галерея')),
       h('div', { class: 'hint small' }, 'Тарелка, упаковка, этикетка: всё это одно блюдо'),
-      dishes.length ? [h('div', { class: 'section-label' }, 'На чём еда?'), dishPicker(g, n)] : null);
+      dishes.length ? [h('div', { class: 'section-label' }, 'На чём еда?'), dishPicker(g, n)] : null,
+      ingBlock(g, n));
   }
 
   function paint() {
@@ -183,7 +273,7 @@ export default async function render(root, ctx) {
           class: 'btn btn-secondary btn-block', type: 'button',
           onclick: () => {
             if (allPhotos().length >= MAX) { toast(`Не больше ${MAX} фото`); return; }
-            const g = { photos: [], dishId: filled[filled.length - 1].dishId };
+            const g = { photos: [], dishId: filled[filled.length - 1].dishId, note: '', ings: [] };
             groups.push(g);
             haptic('light');
             pick(camera, g);
@@ -204,6 +294,21 @@ export default async function render(root, ctx) {
     mainButton.setDisabled(d);
   }
 
+  // Уточнения по блюдам + общий комментарий одним текстом для модели.
+  function composeNote(filled) {
+    const parts = [];
+    filled.forEach((g, gi) => {
+      const bits = [];
+      if (g.ings.length) {
+        bits.push('состав: ' + g.ings.map((d) => `${d.name}${d.brand ? ` (${d.brand})` : ''}, на 100 г: ${fmtN(d.kcal)} ккал, Б ${fmtN(d.protein)}, Ж ${fmtN(d.fat)}, У ${fmtN(d.carbs)}`).join('; '));
+      }
+      if (g.note.trim()) bits.push(g.note.trim());
+      if (bits.length) parts.push((filled.length > 1 ? `Блюдо ${gi + 1}: ` : '') + bits.join('. '));
+    });
+    if (textTa.value.trim()) parts.push(textTa.value.trim());
+    return parts.join('\n');
+  }
+
   async function submit() {
     if (busy || !valid()) return;
     busy = true;
@@ -220,7 +325,8 @@ export default async function render(root, ctx) {
       }));
       filled.forEach((g) => g.photos.forEach(() => fd.append('dish_id', g.dishId == null ? '' : String(g.dishId))));
       fd.append('groups', owner.join(','));
-      if (textTa.value.trim()) fd.append('comment', textTa.value.trim());
+      const note = composeNote(filled);
+      if (note) fd.append('comment', note);
     } else {
       fd.append('text', textTa.value.trim());
     }
@@ -250,7 +356,7 @@ export default async function render(root, ctx) {
     h('div', { class: 'stack' },
       quick, dishList, capture, noDishHint || document.createDocumentFragment(),
       h('label', { class: 'field' }, textLabel, textTa),
-      camera, gallery));
+      camera, gallery, codeShot));
 
   mainButton.show('Сохранить приём', submit, { disabled: true });
   lastDisabled = true;

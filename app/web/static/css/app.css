@@ -307,6 +307,10 @@ input::placeholder, textarea::placeholder { color: var(--c-hint); opacity: .8; }
 .photo-card { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
 .photo-head { display: flex; gap: 12px; align-items: center; }
 .photo-card .section-label { font-size: 13px; color: var(--c-hint); text-transform: uppercase; letter-spacing: .02em; padding: 2px 6px 0; }
+.photo-card textarea { min-height: 64px; background: color-mix(in srgb, var(--c-hint) 9%, transparent); border-radius: 10px; padding: 10px 12px; }
+.ing-list { background: color-mix(in srgb, var(--c-hint) 9%, transparent); --sep-l: 16px; }
+.ing-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.ing-actions .btn { padding-inline: 6px; gap: 6px; font-size: 14px; min-width: 0; }
 .dish-pick { background: color-mix(in srgb, var(--c-hint) 9%, transparent); --sep-l: 57px; }
 .dish-pick .row.selected { background: color-mix(in srgb, var(--c-accent) 12%, transparent); }
 .radio { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid color-mix(in srgb, var(--c-hint) 60%, transparent); display: grid; place-items: center; color: #fff; }
