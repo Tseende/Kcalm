@@ -58,6 +58,23 @@ export function tile(name, color = 'blue', size = 30) {
   return t;
 }
 
+// Эмодзи из текстов бота -> линейная иконка и цвет (в Мини-аппе эмодзи не показываем)
+const GLYPH = {
+  '🥩': ['egg-fried', 'red'], '💧': ['droplet', 'teal'], '🚶': ['walk', 'green'], '😴': ['bed', 'indigo'],
+  '🍽': ['tools-kitchen', 'orange'], '🌙': ['moon', 'indigo'], '📆': ['calendar', 'blue'], '📝': ['pencil', 'blue'],
+  '🍚': ['bowl', 'orange'], '🧭': ['target', 'purple'], '🧮': ['chart-bar', 'blue'], '⏱': ['clock', 'blue'],
+  '⚖️': ['scale', 'purple'], '⚖': ['scale', 'purple'], '📈': ['chart-bar', 'orange'], '✅': ['check', 'green'],
+};
+const LABEL_GLYPH = { 'Калории': '🍽', 'Белок': '🥩', 'Вода': '💧', 'Шаги': '🚶', 'Сон': '😴', 'Дней с едой': '📆' };
+/** Мягкая плитка с иконкой вместо эмодзи. key: эмодзи или название показателя; color перекрывает цвет по умолчанию. */
+export function glyph(key, size = 36, color) {
+  const [name, col] = GLYPH[LABEL_GLYPH[key] || key] || ['sparkles', 'blue'];
+  const t = h('span', { class: 'stile', 'aria-hidden': 'true' }, icon(name, Math.round(size * 0.56)));
+  t.style.setProperty('--tc', TILE[color || col]);
+  t.style.width = t.style.height = size + 'px';
+  return t;
+}
+
 // --------------------------------------------------------------- formatters
 const nf = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 });
 export const fmtN = (n) => (n === null || n === undefined || isNaN(n) ? '—' : nf.format(Math.round(n * 10) / 10));

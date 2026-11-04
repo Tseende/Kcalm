@@ -1,6 +1,6 @@
 // Weekly mini-goal card: pick one habit for the week, progress is counted from the diary.
 import { api } from '../api.js';
-import { h, icon, toast, haptic, nav, sectionTitle, skeletonCards } from '../ui.js';
+import { h, icon, glyph, toast, haptic, nav, sectionTitle, skeletonCards } from '../ui.js';
 
 const days = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'день' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'дня' : 'дней');
 
@@ -48,7 +48,7 @@ export function weekGoalBlock(ctx, { withRecap = false, compact = false } = {}) 
   function goalCard(g) {
     return h('section', { class: 'card wg-card' + (g.achieved ? ' achieved' : '') },
       h('div', { class: 'wg-top' },
-        h('span', { class: 'wg-ico', 'aria-hidden': 'true' }, g.icon),
+        glyph(g.icon, 36),
         h('div', { class: 'grow' },
           h('div', { class: 'row-title' }, g.title),
           h('div', { class: 'muted small' }, `${g.target} ${days(g.target)} из 7`)),
@@ -64,7 +64,7 @@ export function weekGoalBlock(ctx, { withRecap = false, compact = false } = {}) 
       h('div', { class: 'row-title' }, 'Цель на эту неделю'),
       h('div', { class: 'muted small' }, 'Одна простая привычка. Планка выбрана чуть выше того, что получилось на прошлой неделе.'),
       h('div', { class: 'stack-sm' }, options.map((o) => h('button', { class: 'wg-opt', type: 'button', onclick: () => choose(o) },
-        h('span', { class: 'wg-ico', 'aria-hidden': 'true' }, o.icon),
+        glyph(o.icon, 36),
         h('span', { class: 'grow' }, h('b', null, o.title), h('span', { class: 'muted small wg-sub' }, `${o.target} ${days(o.target)} из 7`)),
         icon('next', 16)))));
   }
@@ -73,7 +73,7 @@ export function weekGoalBlock(ctx, { withRecap = false, compact = false } = {}) 
     const kids = [sectionTitle('Итог прошлой недели')];
     const rows = [];
     if (r.goal) {
-      rows.push(h('div', { class: 'an-item' }, h('span', { class: 'an-mark ' + (r.goal.achieved ? 'good' : '') }, r.goal.achieved ? icon('check', 16) : r.goal.icon),
+      rows.push(h('div', { class: 'an-item' }, h('span', { class: 'an-mark ' + (r.goal.achieved ? 'good' : '') }, icon(r.goal.achieved ? 'check' : 'target', 16)),
         h('span', null, `${r.goal.title}: ${r.goal.done} из ${r.goal.target}. ` + (r.goal.achieved ? 'Цель выполнена.' : 'Планка не взялась, это нормально.'))));
     }
     r.good.forEach((g) => rows.push(h('div', { class: 'an-item' }, h('span', { class: 'an-mark good' }, icon('check', 16)), h('span', null, g))));

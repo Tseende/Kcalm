@@ -2,12 +2,20 @@
 import { api } from '../api.js';
 import { weekGoalBlock } from './weekgoal.js';
 import { lineChart } from '../charts.js';
-import { h, icon, nav, segmented, shortDate, fmtN, skeletonCards, emptyState, errorState, sectionTitle, todayISO, addDays, dateLabel, longDate } from '../ui.js';
+import { h, icon, glyph, nav, segmented, shortDate, fmtN, skeletonCards, emptyState, errorState, sectionTitle, todayISO, addDays, dateLabel, longDate } from '../ui.js';
 
 let curDate = todayISO();
 const PERIODS = [['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц']];
 function loadPeriod() { try { const v = localStorage.getItem('an_period'); return PERIODS.some((x) => x[0] === v) ? v : 'day'; } catch (e) { return 'day'; } }
 function savePeriod(v) { try { localStorage.setItem('an_period', v); } catch (e) { /* ignore */ } }
+// Сводка статусов под заголовком: сколько показателей в норме, около нормы и требуют внимания
+function statusChips(items) {
+  const n = { good: 0, ok: 0, bad: 0 };
+  items.forEach((m) => { if (n[m.status] !== undefined) n[m.status] += 1; });
+  const defs = [['good', 'в норме'], ['ok', 'почти'], ['bad', 'поправить']].filter(([k]) => n[k]);
+  if (!defs.length) return null;
+  return h('div', { class: 'an-chips' }, defs.map(([k, t]) => h('span', { class: 'an-chip ' + k }, h('b', null, String(n[k])), t)));
+}
 const signed = (v, d = 1) => (v > 0 ? '+' : v < 0 ? '−' : '') + fmtN(Math.abs(v), d) + ' кг';
 
 export default async function render(root, ctx) {
@@ -70,17 +78,19 @@ export default async function render(root, ctx) {
     }
     const kids = [h('div', { class: 'card an-head' },
       h('div', { class: 'an-title' }, a.headline),
-      h('div', { class: 'muted small' }, `Разбор за ${word}: ${range}`))];
+      h('div', { class: 'muted small' }, `Разбор за ${word}: ${range}`),
+      statusChips(a.metrics))];
     if (a.focus) {
       kids.push(h('div', { class: 'an-focus' },
         h('div', { class: 'an-focus-k' }, a.period === 'week' ? 'Главное на следующую неделю' : 'Главное на ближайшее время'),
-        h('div', { class: 'an-focus-t' }, (a.focus.icon || '') + ' ' + a.focus.title),
-        h('div', { class: 'an-focus-x' }, a.focus.text)));
+        h('div', { class: 'an-focus-row' },
+          h('span', { class: 'an-focus-ico' }, glyph(a.focus.icon, 44)),
+          h('div', { class: 'an-focus-body' }, h('div', { class: 'an-focus-t' }, a.focus.title), h('div', { class: 'an-focus-x' }, a.focus.text)))));
     }
     if (a.metrics.length) {
       kids.push(sectionTitle('Показатели'),
         h('div', { class: 'card an-metrics' }, a.metrics.map((m) => h('div', { class: 'an-metric' },
-          h('span', { class: 'an-dot ' + m.status, 'aria-hidden': 'true' }),
+          h('span', { class: 'an-ico ' + m.status }, glyph(m.label, 34)),
           h('div', { class: 'an-m-main' },
             h('div', { class: 'an-m-top' }, h('span', { class: 'an-label' }, m.label), h('span', { class: 'an-val' }, m.value)),
             h('div', { class: 'an-m-sub muted small' },
@@ -109,13 +119,13 @@ export default async function render(root, ctx) {
     }
     if (a.patterns.length) {
       kids.push(sectionTitle('Закономерности'),
-        h('div', { class: 'stack-sm' }, a.patterns.map((t) => h('div', { class: 'card an-tip an-pattern' },
-          h('div', { class: 'an-tip-title' }, t.icon + ' ' + t.title), h('div', null, t.text)))));
+        h('div', { class: 'stack-sm' }, a.patterns.map((t) => h('div', { class: 'card an-tip an-pattern' }, glyph(t.icon, 36),
+          h('div', { class: 'an-tip-body' }, h('div', { class: 'an-tip-title' }, t.title), h('div', null, t.text))))));
     }
     if (a.tips.length) {
       kids.push(sectionTitle('Что поправить'),
-        h('div', { class: 'stack-sm' }, a.tips.map((t) => h('div', { class: 'card an-tip' },
-          h('div', { class: 'an-tip-title' }, t.icon + ' ' + t.title), h('div', null, t.text)))));
+        h('div', { class: 'stack-sm' }, a.tips.map((t) => h('div', { class: 'card an-tip' }, glyph(t.icon, 36),
+          h('div', { class: 'an-tip-body' }, h('div', { class: 'an-tip-title' }, t.title), h('div', null, t.text))))));
     }
     if (a.logged_days < Math.ceil(a.days / 2)) {
       kids.push(h('div', { class: 'muted small an-foot' }, 'Записей немного, поэтому выводы приблизительные.'));
@@ -126,11 +136,12 @@ export default async function render(root, ctx) {
   function draw(a) {
     const kids = [h('div', { class: 'card an-head' },
       h('div', { class: 'an-title' }, a.headline),
-      h('div', { class: 'muted small' }, a.closed ? 'Итог дня по записям и данным браслета' : 'День ещё идёт: недобор пока не считаем'))];
+      h('div', { class: 'muted small' }, a.closed ? 'Итог дня по записям и данным браслета' : 'День ещё идёт: недобор пока не считаем'),
+      statusChips(a.rows))];
 
     if (a.rows.length) {
       kids.push(h('div', { class: 'card an-rows' }, a.rows.map((r) => h('div', { class: 'an-row' },
-        h('span', { class: 'an-dot ' + r.status, 'aria-hidden': 'true' }),
+        h('span', { class: 'an-ico ' + r.status }, glyph(r.label, 30)),
         h('span', { class: 'an-label' }, r.label),
         h('span', { class: 'an-val' }, r.value),
         h('span', { class: 'muted small an-goal' }, r.status === 'none' ? '' : 'из ' + r.goal)))));
@@ -141,9 +152,8 @@ export default async function render(root, ctx) {
     }
     if (a.tips.length) {
       kids.push(sectionTitle('Что поправить'),
-        h('div', { class: 'stack-sm' }, a.tips.map((t) => h('div', { class: 'card an-tip' },
-          h('div', { class: 'an-tip-title' }, t.title),
-          h('div', null, t.text)))));
+        h('div', { class: 'stack-sm' }, a.tips.map((t) => h('div', { class: 'card an-tip' }, glyph(t.icon, 36),
+          h('div', { class: 'an-tip-body' }, h('div', { class: 'an-tip-title' }, t.title), h('div', null, t.text))))));
     }
     if (!a.good.length && !a.tips.length) {
       kids.push(emptyState('sparkles', 'Пока нечего анализировать', 'Запишите еду, воду и сон, и здесь появится разбор дня.',
