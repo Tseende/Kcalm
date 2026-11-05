@@ -187,7 +187,7 @@ input::placeholder, textarea::placeholder { color: var(--c-hint); opacity: .8; }
 /* ---------- overlays ---------- */
 .sheet-wrap { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0); display: flex; align-items: flex-end; justify-content: center; transition: background .2s; }
 .sheet-wrap.open { background: rgba(0, 0, 0, .4); }
-.sheet { width: 100%; max-width: 560px; max-height: 88vh; overflow-y: auto; background: var(--c-bg); border-radius: 14px 14px 0 0; padding: 8px 16px calc(16px + var(--safe-b)); transform: translateY(100%); transition: transform .22s ease-out; }
+.sheet { width: 100%; max-width: 560px; max-height: 92vh; overflow-y: auto; overscroll-behavior: contain; outline: none; touch-action: pan-y; background: var(--c-bg); border-radius: 14px 14px 0 0; padding: 8px 16px calc(16px + var(--safe-b)); transform: translateY(100%); transition: transform .22s ease-out; }
 .sheet-wrap.open .sheet { transform: none; }
 .grabber { width: 36px; height: 4px; border-radius: 2px; background: var(--c-sep); margin: 0 auto 10px; }
 .sheet-title { font-size: 17px; font-weight: 600; text-align: center; margin-bottom: 12px; }
@@ -456,7 +456,8 @@ body.kb-open.has-tabbar, body.kb-open.has-main { padding-bottom: calc(var(--kb-h
 .kbbar[hidden] { display: none; }
 body.kb-open.has-main, body.kb-open.has-main.has-tabbar { padding-bottom: calc(var(--kb-h) + 92px); }
 body.kb-open .sheet-wrap { padding-bottom: var(--kb-h); }
-body.kb-open .sheet { max-height: calc(88vh - var(--kb-h)); }
+body.kb-open .sheet { max-height: calc(92vh - var(--kb-h)); }
+body.sheet-open { overflow: hidden; }
 /* поля не должны уезжать под липкую шапку и нижние панели при прокрутке к ним */
 input, textarea, select { scroll-margin-top: calc(var(--safe-t) + 70px); scroll-margin-bottom: 90px; }
 
@@ -974,3 +975,19 @@ input.time-in[type="time"] { width: 104px; flex: none; min-height: 36px; padding
 .today .water-card .quick .btn-tonal small { font-size: 12px; color: var(--c-hint); }
 .today .water-card .quick .btn-tonal:active { background: color-mix(in srgb, var(--c-water) 20%, transparent); }
 .today .water-undo { width: 36px; height: 36px; border-radius: 50%; }
+
+/* избранное */
+.fav-thumb { width: 48px; height: 48px; border-radius: 12px; overflow: hidden; flex: none; background: var(--c-fill); display: block; }
+.fav-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fav-photo { border-radius: 18px; overflow: hidden; background: var(--c-fill); height: 190px; display: flex; align-items: center; justify-content: center; }
+.fav-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fav-photo.ph { height: 110px; }
+
+/* ввод словами: поле наверху, остальное убрано (только когда открыта клавиатура) */
+body.kb-open .screen.compose .stack > :not(.compose-keep) { display: none; }
+body.kb-open .screen.compose textarea { min-height: 34vh; }
+.scan-quick { margin-top: 10px; }
+
+.kbbar:not([hidden]) { display: flex; gap: 10px; }
+.kbbar .kbbar-hide { flex: 0 0 auto; padding-inline: 16px; }
+.kbbar .btn-block { flex: 1; width: auto; }

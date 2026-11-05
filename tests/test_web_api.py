@@ -1010,6 +1010,54 @@ async def test_favorites_flow(client):
     assert (await client.post(f"/api/favorites/{fav_id}/repeat", headers=H)).status == 404
 
 
+async def test_favorite_custom_edit_repeat_and_diary_untouched(client):
+    """Избранное с нуля не попадает в дневник; правка состава не меняет исходный приём."""
+    created = await client.post("/api/favorites/custom", headers=H, json={
+        "title": "Мой омлет", "note": "на сливочном масле", "kcal": 320, "protein": 20, "fat": 24, "carbs": 3})
+    assert created.status == 201
+    fav_id = (await created.json())["id"]
+    dup = await client.post("/api/favorites/custom", headers=H, json={"title": "мой омлет", "kcal": 1})
+    assert dup.status == 409
+    assert (await client.post("/api/favorites/custom", headers=H, json={"title": "", "kcal": 5})).status == 400
+
+    day = await (await client.get("/api/day", headers=H)).json()
+    assert day["meals"] == []                                          # шаблон в дневнике не виден
+    got = await (await client.get(f"/api/favorites/{fav_id}", headers=H)).json()
+    assert (got["title"], got["note"], got["kcal"], got["protein"]) == ("Мой омлет", "на сливочном масле", 320, 20.0)
+
+    patched = await client.patch(f"/api/favorites/{fav_id}", headers=H, json={"kcal": 350, "fat": 27, "note": "без соли"})
+    assert patched.status == 200
+    new = await patched.json()
+    assert (new["kcal"], new["fat"], new["protein"], new["note"], new["title"]) == (350, 27.0, 20.0, "без соли", "Мой омлет")
+
+    rep = await client.post(f"/api/favorites/{fav_id}/repeat", headers=H)
+    assert rep.status == 201 and (await rep.json())["kcal"] == 350
+    listed = (await (await client.get("/api/favorites", headers=H)).json())["items"]
+    assert [i["id"] for i in listed] == [fav_id]
+
+    # правка избранного, созданного из приёма, не меняет сам приём в дневнике
+    await _two_colas(client)
+    items = (await (await client.get("/api/frequent", headers=H)).json())["items"]
+    meal_id = next(i["meal_id"] for i in items if i["title"] == "Кола")
+    cola_fav = (await (await client.post("/api/favorites", json={"meal_id": meal_id}, headers=H)).json())["id"]
+    await client.patch(f"/api/favorites/{cola_fav}", headers=H, json={"title": "Кола 0,5", "kcal": 99})
+    assert (await (await client.get(f"/api/meals/{meal_id}", headers=H)).json())["kcal"] == 140
+    assert (await (await client.get(f"/api/favorites/{cola_fav}", headers=H)).json())["kcal"] == 99
+    assert (await client.patch("/api/favorites/424242", headers=H, json={"title": "x"})).status == 404
+
+
+async def test_meal_product_logs_portion_without_llm(client):
+    r = await client.post("/api/meals/product", headers=H, json={
+        "name": "Батончик", "brand": "Snickers", "grams": 50, "kcal": 480, "protein": 8, "fat": 24, "carbs": 60})
+    assert r.status == 201
+    body = await r.json()
+    assert body["kcal"] == 240
+    meal = await (await client.get(f"/api/meals/{body['id']}", headers=H)).json()
+    assert meal["items"][0]["grams"] == 50 and meal["protein"] == 4.0
+    assert (await client.post("/api/meals/product", headers=H, json={"name": "", "grams": 5, "kcal": 1})).status == 400
+    assert (await client.post("/api/meals/product", headers=H, json={"name": "x", "grams": 0, "kcal": 1})).status == 400
+
+
 async def test_favorites_validation_and_isolation(client, db):
     assert (await client.post("/api/favorites", json={"meal_id": 424242}, headers=H)).status == 404
     assert (await client.post("/api/favorites", json={}, headers=H)).status == 400

@@ -1,28 +1,25 @@
 // "Мои продукты" list
 import { api } from '../api.js';
 import { foodPic, foodGroupOf, FOOD_GROUPS } from '../pics.js';
-import { h, icon, tile, nav, pageHead, sheet, skeletonCards, emptyState, errorState, debounce, fmtN, plural, segmented } from '../ui.js';
+import { h, icon, tile, nav, pageHead, sheet, skeletonCards, emptyState, errorState, debounce, fmtN, plural, mainButton } from '../ui.js';
 import { drinkPic } from '../pics.js';
 
 const PALETTE = ['blue', 'green', 'orange', 'purple', 'teal', 'pink', 'red'];
-const ORDER = [...FOOD_GROUPS.map(([t]) => t), 'Другое'];
+const ORDER = [...new Set([...FOOD_GROUPS.map(([t]) => t), 'Другое'])];
+const DRINKS = '\u0000drinks';   // служебный ключ чипа «Напитки» (каталог напитков, не свои продукты)
 
 export default async function render(root, ctx) {
   const view = h('div', { class: 'screen' });
   const list = h('div', { class: 'stack' });
   const chips = h('div', { class: 'chips scroll', role: 'tablist', 'aria-label': 'Категории' });
-  chips.hidden = true;
-  const search = h('input', { type: 'search', placeholder: 'Поиск по названию или бренду', 'aria-label': 'Поиск продуктов', autocomplete: 'off', oninput: debounce(() => load(), 250) });
-  const addBtn = h('button', { class: 'icon-btn accent', type: 'button', 'aria-label': 'Добавить продукт', 'aria-haspopup': 'dialog', onclick: openAdd }, icon('plus'));
-  let mode = 'food'; // food — свои продукты, drinks — каталог напитков
-  const modeSeg = segmented([['food', 'Продукты'], ['drinks', 'Напитки']], mode, (v) => { mode = v; addBtn.hidden = v === 'drinks'; search.placeholder = v === 'drinks' ? 'Поиск напитка' : 'Поиск по названию или бренду'; load(); }, 'Раздел');
+  const search = h('input', { type: 'search', placeholder: 'Поиск по названию или бренду', 'aria-label': 'Поиск', autocomplete: 'off', oninput: debounce(() => load(), 250) });
   view.append(
-    pageHead('Мои продукты', { parent: '/menu', right: addBtn }),
-    modeSeg,
+    pageHead('Мои продукты', { parent: '/menu' }),
     h('div', { class: 'search' }, icon('search', 18), search),
     chips,
     list);
   root.append(view);
+  mainButton.show('Добавить продукт', () => openAdd());
 
   let all = [];
   let cat = null;
@@ -46,13 +43,15 @@ export default async function render(root, ctx) {
       const g = foodGroupOf(p.name, p.icon);
       groups.set(g, (groups.get(g) || 0) + 1);
     }
-    if (cat && !groups.has(cat)) cat = null;
-    const showChips = all.length >= 4 && groups.size >= 2;
-    chips.hidden = !showChips;
-    if (!showChips) cat = null;
+    if (cat && cat !== DRINKS && !groups.has(cat)) cat = null;
     const mk = (key, text) => h('button', { type: 'button', role: 'tab', class: 'chip' + (cat === key ? ' active' : ''), 'aria-selected': String(cat === key),
-      onclick: () => { cat = key; paint(); } }, text);
-    chips.replaceChildren(mk(null, `Все ${all.length}`), ...ORDER.filter((g) => groups.has(g)).map((g) => mk(g, `${g} ${groups.get(g)}`)));
+      onclick: () => { cat = key; search.placeholder = key === DRINKS ? 'Поиск напитка' : 'Поиск по названию или бренду'; paint(); load(); } }, text);
+    const keepX = chips.scrollLeft;
+    chips.replaceChildren(mk(null, `Все ${all.length}`), ...ORDER.filter((g) => groups.has(g)).map((g) => mk(g, `${g} ${groups.get(g)}`)), mk(DRINKS, 'Напитки'));
+    // Лента пересобирается при выборе: возвращаем прокрутку и держим выбранную вкладку на виду.
+    chips.scrollLeft = keepX;
+    chips.querySelector('.chip.active')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+    if (cat === DRINKS) return;
     const shown = cat ? all.filter((p) => foodGroupOf(p.name, p.icon) === cat) : all;
     list.replaceChildren(h('div', { class: 'list tiles prod-list' }, shown.map((p) => h('button', { class: 'row prod-row', type: 'button', onclick: () => nav.go('/menu/product/' + p.id) },
       foodPic(p.name, 48, p.icon) || tile('package', PALETTE[Math.abs(Number(p.id) || 0) % PALETTE.length]),
@@ -67,11 +66,10 @@ export default async function render(root, ctx) {
   // Напитки: готовый каталог с калориями на 100 мл; тап открывает ввод напитка с этим выбором.
   async function loadDrinks() {
     const q = search.value.trim().toLowerCase();
-    chips.hidden = true;
     if (!list.children.length) list.replaceChildren(skeletonCards(3, 64));
     try {
       const { drinks } = await api.get('/drinks');
-      if (!ctx.alive() || mode !== 'drinks') return;
+      if (!ctx.alive() || cat !== DRINKS) return;
       const shown = drinks.filter((d) => !q || d.name.toLowerCase().includes(q));
       if (!shown.length) { list.replaceChildren(emptyState('search', 'Ничего не найдено', 'Попробуйте другое название.')); return; }
       list.replaceChildren(h('div', { class: 'list tiles prod-list' }, shown.map((d) => h('button', {
@@ -88,7 +86,7 @@ export default async function render(root, ctx) {
   }
 
   async function load() {
-    if (mode === 'drinks') return loadDrinks();
+    if (cat === DRINKS) return loadDrinks();
     const q = search.value.trim();
     if (!list.children.length) list.replaceChildren(skeletonCards(3, 64));
     try {
@@ -96,7 +94,7 @@ export default async function render(root, ctx) {
       if (!ctx.alive() || q !== search.value.trim()) return;
       all = products;
       if (!products.length) {
-        chips.hidden = true;
+        paint();
         list.replaceChildren(q ? emptyState('search', 'Ничего не найдено', 'Попробуйте другое название.')
           : emptyState('package', 'Своих продуктов пока нет', 'Сохраняйте продукты с этикетки или из приёма пищи: они сразу будут учитываться при распознавании.'));
         return;

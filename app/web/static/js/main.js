@@ -1,7 +1,7 @@
 // Router + tab bar + Telegram bootstrap.
 import { api, isMock, onMockEnabled, tg, inTelegram } from './api.js';
 import { initKeyboard } from './keyboard.js';
-import { h, $, icon, tile, sheet, nav, mainButton, backButton, emptyState, errorState, haptic } from './ui.js';
+import { h, $, icon, tile, sheet, nav, mainButton, backButton, emptyState, errorState, haptic, closeAllSheets } from './ui.js';
 import { mealPic, drinkPic } from './pics.js';
 
 const R = (re, load, opts = {}) => ({ re: new RegExp('^' + re + '$'), load, ...opts });
@@ -23,6 +23,7 @@ const routes = [
   R('/menu/profile', () => import('./screens/profile.js'), { parent: '/menu' }),
   R('/menu/reminders', () => import('./screens/reminders.js'), { parent: '/menu' }),
   R('/menu/favorites', () => import('./screens/favorites.js'), { parent: '/menu' }),
+  R('/menu/favorite/(new|\\d+)', () => import('./screens/favorite.js'), { keys: ['id'], parent: '/menu/favorites' }),
   R('/menu/(goals|export|about|appearance|help)', () => import('./screens/info.js'), { keys: ['page'], parent: '/menu' }),
 ];
 
@@ -104,7 +105,7 @@ async function render() {
   const my = ++rid;
   if (cleanup) { try { cleanup(); } catch (e) { console.error(e); } cleanup = null; }
   mainButton.hide();
-  document.querySelectorAll('#overlay .sheet-wrap').forEach((x) => x.remove());
+  closeAllSheets();
   const found = match(path);
   if (!found) { nav.replace('/today'); return; }
   const { r, params } = found;

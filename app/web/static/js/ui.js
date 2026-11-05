@@ -194,7 +194,13 @@ function showKbBar() {
     onpointerdown: (e) => e.preventDefault(),
     onclick: () => { if (mbCb && !mbState.disabled) { document.activeElement?.blur?.(); mbCb(); } },
   });
-  kbBar.replaceChildren(kbBtn);
+  // Слева «Свернуть»: убрать клавиатуру, введённый текст остаётся.
+  const kbHide = h('button', {
+    class: 'btn btn-secondary kbbar-hide', type: 'button',
+    onpointerdown: (e) => e.preventDefault(),
+    onclick: () => document.activeElement?.blur?.(),
+  }, 'Свернуть');
+  kbBar.replaceChildren(kbHide, kbBtn);
   kbBar.hidden = false;
   paintKbBtn();
 }
@@ -347,29 +353,72 @@ export function toast(msg, kind = '', { undo } = {}) {
 // Screens that show diary data listen for this to reload after changes made elsewhere (undo).
 export function dataChanged() { window.dispatchEvent(new Event('app:data')); }
 
+const openSheets = new Set();
+export function closeAllSheets() { [...openSheets].forEach((s) => s.close()); }
+
 export function sheet({ title, content, onClose } = {}) {
   const wrap = h('div', { class: 'sheet-wrap' });
-  const panel = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title || 'Окно' },
+  const panel = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title || 'Окно', tabindex: '-1' },
     h('div', { class: 'grabber' }),
     title ? h('div', { class: 'sheet-title' }, title) : null,
     content);
+  const prevFocus = document.activeElement;
+  const prevBack = bbCb;
   let closed = false;
+  const api_ = { close, el: panel };
   function close() {
     if (closed) return;
     closed = true;
+    openSheets.delete(api_);
     document.removeEventListener('keydown', onKey);
+    if (!openSheets.size) document.body.classList.remove('sheet-open');
+    if (inTelegram && tg.BackButton) { if (prevBack) backButton.show(prevBack); else backButton.hide(); }
+    wrap.style.pointerEvents = 'none';
     wrap.classList.remove('open');
+    panel.style.transform = '';
     setTimeout(() => wrap.remove(), 220);
+    if (prevFocus && prevFocus.isConnected && prevFocus.focus) { try { prevFocus.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
     if (onClose) onClose();
   }
   function onKey(e) { if (e.key === 'Escape') close(); }
   wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
+
+  // Свайп вниз закрывает шторку: тянем с любого места, если содержимое прокручено к началу.
+  let y0 = 0, dy = 0, t0 = 0, drag = false;
+  panel.addEventListener('touchstart', (e) => {
+    drag = false; dy = 0;
+    if (e.touches.length !== 1) return;
+    y0 = e.touches[0].clientY; t0 = Date.now();
+  }, { passive: true });
+  panel.addEventListener('touchmove', (e) => {
+    if (e.touches.length !== 1) return;
+    const d = e.touches[0].clientY - y0;
+    if (!drag && d > 8 && panel.scrollTop <= 0) { drag = true; panel.style.transition = 'none'; }
+    if (!drag) return;
+    dy = Math.max(0, d);
+    panel.style.transform = `translateY(${dy}px)`;
+    if (e.cancelable) e.preventDefault();
+  }, { passive: false });
+  const release = () => {
+    if (!drag) return;
+    drag = false;
+    panel.style.transition = '';
+    if (dy > 110 || (dy > 40 && Date.now() - t0 < 250)) close();
+    else panel.style.transform = '';
+  };
+  panel.addEventListener('touchend', release);
+  panel.addEventListener('touchcancel', release);
+
   document.addEventListener('keydown', onKey);
+  openSheets.add(api_);
+  document.body.classList.add('sheet-open');
+  if (inTelegram && tg.BackButton) backButton.show(close);   // «Назад» Telegram сначала закрывает шторку
   wrap.append(panel);
   $('#overlay').append(wrap);
   requestAnimationFrame(() => wrap.classList.add('open'));
   setTimeout(() => wrap.classList.add('open'), 60);
-  return { close, el: panel };
+  try { panel.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
+  return api_;
 }
 
 export function skel(height = 16, width = '100%', extra = '') {

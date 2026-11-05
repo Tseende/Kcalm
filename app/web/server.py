@@ -23,6 +23,7 @@ from app.adapters import off
 from app.config import Config, get_config
 from app.domain import dishes as dishdom
 from app.domain import drinks as drinksdom
+from app.domain import manual as manualdom
 from app.domain import water as waterdom
 from app.domain import weekgoal as weekgoaldom
 from app.domain import weighin
@@ -506,6 +507,28 @@ def _meal_response(db, user, meal_id: int, status: int = 200) -> web.Response:
     return ok(data, status)
 
 
+@routes.post("/api/meals/product")
+async def api_meal_product(request: web.Request) -> web.Response:
+    """Продукт целиком одним приёмом (скан штрихкода): значения на 100 г и порция, без LLM."""
+    db, user, _ = ctx(request)
+    data = await read_json(request)
+    name = str(data.get("name") or "").strip()
+    if not name or len(name) > 120:
+        raise bad("Нет названия продукта.", "bad_field")
+    brand = str(data.get("brand") or "").strip()
+    grams = number(data, "grams", 1, 3000, required=True)
+    calc = manualdom.portion_calculation(
+        f"{name} ({brand})" if brand and brand.lower() not in name.lower() else name, grams,
+        number(data, "kcal", 0, 1000, required=True), number(data, "protein", 0, 100) or 0.0,
+        number(data, "fat", 0, 100) or 0.0, number(data, "carbs", 0, 100) or 0.0)
+    now = now_local(user)
+    local_date, local_time = now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
+    meal_id = repo.save_meal(
+        db, user["id"], meals_svc.utc_of(user["tz"], local_date, local_time), local_date, local_time,
+        foodsvc.guess_meal_type(None, local_time, None), "manual", calc)
+    return ok({"id": meal_id, "kcal": calc.kcal_total}, 201)
+
+
 @routes.get("/api/meals/{id}")
 async def api_meal_get(request: web.Request) -> web.Response:
     db, user, _ = ctx(request)
@@ -617,7 +640,7 @@ async def api_frequent(request: web.Request) -> web.Response:
         limit = 8
     today = now_local(user).strftime("%Y-%m-%d")
     favorites = repo.list_favorites(db, user["id"], limit=limit)
-    items = [{"meal_id": f["meal_id"], "favorite_id": f["id"], "title": _short_title(f["names"]),
+    items = [{"meal_id": f["meal_id"], "favorite_id": f["id"], "title": f["title"] or _short_title(f["names"]),
               "names": f["names"], "kcal": int(f["kcal"]), "count": 0} for f in favorites]
     have = {repo.meal_signature(f["names"]) for f in favorites}
     for f in repo.frequent_meals(db, user["id"], limit=limit + len(have), today=today):
@@ -628,6 +651,93 @@ async def api_frequent(request: web.Request) -> web.Response:
         items.append({"meal_id": f["meal_id"], "favorite_id": None, "title": _short_title(f["names"]),
                       "names": f["names"], "kcal": int(f["kcal"]), "count": f["count"]})
     return ok({"items": items})
+
+
+def _favorite_json(f: dict) -> dict:
+    return {"id": f["id"], "title": f["title"] or _short_title(f["names"]), "note": f["note"],
+            "names": f["names"], "kcal": int(f["kcal"]), "protein": round(float(f["protein"] or 0), 1),
+            "fat": round(float(f["fat"] or 0), 1), "carbs": round(float(f["carbs"] or 0), 1),
+            "photo_url": f"/api/favorites/{f['id']}/photo" if f.get("has_photo") else None}
+
+
+def _favorite_fields(data: dict, *, partial: bool) -> tuple[str | None, str | None, "object | None"]:
+    """Название, заметка и (если переданы все четыре числа) новый состав порции."""
+    title = None
+    if "title" in data or not partial:
+        title = str(data.get("title") or "").strip()
+        if not title:
+            raise bad("Назовите блюдо.", "bad_field")
+        if len(title) > 80:
+            raise bad("Название не длиннее 80 символов.", "bad_field")
+    note = None
+    if "note" in data:
+        note = str(data.get("note") or "").strip()
+        if len(note) > 500:
+            raise bad("Заметка не длиннее 500 символов.", "bad_field")
+    calc = None
+    if any(k in data for k in ("kcal", "protein", "fat", "carbs")) or not partial:
+        kcal = number(data, "kcal", 0, 5000, required=True)
+        protein = number(data, "protein", 0, 500) or 0.0
+        fat = number(data, "fat", 0, 500) or 0.0
+        carbs = number(data, "carbs", 0, 1000) or 0.0
+        calc = manualdom.totals_calculation(title or "Блюдо", kcal, protein, fat, carbs)
+    return title, note, calc
+
+
+@routes.get("/api/favorites")
+async def api_favorites(request: web.Request) -> web.Response:
+    db, user, _ = ctx(request)
+    return ok({"items": [_favorite_json(f) for f in repo.list_favorites(db, user["id"], limit=100)]})
+
+
+@routes.get("/api/favorites/{id}")
+async def api_favorite_get(request: web.Request) -> web.Response:
+    db, user, _ = ctx(request)
+    fav = repo.get_favorite(db, user["id"], path_id(request))
+    if fav is None:
+        raise ApiError(404, "not_found", "Избранное не найдено.")
+    return ok(_favorite_json(fav))
+
+
+@routes.get("/api/favorites/{id}/photo")
+async def api_favorite_photo(request: web.Request) -> web.StreamResponse:
+    db, user, config = ctx(request)
+    path = repo.favorite_photo_path(db, user["id"], path_id(request))
+    if path is None:
+        raise ApiError(404, "not_found", "Фото нет.")
+    return serve_photo(config, path)
+
+
+@routes.post("/api/favorites/custom")
+async def api_favorite_custom(request: web.Request) -> web.Response:
+    """Избранное с нуля: название, ккал и БЖУ порции, заметка. В дневник не попадает."""
+    db, user, _ = ctx(request)
+    title, note, calc = _favorite_fields(await read_json(request), partial=False)
+    fav_id = repo.create_favorite_custom(db, user["id"], title, note, calc)
+    if fav_id is None:
+        raise ApiError(409, "exists", "Блюдо с таким названием уже есть в избранном.")
+    return ok({"id": fav_id}, 201)
+
+
+@routes.patch("/api/favorites/{id}")
+async def api_favorite_patch(request: web.Request) -> web.Response:
+    db, user, _ = ctx(request)
+    fav_id = path_id(request)
+    old = repo.get_favorite(db, user["id"], fav_id)
+    if old is None:
+        raise ApiError(404, "not_found", "Избранное не найдено.")
+    data = await read_json(request)
+    if any(k in data for k in ("kcal", "protein", "fat", "carbs")):      # недостающие числа берём из текущих
+        data = {**{k: old[k] for k in ("kcal", "protein", "fat", "carbs")}, **data}
+    title, note, calc = _favorite_fields(data, partial=True)
+    if title is None:
+        title = old["title"]
+    if note is None:
+        note = old["note"]
+    if calc is not None and "title" not in data and not old["title"]:
+        calc.items[0].name_ru = old["names"][0] if old["names"] else "Блюдо"
+    repo.update_favorite(db, user["id"], fav_id, title=title, note=note, calc=calc)
+    return ok(_favorite_json(repo.get_favorite(db, user["id"], fav_id)))
 
 
 @routes.post("/api/favorites")

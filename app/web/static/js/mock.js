@@ -275,6 +275,18 @@ const WG_KINDS = {
   late: { icon: '🌙', title: 'Без поздней еды', hint: 'Ужин на час раньше и с белком, так вечером меньше тянет.' },
 };
 const mockFavs = {}; // meal_id -> favorite_id
+const customFavs = [];   // избранное, созданное с нуля
+const favEdits = {};     // правки полей избранного по id
+const FREQ = [
+  { meal_id: 1, title: 'Овсянка с бананом +1', names: ['Овсянка с бананом', 'Кофе с молоком'], kcal: 410, protein: 16, fat: 11, carbs: 62, count: 9 },
+  { meal_id: 2, title: 'Гречка +1', names: ['Гречка', 'Куриная грудка'], kcal: 520, protein: 41, fat: 12, carbs: 58, count: 6 },
+  { meal_id: 3, title: 'Творог 5%', names: ['Творог 5%'], kcal: 180, protein: 30, fat: 5, carbs: 3, count: 4 },
+  { meal_id: 4, title: 'Капучино', names: ['Капучино'], kcal: 98, protein: 5, fat: 5, carbs: 8, count: 3 },
+];
+function favList() {
+  const starred = FREQ.filter((f) => mockFavs[f.meal_id]).map((f) => ({ ...f, id: mockFavs[f.meal_id], note: null, photo_url: null }));
+  return [...customFavs, ...starred].map((f) => ({ ...f, ...(favEdits[f.id] || {}) }));
+}
 let weekGoal = null;
 function weekGoalMock() {
   const recap = { week_start: '2026-10-26', good: ['Белок держится у цели', 'Воды хватает'], goal: { kind: 'water', icon: '💧', title: 'Вода в норме', done: 5, target: 4, achieved: true } };
@@ -445,13 +457,28 @@ const routes = [
   }],
   ['POST', /^\/activity$/, (m, q, b) => { const bd = body.get(b.date || todayISO()); if (bd) { if (b.steps) bd.steps = b.steps; if (b.active_kcal) bd.active_kcal = b.active_kcal; } return { ok: true }; }],
   ['GET', /^\/frequent$/, () => ({ items: [
-    { meal_id: 1, favorite_id: mockFavs[1] || null, title: 'Овсянка с бананом +1', names: ['Овсянка с бананом', 'Кофе с молоком'], kcal: 410, count: 9 },
-    { meal_id: 2, favorite_id: mockFavs[2] || null, title: 'Гречка +1', names: ['Гречка', 'Куриная грудка'], kcal: 520, count: 6 },
-    { meal_id: 3, favorite_id: mockFavs[3] || null, title: 'Творог 5%', names: ['Творог 5%'], kcal: 180, count: 4 },
-    { meal_id: 4, favorite_id: mockFavs[4] || null, title: 'Капучино', names: ['Капучино'], kcal: 98, count: 3 }]
-    .sort((a, b) => (b.favorite_id ? 1 : 0) - (a.favorite_id ? 1 : 0)) })],
-  ['POST', /^\/favorites$/, (m, q, b) => { mockFavs[b.meal_id] = 100 + Number(b.meal_id); return { id: mockFavs[b.meal_id] }; }],
-  ['DELETE', /^\/favorites\/(\d+)$/, (m) => { for (const k of Object.keys(mockFavs)) if (mockFavs[k] === Number(m[1])) delete mockFavs[k]; return null; }],
+    ...favList().map((f) => ({ meal_id: f.meal_id, favorite_id: f.id, title: f.title, names: f.names, kcal: f.kcal, count: 0 })),
+    ...FREQ.filter((f) => !mockFavs[f.meal_id]).map((f) => ({ meal_id: f.meal_id, favorite_id: null, title: f.title, names: f.names, kcal: f.kcal, count: f.count }))] })],
+  ['GET', /^\/favorites$/, () => ({ items: favList() })],
+  ['GET', /^\/favorites\/(\d+)$/, (m) => { const f = favList().find((x) => x.id === +m[1]); if (!f) throw notFound(); return f; }],
+  ['POST', /^\/favorites\/custom$/, (m, q, b) => {
+    const id = 500 + customFavs.length + 1;
+    customFavs.unshift({ id, meal_id: id, title: b.title, note: b.note || null, kcal: Math.round(b.kcal), protein: +b.protein || 0, fat: +b.fat || 0, carbs: +b.carbs || 0, names: [b.title], photo_url: null });
+    return { id };
+  }, 201],
+  ['PATCH', /^\/favorites\/(\d+)$/, (m, q, b) => {
+    const f = favList().find((x) => x.id === +m[1]);
+    if (!f) throw notFound();
+    favEdits[f.id] = { ...(favEdits[f.id] || {}), ...b };
+    return favList().find((x) => x.id === +m[1]);
+  }],
+  ['POST', /^\/favorites$/, (m, q, b) => { mockFavs[b.meal_id] = 100 + Number(b.meal_id); return { id: mockFavs[b.meal_id] }; }, 201],
+  ['DELETE', /^\/favorites\/(\d+)$/, (m) => {
+    for (const k of Object.keys(mockFavs)) if (mockFavs[k] === Number(m[1])) delete mockFavs[k];
+    const i = customFavs.findIndex((x) => x.id === Number(m[1])); if (i >= 0) customFavs.splice(i, 1);
+    return null;
+  }],
+  ['POST', /^\/meals\/product$/, (m, q, b) => ({ id: 9002, kcal: Math.round(b.kcal * b.grams / 100) }), 201],
   ['POST', /^\/favorites\/(\d+)\/repeat$/, () => ({ id: 9001, kcal: 410 })],
   ['POST', /^\/meals\/(\d+)\/repeat$/, () => ({ id: 9001, kcal: 410 })],
   ['GET', /^\/week-goal$/, () => weekGoalMock()],

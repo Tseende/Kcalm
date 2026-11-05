@@ -1,7 +1,7 @@
 // Add meal: dishes (each = several photos + one plate) and/or a text description. Time and meal type are set by the server (now).
 import { api } from '../api.js';
 import {
-  h, icon, tile, toast, haptic, nav, mainButton, draft, pageHead, compressImage, busyOverlay, dishKind, sheet, fmtN,
+  h, icon, tile, toast, haptic, nav, mainButton, draft, pageHead, compressImage, busyOverlay, dishKind, sheet, fmtN, numInput, numVal, frow,
 } from '../ui.js';
 import { scanBarcode, decodeFile, validBarcode } from '../scanner.js';
 import { dishInfo } from './dishes.js';
@@ -136,7 +136,50 @@ export default async function render(root, ctx) {
     haptic('success');
     paint();
   };
+  // Быстрый путь: штрихкод -> продукт -> порция -> приём записан целиком, без редактирования состава.
+  async function quickByCode(raw) {
+    const code = String(raw || '').replace(/\D/g, '');
+    if (!validBarcode(code)) { toast('Штрихкод не подходит: проверьте цифры', 'error'); return; }
+    const stop = busyOverlay('Ищу продукт…', 'Open Food Facts');
+    let d;
+    try { d = (await api.get('/products/barcode/' + code)).draft; } catch (e) {
+      stop();
+      toast(e.status === 404 ? 'В базе такого штрихкода нет. Сфотографируйте этикетку' : e.message, 'error');
+      return;
+    }
+    stop();
+    quickPortion(d);
+  }
+  function quickPortion(d) {
+    const per = d.default_grams || d.unit_grams || 100;
+    const grams = numInput({ value: per, min: 1, max: 3000, step: 1, 'aria-label': 'Граммы' });
+    const total = h('span', { class: 'row-title' });
+    const calc = () => {
+      const g = numVal(grams) || 0;
+      total.textContent = `${fmtN(Math.round((d.kcal || 0) * g / 100))} ккал · Б ${fmtN(+((d.protein || 0) * g / 100).toFixed(1))} · Ж ${fmtN(+((d.fat || 0) * g / 100).toFixed(1))} · У ${fmtN(+((d.carbs || 0) * g / 100).toFixed(1))}`;
+    };
+    grams.addEventListener('input', calc);
+    calc();
+    const add = h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: async () => {
+      const g = numVal(grams);
+      if (!g || g <= 0) { toast('Укажите граммы', 'error'); return; }
+      add.disabled = true;
+      try {
+        const r = await api.post('/meals/product', { name: d.name, brand: d.brand, grams: g, kcal: d.kcal, protein: d.protein, fat: d.fat, carbs: d.carbs });
+        haptic('success');
+        sh.close();
+        mainButton.hide();
+        nav.replace('/meal/' + r.id);
+      } catch (e) { add.disabled = false; toast(e.message, 'error'); }
+    } }, 'Записать приём');
+    const sh = sheet({ title: d.name, content: h('div', { class: 'stack' },
+      d.brand ? h('div', { class: 'muted center' }, d.brand) : null,
+      h('div', { class: 'muted small center' }, `${fmtN(d.kcal)} ккал · Б ${fmtN(d.protein)} · Ж ${fmtN(d.fat)} · У ${fmtN(d.carbs)} на 100 г`),
+      h('div', { class: 'fgroup' }, h('div', { class: 'list form' }, frow('Съели, г', grams))),
+      total, add) });
+  }
   async function ingByCode(g, raw) {
+    if (!g) return quickByCode(raw);
     const code = String(raw || '').replace(/\D/g, '');
     if (!validBarcode(code)) { toast('Штрихкод не подходит: проверьте цифры', 'error'); return; }
     const stop = busyOverlay('Ищу продукт…', 'Open Food Facts');
@@ -157,9 +200,10 @@ export default async function render(root, ctx) {
       h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: go }, 'Найти')) });
     setTimeout(() => inp.focus(), 250);
   }
+  let codeFor = null;   // для кого читаем штрихкод: блюдо (состав) или null (быстрая запись продукта)
   const codeShot = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, onchange: async () => {
     const f = codeShot.files[0];
-    const g = target;
+    const g = codeFor;
     codeShot.value = '';
     if (!f) return;
     const stop = busyOverlay('Читаю штрихкод…');
@@ -170,7 +214,8 @@ export default async function render(root, ctx) {
   } });
   async function scanIng(g) {
     haptic('light');
-    target = g;
+    codeFor = g;
+    if (g) target = g;
     const r = await scanBarcode();
     if (!r) return;
     if (r.code) { ingByCode(g, r.code); return; }
@@ -266,7 +311,8 @@ export default async function render(root, ctx) {
         h('div', { class: 'capture-sub' }, `Можно до ${MAX} фото: тарелка, упаковка, этикетка. Другое блюдо добавляется отдельно`),
         h('div', { class: 'capture-actions' },
           h('button', { class: 'btn btn-primary', type: 'button', onclick: () => pick(camera, groups[0]) }, icon('camera', 20), 'Снять'),
-          h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => pick(gallery, groups[0]) }, icon('image', 20), 'Галерея')));
+          h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => pick(gallery, groups[0]) }, icon('image', 20), 'Галерея')),
+        h('button', { class: 'btn btn-tonal btn-block scan-quick', type: 'button', onclick: () => scanIng(null) }, icon('barcode', 20), 'Штрихкод продукта'));
     } else {
       capture.replaceChildren(
         h('button', {
@@ -355,8 +401,12 @@ export default async function render(root, ctx) {
     pageHead('Приём пищи', { parent: '/today' }),
     h('div', { class: 'stack' },
       quick, dishList, capture, noDishHint || document.createDocumentFragment(),
-      h('label', { class: 'field' }, textLabel, textTa),
+      h('label', { class: 'field compose-keep' }, textLabel, textTa),
       camera, gallery, codeShot));
+
+  // Пока пишете словами, всё лишнее прячется: поле выходит наверх и не прячется за клавиатурой и кнопкой.
+  textTa.addEventListener('focus', () => { view.classList.add('compose'); window.scrollTo(0, 0); });
+  textTa.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== textTa) view.classList.remove('compose'); }, 80));
 
   mainButton.show('Сохранить приём', submit, { disabled: true });
   lastDisabled = true;

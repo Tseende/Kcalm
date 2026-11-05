@@ -399,18 +399,81 @@ def add_favorite(conn: sqlite3.Connection, user_id: int, meal_id: int) -> int | 
 
 
 def list_favorites(conn: sqlite3.Connection, user_id: int, limit: int = 30) -> list[dict]:
-    """Избранное, новое сверху: {id, meal_id, kcal, names}."""
+    """Избранное, новое сверху: {id, meal_id, kcal, protein, fat, carbs, names, title, note}."""
     rows = conn.execute(
-        """SELECT f.id, f.meal_id, m.kcal_total FROM favorite_meals f
-           JOIN meals m ON m.id = f.meal_id WHERE f.user_id=? ORDER BY f.id DESC LIMIT ?""",
+        """SELECT f.id, f.meal_id, f.title, f.note, m.kcal_total, m.protein_g, m.fat_g, m.carbs_g,
+                  EXISTS(SELECT 1 FROM meal_photos p WHERE p.meal_id = f.meal_id) AS has_photo
+           FROM favorite_meals f JOIN meals m ON m.id = f.meal_id
+           WHERE f.user_id=? ORDER BY f.id DESC LIMIT ?""",
         (user_id, limit)).fetchall()
     out = []
     for r in rows:
         names = _meal_names(conn, r["meal_id"])
         if names:
             out.append({"id": r["id"], "meal_id": r["meal_id"], "kcal": r["kcal_total"],
-                        "names": names})
+                        "protein": r["protein_g"], "fat": r["fat_g"], "carbs": r["carbs_g"],
+                        "title": r["title"], "note": r["note"], "names": names,
+                        "has_photo": bool(r["has_photo"])})
     return out
+
+
+def get_favorite(conn: sqlite3.Connection, user_id: int, favorite_id: int) -> dict | None:
+    for f in list_favorites(conn, user_id, limit=500):
+        if f["id"] == favorite_id:
+            return f
+    return None
+
+
+def favorite_photo_path(conn: sqlite3.Connection, user_id: int, favorite_id: int) -> str | None:
+    row = conn.execute(
+        """SELECT p.path FROM favorite_meals f JOIN meal_photos p ON p.meal_id = f.meal_id
+           WHERE f.id=? AND f.user_id=? ORDER BY p.position, p.id LIMIT 1""",
+        (favorite_id, user_id)).fetchone()
+    return row["path"] if row else None
+
+
+def _hidden_meal(conn: sqlite3.Connection, user_id: int, calc: MealCalculation,
+                 photo_paths: list[str] | None = None) -> int:
+    """Образец избранного: обычная запись приёма, но убранная из дневника (deleted_at)."""
+    now = utcnow_iso()
+    meal_id = save_meal(conn, user_id, now, now[:10], now[11:16], "snack", "manual", calc,
+                        photo_paths=photo_paths or None)
+    conn.execute("UPDATE meals SET deleted_at=? WHERE id=?", (now, meal_id))
+    sync_meal_water(conn, meal_id)
+    conn.commit()
+    return meal_id
+
+
+def create_favorite_custom(conn: sqlite3.Connection, user_id: int, title: str, note: str | None,
+                           calc: MealCalculation) -> int | None:
+    """Избранное «с нуля»: без приёма в дневнике. None — блюдо с таким названием уже есть."""
+    sig = meal_signature([title])
+    if conn.execute("SELECT 1 FROM favorite_meals WHERE user_id=? AND sig=?",
+                    (user_id, sig)).fetchone():
+        return None
+    meal_id = _hidden_meal(conn, user_id, calc)
+    cur = conn.execute(
+        "INSERT INTO favorite_meals (user_id, meal_id, sig, title, note) VALUES (?,?,?,?,?)",
+        (user_id, meal_id, sig, title, note or None))
+    conn.commit()
+    return cur.lastrowid
+
+
+def update_favorite(conn: sqlite3.Connection, user_id: int, favorite_id: int, *,
+                    title: str | None, note: str | None, calc: MealCalculation | None) -> bool:
+    """Название и заметка; при `calc` состав заменяется копией-образцом. Исходный приём в дневнике не трогаем."""
+    row = conn.execute("SELECT * FROM favorite_meals WHERE id=? AND user_id=?",
+                       (favorite_id, user_id)).fetchone()
+    if row is None:
+        return False
+    meal_id = row["meal_id"]
+    if calc is not None:
+        paths = [p["path"] for p in meal_photos(conn, meal_id)]
+        meal_id = _hidden_meal(conn, user_id, calc, paths)
+    conn.execute("UPDATE favorite_meals SET meal_id=?, title=?, note=? WHERE id=?",
+                 (meal_id, title or None, note or None, favorite_id))
+    conn.commit()
+    return True
 
 
 def favorite_meal_id(conn: sqlite3.Connection, user_id: int, favorite_id: int) -> int | None:

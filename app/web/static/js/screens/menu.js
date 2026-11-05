@@ -1,6 +1,6 @@
 // Screen 5: Menu
-import { api, tg } from '../api.js';
-import { h, icon, tile, nav, pageHead, fmtN } from '../ui.js';
+import { api, tg, inTelegram } from '../api.js';
+import { h, icon, tile, nav, pageHead, fmtN, toggle, haptic } from '../ui.js';
 
 // Фото из Telegram (если пользователь его разрешил), иначе первая буква имени
 function avatarEl(name) {
@@ -13,6 +13,30 @@ function avatarEl(name) {
     img.onerror = () => { /* оставляем букву */ };
   }
   return box;
+}
+
+// Тёмная тема одним переключателем. Пока человек не трогал его, работает тема Telegram/системы;
+// ручной выбор запоминается только если он отличается от системной темы.
+function systemDark() {
+  if (inTelegram && tg && tg.colorScheme) return tg.colorScheme === 'dark';
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+function themeRow() {
+  let pref = null;
+  try { pref = localStorage.getItem('theme'); } catch (e) { /* без хранилища */ }
+  const manual = pref === 'dark' || pref === 'light';
+  const dark = manual ? pref === 'dark' : systemDark();
+  const sub = h('span', { class: 'row-sub' }, manual ? 'Выбрано вручную' : 'Как в системе');
+  const sw = toggle(dark, (on) => {
+    try {
+      if (on === systemDark()) { localStorage.removeItem('theme'); sub.textContent = 'Как в системе'; }
+      else { localStorage.setItem('theme', on ? 'dark' : 'light'); sub.textContent = 'Выбрано вручную'; }
+    } catch (e) { /* без сохранения */ }
+    window.dispatchEvent(new Event('app:theme'));
+    haptic('light');
+  }, 'Тёмная тема');
+  return h('div', { class: 'row static' }, tile('moon', 'indigo'),
+    h('span', { class: 'grow' }, h('span', { class: 'row-title' }, 'Тёмная тема'), sub), sw);
 }
 
 export default async function render(root, ctx) {
@@ -41,9 +65,7 @@ export default async function render(root, ctx) {
       item('soup', 'teal', 'Моя посуда', 'Помогает оценивать порции', '/menu/dishes'),
       item('star', 'yellow', 'Избранное', 'Приёмы в одно касание', '/menu/favorites')),
     h('div', { class: 'list tiles' },
-      item('moon', 'indigo', 'Внешний вид', 'Тема: светлая или тёмная', '/menu/appearance'),
-      item('file-export', 'green', 'Данные', 'Экспорт CSV и удаление', '/menu/export')),
-    h('div', { class: 'list tiles' },
-      item('help-circle', 'blue', 'Помощь', 'Как пользоваться', '/menu/help'),
-      item('info-circle', 'gray', 'О приложении', null, '/menu/about'))].filter(Boolean));
+      themeRow(),
+      item('file-export', 'green', 'Данные', 'Экспорт CSV и удаление', '/menu/export'),
+      item('help-circle', 'blue', 'Помощь и о приложении', 'Как пользоваться, версия', '/menu/help'))].filter(Boolean));
 }
