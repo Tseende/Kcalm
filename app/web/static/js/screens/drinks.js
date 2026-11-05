@@ -6,6 +6,9 @@ import {
 import { drinkPic } from '../pics.js';
 
 const WATER = { id: 'water', name: 'Вода', emoji: '💧', color: 'teal', kcal_100: 0, sizes: [150, 200, 250, 300, 500], sugar: false, hydrates: true };
+// Границы объёма за одну запись — как на сервере (domain/water.py и domain/drinks.py).
+const WATER_ML = [10, 3000];
+const DRINK_ML = [30, 1500];
 const SUGAR_KCAL = 20; // one teaspoon, about 5 g
 
 export default async function render(root, ctx) {
@@ -102,7 +105,8 @@ export default async function render(root, ctx) {
   async function go() {
     if (busy) return;
     const v = numVal(ml);
-    if (!v || v < 30 || v > 1500) { toast('Укажите объём от 30 до 1500 мл', 'error'); return; }
+    const [lo, hi] = cur.id === 'water' ? WATER_ML : DRINK_ML;
+    if (!v || v < lo || v > hi) { toast(`Укажите объём от ${lo} до ${hi} мл`, 'error'); return; }
     busy = true;
     mainButton.setLoading(true);
     try {

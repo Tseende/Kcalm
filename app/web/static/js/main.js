@@ -1,8 +1,8 @@
 // Router + tab bar + Telegram bootstrap.
 import { api, isMock, onMockEnabled, tg, inTelegram } from './api.js';
 import { initKeyboard } from './keyboard.js';
-import { h, $, icon, tile, sheet, nav, mainButton, backButton, emptyState, errorState, haptic, closeAllSheets } from './ui.js';
-import { mealPic, drinkPic } from './pics.js';
+import { h, $, icon, tile, sheet, nav, mainButton, backButton, emptyState, errorState, haptic, closeAllSheets, getThemePref, staggerIn } from './ui.js';
+import { mealPic } from './pics.js';
 
 const R = (re, load, opts = {}) => ({ re: new RegExp('^' + re + '$'), load, ...opts });
 const routes = [
@@ -45,7 +45,7 @@ function buildTabbar() {
     if (id === 'add') {
       return h('button', { class: 'tab tab-plus', type: 'button', 'aria-label': 'Добавить', 'aria-haspopup': 'dialog', onclick: openAddSheet }, h('span', { class: 'plus-circle' }, icon('plus', 20)));
     }
-    return h('a', { class: 'tab', href: '#' + path, dataset: { tab: id }, 'aria-label': label }, icon(ic, 24), h('span', null, label));
+    return h('a', { class: 'tab', href: '#' + path, dataset: { tab: id }, 'aria-label': label, onclick: () => haptic('selection') }, icon(ic, 24), h('span', null, label));
   }));
 }
 
@@ -62,8 +62,8 @@ function setActiveTab(tab) {
 function openAddSheet() {
   haptic('light');
   const go = (path) => { s.close(); nav.go(path); };
-  const card = (ic, col, title, sub, path, visual) => h('button', { class: 'add-card', type: 'button', onclick: () => go(path) },
-    visual || tile(ic, col, 42),
+  const card = (ic, col, title, sub, path) => h('button', { class: 'add-card', type: 'button', onclick: () => go(path) },
+    tile(ic, col, 42),
     h('span', { class: 'add-text' }, h('span', { class: 'row-title' }, title), h('span', { class: 'row-sub muted' }, sub)));
   const hero = h('button', { class: 'add-hero', type: 'button', onclick: () => go('/add/meal') },
     h('span', { class: 'add-hero-text' },
@@ -72,18 +72,20 @@ function openAddSheet() {
       h('span', { class: 'add-hero-cta' }, icon('camera', 16), 'Добавить')),
     h('span', { class: 'add-hero-pics', 'aria-hidden': 'true' },
       ['dinner', 'lunch', 'breakfast'].map((t, i) => h('span', { class: 'add-hero-pic p' + i }, mealPic(t, 64)))));
-  const s = sheet({ title: 'Добавить', content: h('div', { class: 'add-sheet' },
+  const content = h('div', { class: 'add-sheet' },
     hero,
     h('div', { class: 'add-label' }, 'Еда'),
     h('div', { class: 'add-grid' },
-      card('droplet', 'teal', 'Напитки', 'Вода, чай, кофе', '/add/drink', h('span', { class: 'add-pic' }, drinkPic('cappuccino', 44))),
+      card('cup', 'var(--c-water)', 'Напитки', 'Вода, чай, кофе', '/add/drink'),
       card('barcode', 'red', 'Продукт', 'Штрихкод или этикетка', '/add/label')),
     h('div', { class: 'add-label' }, 'Здоровье'),
     h('div', { class: 'add-grid' },
       card('scale', 'purple', 'Вес', 'Утреннее взвешивание', '/add/weight'),
       card('bed', 'indigo', 'Сон', 'Часы сна и оценка', '/add/sleep'),
       card('run', 'green', 'Активность', 'Шаги и тренировка', '/add/activity'),
-      card('device-mobile', 'blue', 'Скриншот', 'Сон, шаги или весы', '/add/screen'))) });
+      card('device-mobile', 'blue', 'Скриншот', 'Сон, шаги или весы', '/add/screen')));
+  const s = sheet({ title: 'Добавить', content });
+  staggerIn(content, [...content.querySelectorAll('.add-card')]);   // карточки сетки въезжают по очереди
 }
 
 function match(path) {
@@ -157,15 +159,12 @@ async function boot() {
   const syncFs = () => document.documentElement.classList.toggle('fs', !!(tg && tg.isFullscreen));
   syncFs();
   try { if (tg && tg.onEvent) tg.onEvent('fullscreenChanged', syncFs); } catch (e) { /* старый клиент */ }
+  // Единственная палитра тёмной темы — html.scheme-dark. Класс ставит и inline-скрипт в <head> (до первой отрисовки).
   const applyScheme = () => {
-    let pref = null;
-    try { pref = localStorage.getItem('theme'); } catch (e) { /* без хранилища */ }
-    const forced = pref === 'dark' || pref === 'light';
-    if (!forced && !(inTelegram && tg && tg.colorScheme)) {
-      document.documentElement.classList.remove('scheme-dark', 'scheme-light');
-      return;
-    }
-    const dark = forced ? pref === 'dark' : tg.colorScheme === 'dark';
+    const pref = getThemePref();                      // null = «Авто»: ключ снят, работает тема Telegram/системы
+    const sys = inTelegram && tg && tg.colorScheme ? tg.colorScheme === 'dark'
+      : !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    const dark = pref ? pref === 'dark' : sys;
     document.documentElement.classList.toggle('scheme-dark', dark);
     document.documentElement.classList.toggle('scheme-light', !dark);
     // Шапка и фон Telegram под фон приложения (системный серый iOS), а не под тему клиента.
@@ -174,6 +173,7 @@ async function boot() {
   };
   applyScheme();
   window.addEventListener('app:theme', applyScheme);
+  try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyScheme); } catch (e) { /* старый браузер */ }
   try { if (tg && tg.onEvent) tg.onEvent('themeChanged', applyScheme); } catch (e) { /* old client */ }
   const onScroll = () => document.body.classList.toggle('scrolled', window.scrollY > 4);
   window.addEventListener('scroll', onScroll, { passive: true });

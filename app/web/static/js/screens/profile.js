@@ -1,8 +1,8 @@
 // Профиль и цели: данные, из которых бот считает норму, и сама норма (расчётная или ручная).
 import { api } from '../api.js';
 import {
-  h, icon, tile, toast, haptic, mainButton, pageHead, frow, group, numInput, numVal, segmented, sheet,
-  fmtN, fmtKcal, errorState, skeletonCards, dataChanged, plural,
+  h, icon, toast, haptic, mainButton, pageHead, frow, group, numInput, numVal, segmented, sheet,
+  fmtN, fmtKcal, errorState, skeletonCards, dataChanged, plural, macroChips,
 } from '../ui.js';
 
 const ACTIVITY = [
@@ -20,7 +20,7 @@ export default async function render(root, ctx) {
   root.append(view);
 
   let d;
-  try { d = await api.get('/profile'); } catch (e) { if (ctx.alive()) errorState(box, e, () => render(root, ctx)); return; }
+  try { d = await api.get('/profile'); } catch (e) { if (ctx.alive()) errorState(box, e, () => { root.replaceChildren(); render(root, ctx); }); return; }
   if (!ctx.alive()) return;
 
   let init = { ...d.profile };
@@ -35,11 +35,8 @@ export default async function render(root, ctx) {
       h('div', { class: 'row-between' },
         h('div', null, h('div', { class: 'muted small' }, 'Дневная норма'), h('div', { class: 'target-kcal' }, h('b', null, fmtKcal(targets.kcal)), ' ккал')),
         h('button', { class: 'btn btn-secondary', type: 'button', onclick: editTargets }, icon('edit', 18), 'Изменить')),
-      h('div', { class: 'macs target-macs' },
-        h('span', { class: 'mac p' }, h('i'), `Б ${fmtN(targets.protein)} г`),
-        h('span', { class: 'mac f' }, h('i'), `Ж ${fmtN(targets.fat)} г`),
-        h('span', { class: 'mac c' }, h('i'), `У ${fmtN(targets.carbs)} г`),
-        h('span', { class: 'mac' }, h('i'), `Вода ${fmtKcal(targets.water_ml)} мл`)));
+      macroChips({ p: targets.protein, f: targets.fat, c: targets.carbs }, { unit: ' г', cls: 'target-macs',
+        extra: h('span', { class: 'mac' }, h('i'), `Вода ${fmtKcal(targets.water_ml)} мл`) }));
   }
 
   function editTargets() {
@@ -49,7 +46,7 @@ export default async function render(root, ctx) {
       fat: numInput({ min: 0, max: 500, step: 1, value: targets.fat, inputmode: 'numeric', 'aria-label': 'Жиры' }),
       carbs: numInput({ min: 0, max: 900, step: 1, value: targets.carbs, inputmode: 'numeric', 'aria-label': 'Углеводы' }),
     };
-    const done = (r, text) => { targets = r.targets; paintTargets(); dataChanged(); s.close(); haptic('success'); toast(text, 'ok'); };
+    const done = (r, text) => { api._me = null; targets = r.targets; paintTargets(); dataChanged(); s.close(); haptic('success'); toast(text, 'ok'); };
     const save = async () => {
       try {
         const r = await api.put('/targets', { kcal: numVal(f.kcal), protein: numVal(f.protein), fat: numVal(f.fat), carbs: numVal(f.carbs) });

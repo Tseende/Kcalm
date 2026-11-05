@@ -1,4 +1,4 @@
-// Simple add forms: water, weight, sleep, activity
+// Simple add forms: weight, sleep, activity (вода и напитки живут в drinks.js)
 import { api } from '../api.js';
 import {
   h, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, segmented, fmtN, todayISO,
@@ -6,7 +6,7 @@ import {
 
 export default async function render(root, ctx) {
   const kind = ctx.params.kind;
-  const builders = { water, weight, sleep, activity };
+  const builders = { weight, sleep, activity };
   const view = h('div', { class: 'screen' });
   root.append(view);
   const { title, body, submit } = builders[kind]();
@@ -35,21 +35,6 @@ export default async function render(root, ctx) {
 
 function invalid(msg) { toast(msg, 'error'); return false; }
 
-function water() {
-  const ml = numInput({ min: 50, max: 3000, step: 50, value: 250, inputmode: 'numeric', 'aria-label': 'Миллилитры' });
-  const chips = [150, 200, 250, 300, 500].map((v) => h('button', { type: 'button', class: 'chip', onclick: () => { ml.value = v; } }, v + ' мл'));
-  return {
-    title: 'Вода',
-    body: [h('div', { class: 'chips wrap' }, chips), group([frow('Количество, мл', ml)])],
-    async submit() {
-      const v = numVal(ml);
-      if (!v || v < 10 || v > 5000) return invalid('Укажите объём от 10 до 5000 мл');
-      const r = await api.post('/water', { ml: Math.round(v) });
-      return `Выпито за день: ${r.water_ml} из ${r.goal_ml} мл`;
-    },
-  };
-}
-
 function weight() {
   const w = numInput({ min: 25, max: 400, step: 0.1, placeholder: '82,4', 'aria-label': 'Вес в килограммах' });
   api.me().then((m) => { if (m.weight && m.weight.latest && !w.value) w.placeholder = fmtN(m.weight.latest); }).catch(() => {});
@@ -60,6 +45,7 @@ function weight() {
       const v = numVal(w);
       if (!v || v < 25 || v > 400) return invalid('Введите вес от 25 до 400 кг');
       const r = await api.post('/weight', { weight_kg: Math.round(v * 10) / 10 });
+      api._me = null;                                   // меню показывает вес из /me: сбрасываем кеш
       return `Вес записан. Тренд: ${fmtN(r.trend)} кг`;
     },
   };

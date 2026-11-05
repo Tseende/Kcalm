@@ -1,8 +1,8 @@
 // Weekly mini-goal card: pick one habit for the week, progress is counted from the diary.
 import { api } from '../api.js';
-import { h, icon, glyph, toast, haptic, nav, sectionTitle } from '../ui.js';
+import { h, icon, glyph, toast, haptic, nav, sectionTitle, plural } from '../ui.js';
 
-const days = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'день' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'дня' : 'дней');
+const days = (n) => plural(n, 'день', 'дня', 'дней').replace(/^-?\d+ /, '');
 
 // Celebrate once per week, on whichever screen first sees the goal done. Storage may be unavailable.
 function celebrateOnce(g, weekStart, el) {
@@ -74,7 +74,7 @@ export function weekGoalBlock(ctx, { withRecap = false, compact = false } = {}) 
     const rows = [];
     if (r.goal) {
       rows.push(h('div', { class: 'an-item' }, h('span', { class: 'an-mark ' + (r.goal.achieved ? 'good' : '') }, icon(r.goal.achieved ? 'check' : 'target', 16)),
-        h('span', null, `${r.goal.title}: ${r.goal.done} из ${r.goal.target}. ` + (r.goal.achieved ? 'Цель выполнена.' : 'Планка не взялась, это нормально.'))));
+        h('span', null, `${r.goal.title} ${r.goal.done} дн. из 7 — цель (${r.goal.target}) ` + (r.goal.achieved ? 'выполнена' : 'не взялась, это нормально'))));
     }
     r.good.forEach((g) => rows.push(h('div', { class: 'an-item' }, h('span', { class: 'an-mark good' }, icon('check', 16)), h('span', null, g))));
     kids.push(h('div', { class: 'card an-list' }, rows));

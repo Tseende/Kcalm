@@ -4,7 +4,7 @@ import { mealIcon, mealPic } from '../pics.js';
 import { scanBarcode, decodeFile, validBarcode } from '../scanner.js';
 import {
   h, icon, toast, haptic, nav, sheet, confirmDialog, pageHead, sectionTitle, skeletonCards, errorState, photoImg,
-  fmtN, fmtKcal, longDate, mealType, MEAL_TYPES, dishKind, numVal, busyOverlay,
+  fmtN, fmtKcal, longDate, mealType, MEAL_TYPES, dishKind, numVal, busyOverlay, macroChips,
 } from '../ui.js';
 
 export default async function render(root, ctx) {
@@ -33,10 +33,7 @@ export default async function render(root, ctx) {
     totalsEl.replaceChildren(
       h('div', { class: 'totals-kcal' }, h('span', { class: 'big' }, fmtKcal(meal.kcal)), ' ккал'),
       range ? h('div', { class: 'range-hint small' }, range) : null,
-      h('div', { class: 'pills' },
-        h('span', { class: 'pill pill-p' }, 'Б ', h('b', null, fmtN(meal.protein)), ' г'),
-        h('span', { class: 'pill pill-f' }, 'Ж ', h('b', null, fmtN(meal.fat)), ' г'),
-        h('span', { class: 'pill pill-c' }, 'У ', h('b', null, fmtN(meal.carbs)), ' г')),
+      macroChips({ p: meal.protein, f: meal.fat, c: meal.carbs }, { pills: true }),
       meal.confidence != null ? h('div', { class: 'muted small' }, `Уверенность распознавания: ${Math.round(meal.confidence * 100)}%`) : null);
   }
 

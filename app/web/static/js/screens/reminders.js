@@ -1,6 +1,6 @@
 // Напоминания бота: включить, выключить и выбрать время.
 import { api } from '../api.js';
-import { h, toast, haptic, pageHead, toggle, group, errorState, skeletonCards } from '../ui.js';
+import { h, toast, haptic, pageHead, toggle, errorState, skeletonCards } from '../ui.js';
 
 export default async function render(root, ctx) {
   const view = h('div', { class: 'screen' });
@@ -8,7 +8,7 @@ export default async function render(root, ctx) {
   view.append(pageHead('Напоминания', { parent: '/menu' }), box);
   root.append(view);
   let items;
-  try { items = (await api.get('/reminders')).reminders; } catch (e) { if (ctx.alive()) errorState(box, e, () => render(root, ctx)); return; }
+  try { items = (await api.get('/reminders')).reminders; } catch (e) { if (ctx.alive()) errorState(box, e, () => { root.replaceChildren(); render(root, ctx); }); return; }
   if (!ctx.alive()) return;
 
   async function save(kind, body, undo) {

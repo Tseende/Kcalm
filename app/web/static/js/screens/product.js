@@ -1,7 +1,7 @@
 // Product add/edit form (also reused by the label screen)
 import { api } from '../api.js';
 import { foodPic, foodGroupOf, FOOD_ICONS, FOOD_GROUPS } from '../pics.js';
-import { h, icon, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, confirmDialog, errorState } from '../ui.js';
+import { h, icon, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, confirmDialog, errorState, skeletonCards } from '../ui.js';
 
 const val = (v) => (v === null || v === undefined ? '' : v);
 
@@ -90,15 +90,17 @@ export default async function render(root, ctx) {
   const isNew = ctx.params.id === 'new';
   const view = h('div', { class: 'screen' });
   root.append(view);
+  if (!isNew) view.append(pageHead('Продукт', { parent: '/menu/products' }), skeletonCards(3, 64));
   let product = {};
   if (!isNew) {
     try {
       const all = (await api.get('/products')).products;
       product = all.find((x) => String(x.id) === ctx.params.id);
       if (!product) throw new Error('Продукт не найден');
-    } catch (e) { const b = h('div'); view.append(pageHead('Продукт', { parent: '/menu/products' }), b); errorState(b, e); return; }
+    } catch (e) { const b = h('div'); view.replaceChildren(pageHead('Продукт', { parent: '/menu/products' }), b); errorState(b, e); return; }
   }
   if (!ctx.alive()) return;
+  view.replaceChildren();
   const form = productForm(product);
   let busy = false;
   async function save() {

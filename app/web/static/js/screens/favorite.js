@@ -1,19 +1,21 @@
 // Избранное: создание и правка блюда (название, ккал и БЖУ порции, комментарий). Из списка избранного.
 import { api } from '../api.js';
 import { foodPic, mealPic } from '../pics.js';
-import { h, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, confirmDialog, errorState, photoImg } from '../ui.js';
+import { h, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, confirmDialog, errorState, skeletonCards, photoImg } from '../ui.js';
 
 export default async function render(root, ctx) {
   const isNew = ctx.params.id === 'new';
   const view = h('div', { class: 'screen' });
   root.append(view);
+  if (!isNew) view.append(pageHead('Избранное', { parent: '/menu/favorites' }), skeletonCards(3, 64));
   let fav = { title: '', note: '', kcal: '', protein: '', fat: '', carbs: '' };
   if (!isNew) {
     try { fav = await api.get('/favorites/' + ctx.params.id); } catch (e) {
-      const b = h('div'); view.append(pageHead('Избранное', { parent: '/menu/favorites' }), b); errorState(b, e); return;
+      const b = h('div'); view.replaceChildren(pageHead('Избранное', { parent: '/menu/favorites' }), b); errorState(b, e); return;
     }
   }
   if (!ctx.alive()) return;
+  view.replaceChildren();
 
   const title = h('input', { type: 'text', value: fav.title, maxLength: 80, placeholder: 'Например: мой омлет', autocomplete: 'off', 'aria-label': 'Название' });
   const num = (v, max, step, label) => numInput({ value: v === null || v === undefined ? '' : v, min: 0, max, step, 'aria-label': label });

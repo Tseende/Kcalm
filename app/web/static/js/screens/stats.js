@@ -1,17 +1,73 @@
-// Screen 2: "Статистика"
+// Screen 2: "Статистика" — «как я иду»: герой «Вес», календарь дней в норме, показатели, динамика, ссылка на разбор
 import { api } from '../api.js';
-import { lineChart, barChart, stackedBars } from '../charts.js';
-import { h, nav, pageHead, segmented, skeletonCards, errorState, emptyState, fmtN, fmtKcal, fmtDur, shortDate } from '../ui.js';
+import { lineChart, barChart, stackedBars, makeTip } from '../charts.js';
+import { h, icon, tile, nav, pageHead, segmented, skeletonCards, errorState, emptyState, heroCard, progressBar, statTile, countUp, fmtN, fmtKcal, fmtDur, shortDate, longDate, parseISO, addDays, todayISO, reducedMotion, staggerIn, haptic, plural } from '../ui.js';
 
 const RANGES = [['week', 'Неделя'], ['month', 'Месяц'], ['90d', '90 дней']];
+const METRICS = [['kcal', 'Калории'], ['macro', 'БЖУ'], ['water', 'Вода'], ['sleep', 'Сон'], ['steps', 'Шаги']];
 
 function loadRange() {
   try { const v = localStorage.getItem('stats_range'); return RANGES.some((r) => r[0] === v) ? v : 'week'; } catch (e) { return 'week'; }
 }
+function loadMetric() {
+  try { const v = localStorage.getItem('stats_metric'); return METRICS.some((r) => r[0] === v) ? v : 'kcal'; } catch (e) { return 'kcal'; }
+}
+const seenRanges = new Set(); // графики анимируются только при первом показе диапазона
 function saveRange(v) { try { localStorage.setItem('stats_range', v); } catch (e) { /* ignore */ } }
+function saveMetric(v) { try { localStorage.setItem('stats_metric', v); } catch (e) { /* ignore */ } }
+
+const dowFmt = new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' });
+const DOW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+const dowIdx = (iso) => (parseISO(iso).getDay() + 6) % 7;
+const cap1 = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+
+// Календарь «дни в норме»: ячейка = день. ok = 80–120 % нормы, low = ниже, over = выше, none = нет записей
+function kcalClass(d, target) {
+  const t = d.target_kcal || target;
+  if (d.kcal == null || !t) return 'none';
+  const r = d.kcal / t;
+  return r > 1.2 ? 'over' : r < 0.8 ? 'low' : 'ok';
+}
+
+function heatmap(days, target, range, animate) {
+  const wrap = h('div', { class: 'hm-wrap' });
+  const week = range === 'week';
+  const cells = [];
+  if (!week) for (let i = 0; i < dowIdx(days[0].date); i += 1) cells.push(h('span', { class: 'hm-pad', 'aria-hidden': 'true' }));
+  const lead = cells.length;
+  const today = todayISO();
+  const tip = makeTip(wrap);
+  days.forEach((d, i) => {
+    const cl = kcalClass(d, target);
+    const t = d.target_kcal || target;
+    const pct = d.kcal != null && t ? Math.round((d.kcal / t) * 100) : null;
+    const text = d.kcal != null ? [cap1(dowFmt.format(parseISO(d.date))), `${fmtKcal(d.kcal)} ккал${pct != null ? ' · ' + pct + '% нормы' : ''}`] : [cap1(dowFmt.format(parseISO(d.date))), 'нет записей'];
+    const cell = h('button', { type: 'button', class: `hm-cell hm-${cl}${d.date === today ? ' hm-today' : ''}`, 'aria-label': text.join(', '), onclick: () => {
+      haptic('selection');
+      const wr = wrap.getBoundingClientRect(); const r = cell.getBoundingClientRect();
+      tip.show(r.left - wr.left + r.width / 2, r.top - wr.top, text);
+    } }, week ? h('span', { class: 'hm-kcal' }, d.kcal != null ? String(Math.round(d.kcal)) : '') : range === 'month' ? h('span', { class: 'hm-day' }, String(parseISO(d.date).getDate())) : null);
+    if (animate) { cell.classList.add('hm-in'); cell.style.setProperty('--d', ((week ? i : Math.floor((i + lead) / 7) + ((i + lead) % 7)) * 8) + 'ms'); }
+    cells.push(cell);
+  });
+  const labels = week ? days.map((d) => DOW[dowIdx(d.date)]) : DOW;
+  wrap.prepend(h('div', { class: 'hm-dow' }, labels.map((t) => h('span', null, t))));
+  wrap.insertBefore(h('div', { class: `hm-grid hm-${range}` }, cells), tip ? wrap.querySelector('.ch-tip') : null);
+  return wrap;
+}
+
+// Серия: сколько последних дней подряд в коридоре (если сегодня ещё нет записей, считаем со вчера)
+function streakOf(days, target) {
+  let i = days.length - 1;
+  if (days[i] && days[i].kcal == null) i -= 1;
+  let n = 0;
+  for (; i >= 0 && kcalClass(days[i], target) === 'ok'; i -= 1) n += 1;
+  return n;
+}
 
 export default async function render(root, ctx) {
   let range = loadRange();
+  let metric = loadMetric();
   const view = h('div', { class: 'screen' });
   const body = h('div', { class: 'stack' });
   view.append(pageHead('Статистика', { back: false }), segmented(RANGES, range, (v) => { range = v; saveRange(v); load(); }, 'Период'), body);
@@ -20,89 +76,191 @@ export default async function render(root, ctx) {
   async function load() {
     body.replaceChildren(skeletonCards(3, 110));
     try {
-      const data = await api.get('/stats', { range });
+      const [data, me] = await Promise.all([api.get('/stats', { range }), api.me().catch(() => null)]);
       if (!ctx.alive()) return;
-      draw(data);
+      const animate = !seenRanges.has(range) && !reducedMotion();
+      seenRanges.add(range);
+      draw(data, me, animate);
     } catch (e) { if (ctx.alive()) errorState(body, e, load); }
   }
 
-  function draw({ days, summary: s, prev_summary: ps, goals }) {
+  function draw({ days, summary: s, prev_summary: ps, goals }, me, animate) {
     if (!days.length || (!s.days_logged && s.avg_sleep_min == null && s.avg_steps == null && s.weight_change == null)) {
       body.replaceChildren(emptyState('chart-bar', 'Пока мало данных', 'Записывайте приёмы пищи несколько дней, и здесь появятся графики.'));
       return;
     }
     goals = goals || {};
+    ps = ps || {};
     const lbl = (d) => shortDate(d.date);
     const n = days.length;
     const target = [...days].reverse().find((d) => d.target_kcal)?.target_kcal || null;
-    const per = RANGES.find((r) => r[0] === range)[1].toLowerCase();
+    const perWord = { week: 'за неделю', month: 'за месяц', '90d': 'за 90 дней' }[range];
+    const kids = [];
 
-    // chip: change vs the previous period; better = 'up' | 'down' | 'near'(closer to target)
+    // ---- 1. Герой «Вес»
+    const trendVals = days.map((d) => (d.weight_trend != null ? d.weight_trend : d.weight));
+    const lastW = [...trendVals].reverse().find((v) => v != null);
+    const goalW = (goals.goal_weight_kg) || (me && me.user && me.user.goal_weight_kg) || null;
+    const startW = me && me.weight && me.weight.start != null ? me.weight.start : null;
+    const wc = s.weight_change;
+    if (lastW != null) {
+      const num = h('span', { class: 'st-hero-num' });
+      const f1 = (v) => v.toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+      if (animate) countUp(num, lastW, { fmt: f1, ms: 800 }); else num.textContent = f1(lastW);
+      const wantDown = goalW != null ? goalW < lastW : null;
+      const chipCls = wc != null && wc < 0 && wantDown ? 'good' : 'flat';
+      const chart = lineChart({ points: days.map((d) => ({ label: lbl(d), y: d.weight, t: d.weight_trend })), decimals: 1, unit: 'кг', color: 'var(--c-accent)', animate, goal: goalW });
+      const goalInChart = chart.dataset && chart.dataset.goal === '1';
+      const hero = heroCard({ tone: 'accent', cls: 'st-hero', children: [
+        h('div', { class: 'st-hero-head' },
+          h('div', null, h('div', { class: 'st-hero-k' }, 'Вес по тренду'),
+            h('div', { class: 'st-hero-val' }, num, h('span', { class: 'st-hero-unit' }, ' кг')),
+            goalW && !goalInChart ? h('div', { class: 'muted small' }, `цель ${fmtN(goalW)} кг`) : null),
+          wc != null && Math.abs(wc) >= 0.05 ? h('span', { class: 'chip-delta ' + chipCls }, `${wc < 0 ? '−' : '+'}${fmtN(Math.abs(wc))} кг ${perWord}`) : null),
+        chart] });
+      // старт → цель и прогноз
+      if (goalW != null) {
+        if (startW != null && Math.abs(startW - goalW) > 0.05) {
+          const total = Math.abs(startW - goalW);
+          const done = Math.max(0, Math.min(total, goalW < startW ? startW - lastW : lastW - startW));
+          hero.append(h('div', { class: 'st-goal' },
+            progressBar(done, total, { status: 'good', label: 'Прогресс к цели' }),
+            h('div', { class: 'st-goal-ends muted small' }, h('span', null, fmtN(startW) + ' кг'), h('span', null, fmtN(goalW) + ' кг'))));
+        }
+        const left = Math.abs(lastW - goalW);
+        let line = left < 0.05 ? 'Цель достигнута' : `до цели ${fmtN(left)} кг`;
+        const idx = trendVals.map((v, i) => (v != null ? i : -1)).filter((i) => i >= 0);
+        if (left >= 0.05 && idx.length > 1 && idx[idx.length - 1] - idx[0] >= 5) {
+          const rate = (trendVals[idx[idx.length - 1]] - trendVals[idx[0]]) / (idx[idx.length - 1] - idx[0]);
+          if (goalW < lastW && rate < 0) {
+            const need = Math.ceil((lastW - goalW) / -rate);
+            if (need <= 730) line += ` · в этом темпе ≈ к ${longDate(addDays(todayISO(), need))}`;
+          }
+        }
+        hero.append(h('div', { class: 'st-hero-foot' }, line));
+      }
+      kids.push(hero);
+    }
+
+    // ---- 2. Дни в норме: календарь
+    if (s.days_logged) {
+      const streak = streakOf(days, target);
+      kids.push(h('section', { class: 'card st-heat' },
+        h('div', { class: 'st-heat-head' },
+          h('div', { class: 'st-heat-title' }, h('b', null, String(s.days_on_target)), ` из ${n} дней в норме`),
+          streak >= 2 ? h('span', { class: 'st-streak' }, icon('flame', 14), `серия ${plural(streak, 'день', 'дня', 'дней')}`) : null),
+        heatmap(days, target, range, animate),
+        h('div', { class: 'legend st-heat-legend' },
+          h('span', null, h('i', { class: 'dot dot-good' }), 'в норме'), h('span', null, h('i', { class: 'dot dot-low' }), 'ниже'),
+          h('span', null, h('i', { class: 'dot dot-over' }), 'выше'), h('span', null, h('i', { class: 'dot dot-none' }), 'нет записей'))));
+    }
+
+    // ---- 3. Показатели 2×3
     const chip = (cur, prev, unit, better, ref) => {
       if (cur == null || prev == null || !prev) return null;
       const diff = cur - prev;
       if (Math.abs(diff) / Math.abs(prev) < 0.03) return h('span', { class: 'chip-delta flat' }, 'как раньше');
       const good = better === 'near' ? Math.abs(cur - ref) < Math.abs(prev - ref) : (diff > 0) === (better === 'up');
-      return h('span', { class: 'chip-delta ' + (good ? 'good' : 'bad') }, (diff > 0 ? '+' : '−') + fmtKcal(Math.abs(diff)) + unit);
+      return h('span', { class: 'chip-delta ' + (good ? 'good' : 'flat') }, (diff > 0 ? '+' : '−') + fmtKcal(Math.abs(diff)) + unit);
     };
-    const tile = (title, value, sub, delta) => h('div', { class: 'tile' }, h('div', { class: 'muted small' }, title), h('div', { class: 'tile-val' }, value),
-      sub ? h('div', { class: 'muted small' }, sub) : null, delta || null);
-    const wc = s.weight_change;
-    const tiles = h('div', { class: 'card stat-group' },
-      tile('Средние ккал', s.avg_kcal != null ? fmtKcal(s.avg_kcal) : '—', target ? `норма ${fmtKcal(target)}` : null, chip(s.avg_kcal, ps && ps.avg_kcal, '', 'near', target)),
-      tile('Дней в норме', s.days_logged ? `${s.days_on_target} из ${s.days_logged}` : '—', 'коридор 80–120 % нормы', chip(s.days_on_target, ps && ps.days_on_target, '', 'up')),
-      tile('Белок', s.avg_protein != null ? fmtN(s.avg_protein) + ' г' : '—', goals.protein_g ? `цель ${goals.protein_g} г` : null, chip(s.avg_protein, ps && ps.avg_protein, ' г', 'up')),
-      tile('Вес (тренд)', wc == null ? '—' : (wc > 0 ? '+' : wc < 0 ? '−' : '') + fmtN(Math.abs(wc)) + ' кг', 'за период', null),
-      tile('Средний сон', s.avg_sleep_min != null ? fmtDur(s.avg_sleep_min) : '—', 'цель 7+ ч', chip(s.avg_sleep_min, ps && ps.avg_sleep_min, ' мин', 'up')),
-      tile('Средние шаги', s.avg_steps != null ? fmtKcal(s.avg_steps) : '—', `цель ${fmtKcal(goals.steps || 8000)}`, chip(s.avg_steps, ps && ps.avg_steps, '', 'up')));
+    const share = (v, g) => (v != null && g ? v / g : null);
+    const stOf = (r) => (r == null ? 'none' : r >= 0.9 ? 'good' : r >= 0.6 ? 'ok' : 'bad');
+    const val = (v, f, unit) => {
+      if (v == null) return '—';
+      const num = h('span', null);
+      if (animate && !unit.fmtOnly) countUp(num, v, { fmt: f, ms: 700 }); else num.textContent = f(v);
+      return h('span', null, num, unit.u ? h('span', { class: 'stat-unit' }, ' ' + unit.u) : null);
+    };
+    const kr = share(s.avg_kcal, target);
+    const tiles = [
+      statTile({ icon: 'tools-kitchen', color: 'orange', title: 'Калории, ср.', value: val(s.avg_kcal, fmtKcal, { u: 'ккал' }), bar: target && s.avg_kcal != null ? [s.avg_kcal, target] : null,
+        status: kr == null ? 'none' : kr > 1.2 ? 'bad' : kr >= 0.8 ? 'good' : 'ok', delta: chip(s.avg_kcal, ps.avg_kcal, ' ккал', 'near', target), caption: target ? 'норма ' + fmtKcal(target) : null }),
+      statTile({ icon: 'egg-fried', color: 'blue', title: 'Белок, ср.', value: val(s.avg_protein, fmtN, { u: 'г' }), bar: goals.protein_g && s.avg_protein != null ? [s.avg_protein, goals.protein_g] : null,
+        status: stOf(share(s.avg_protein, goals.protein_g)), delta: chip(s.avg_protein, ps.avg_protein, ' г', 'up'), caption: goals.protein_g ? 'цель ' + goals.protein_g : null }),
+      statTile({ icon: 'droplet', color: 'teal', title: 'Вода, ср.', value: val(s.avg_water, fmtKcal, { u: 'мл' }), bar: goals.water_ml && s.avg_water != null ? [s.avg_water, goals.water_ml] : null,
+        status: stOf(share(s.avg_water, goals.water_ml)), delta: chip(s.avg_water, ps.avg_water, ' мл', 'up'), caption: goals.water_ml ? 'цель ' + fmtKcal(goals.water_ml) : null }),
+      statTile({ icon: 'bed', color: 'indigo', title: 'Сон, ср.', value: val(s.avg_sleep_min, (v) => fmtDur(v), { u: '', fmtOnly: true }), bar: s.avg_sleep_min != null ? [s.avg_sleep_min, goals.sleep_min || 420] : null,
+        status: stOf(share(s.avg_sleep_min, goals.sleep_min || 420)), delta: chip(s.avg_sleep_min, ps.avg_sleep_min, ' мин', 'up'), caption: 'цель 7 ч' }),
+      statTile({ icon: 'walk', color: 'green', title: 'Шаги, ср.', value: val(s.avg_steps, fmtKcal, { u: '' }), bar: s.avg_steps != null ? [s.avg_steps, goals.steps || 8000] : null,
+        status: stOf(share(s.avg_steps, goals.steps || 8000)), delta: chip(s.avg_steps, ps.avg_steps, '', 'up'), caption: 'цель ' + fmtKcal(goals.steps || 8000) }),
+      statTile({ icon: 'calendar', color: 'purple', title: 'Дни с записями', value: h('span', null, String(s.days_logged), h('span', { class: 'stat-unit' }, ` из ${n}`)), bar: [s.days_logged, n],
+        status: stOf(s.days_logged / n), delta: null, caption: null }),
+    ];
+    kids.push(h('div', { class: 'stat-grid' }, tiles));
 
-    // plain-language summary: what it means, not just numbers
-    const lines = [];
-    if (s.days_logged) {
-      const rate = s.days_on_target / s.days_logged;
-      lines.push(s.days_logged < Math.ceil(n / 2)
-        ? `Еда записана за ${s.days_logged} из ${n} дней: картина пока неполная.`
-        : rate >= 0.7 ? `Калории держатся в норме: ${s.days_on_target} из ${s.days_logged} дней.` : `В норму по калориям попали ${s.days_on_target} из ${s.days_logged} дней.`);
-    }
-    if (wc != null) lines.push(wc <= -0.2 ? `Тренд веса идёт вниз: ${fmtN(Math.abs(wc))} кг за ${per}.` : wc >= 0.2 ? `Вес вырос на ${fmtN(wc)} кг за ${per}.` : 'Вес держится на месте.');
-    if (s.avg_protein != null && goals.protein_g) lines.push(s.avg_protein >= goals.protein_g * 0.9 ? 'Белка хватает.' : `Белка маловато: в среднем ${fmtN(s.avg_protein)} из ${goals.protein_g} г.`);
-    if (s.avg_sleep_min != null && s.avg_sleep_min < 390) lines.push(`Сон короткий: в среднем ${fmtDur(s.avg_sleep_min)}.`);
-    const summary = h('section', { class: 'card st-summary' },
-      h('div', { class: 'card-title' }, 'Что видно'),
-      h('ul', { class: 'st-lines' }, lines.map((l) => h('li', null, l))),
-      h('button', { class: 'btn btn-secondary st-more', type: 'button', onclick: () => nav.go('/analysis') }, 'Подробный разбор и советы'));
-
-    // short caption under each chart: what the chart says
-    const cap = (text) => (text ? h('div', { class: 'chart-cap' }, text) : null);
+    // ---- 4. Динамика: один график с переключателем
+    const noteEl = h('span', { class: 'card-head-note muted small' });
+    const capEl = h('div', { class: 'chart-cap' });
+    const legendEl = h('div', { class: 'legend', style: { minHeight: '18px' } });
+    const chartBox = h('div', { class: 'dyn-box' });
     const loggedKcal = days.filter((d) => d.kcal != null);
     const over = target ? loggedKcal.filter((d) => d.kcal > target * 1.2).length : 0;
     const under = target ? loggedKcal.filter((d) => d.kcal < target * 0.8).length : 0;
-    const kcalCap = loggedKcal.length && target ? `В норме ${s.days_on_target} из ${loggedKcal.length} дн.` + (over ? ` · выше нормы ${over}` : '') + (under ? ` · ниже ${under}` : '') : null;
-    const weighins = days.filter((d) => d.weight != null).length;
-    const weightCap = weighins < 2 ? 'Для тренда нужно хотя бы два взвешивания.' : 'Тренд сглаживает колебания воды: смотрите на него, а не на отдельные цифры.';
-    const sleepDays = days.filter((d) => d.sleep_min != null);
-    const sleepCap = sleepDays.length ? `Меньше 6 часов: ${sleepDays.filter((d) => d.sleep_min < 360).length} дн. из ${sleepDays.length}` : null;
-    const stepDays = days.filter((d) => d.steps != null);
-    const stepsCap = stepDays.length ? `Цель ${fmtKcal(goals.steps || 8000)} шагов достигнута ${stepDays.filter((d) => d.steps >= (goals.steps || 8000)).length} дн. из ${stepDays.length}` : null;
-    const waterDays = days.filter((d) => d.water_ml);
     const wgoal = goals.water_ml || null;
-    const waterCap = waterDays.length && wgoal ? `Цель ${fmtKcal(wgoal)} мл достигнута ${waterDays.filter((d) => d.water_ml >= wgoal * 0.9).length} дн. из ${waterDays.length}` : null;
-    const macroCap = s.avg_protein != null ? `Белка в среднем ${fmtN(s.avg_protein)} г в день` + (goals.protein_g ? `, цель ${goals.protein_g} г` : '') : null;
+    const sgoal = goals.steps || 8000;
+    const cnt = (arr, f) => arr.filter(f).length;
+    function dyn(m, anim) {
+      let chart; let note = ''; let cap = null; let leg = null;
+      if (m === 'kcal') {
+        chart = barChart({ bars: days.map((d) => ({ label: lbl(d), v: d.kcal })), target, animate: anim, color: 'var(--c-accent)', unit: 'ккал', status: target ? (v) => (v > target * 1.2 ? 'over' : v < target * 0.8 ? 'low' : 'good') : null });
+        note = target ? 'норма ' + fmtKcal(target) : '';
+        cap = loggedKcal.length && target ? `В норме ${s.days_on_target} из ${loggedKcal.length} дн.` + (over ? ` · выше нормы ${over}` : '') + (under ? ` · ниже ${under}` : '') : null;
+        leg = target ? [['good', 'в норме'], ['low', 'ниже'], ['over', 'выше']] : null;
+      } else if (m === 'macro') {
+        chart = stackedBars({ bars: days.map((d) => ({ label: lbl(d), parts: d.kcal == null ? null : [d.protein, d.fat, d.carbs] })), animate: anim });
+        note = goals.protein_g ? 'белок ' + goals.protein_g + ' г' : '';
+        cap = s.avg_protein != null ? `Белка в среднем ${fmtN(s.avg_protein)} г в день` + (goals.protein_g ? `, цель ${goals.protein_g} г` : '') : null;
+        leg = [['p', 'Белки'], ['f', 'Жиры'], ['c', 'Углеводы']];
+      } else if (m === 'water') {
+        chart = barChart({ bars: days.map((d) => ({ label: lbl(d), v: d.water_ml })), target: wgoal, animate: anim, color: 'var(--c-water)', unit: 'мл' });
+        note = wgoal ? 'цель ' + fmtKcal(wgoal) : '';
+        const wd = days.filter((d) => d.water_ml);
+        cap = wd.length && wgoal ? `Цель достигнута ${cnt(wd, (d) => d.water_ml >= wgoal * 0.9)} дн. из ${wd.length}` : null;
+      } else if (m === 'sleep') {
+        chart = barChart({ bars: days.map((d) => ({ label: lbl(d), v: d.sleep_min == null ? null : d.sleep_min / 60 })), decimals: 1, target: 7, animate: anim, color: 'var(--c-sleep)', unitFmt: (v) => fmtDur(v * 60) });
+        note = 'норма 7 ч';
+        const sd = days.filter((d) => d.sleep_min != null);
+        cap = sd.length ? `Меньше 6 часов: ${cnt(sd, (d) => d.sleep_min < 360)} дн. из ${sd.length}` : null;
+      } else {
+        chart = barChart({ bars: days.map((d) => ({ label: lbl(d), v: d.steps })), target: sgoal, animate: anim, color: 'var(--c-steps)', unit: 'шагов' });
+        note = 'цель ' + fmtKcal(sgoal);
+        const st = days.filter((d) => d.steps != null);
+        cap = st.length ? `Цель достигнута ${cnt(st, (d) => d.steps >= sgoal)} дн. из ${st.length}` : null;
+      }
+      noteEl.textContent = note;
+      capEl.textContent = cap || '';
+      capEl.hidden = !cap;
+      legendEl.replaceChildren(...(leg || []).map(([k, t]) => h('span', null, h('i', { class: 'dot dot-' + k }), t)));
+      legendEl.style.visibility = leg ? '' : 'hidden';
+      chartBox.replaceChildren(chart);
+      if (anim || !reducedMotion()) { chartBox.classList.remove('xfade'); void chartBox.offsetWidth; chartBox.classList.add('xfade'); }
+    }
+    const chipBtns = METRICS.map(([k, t]) => h('button', { type: 'button', role: 'tab', class: 'mchip' + (k === metric ? ' active' : ''), 'aria-selected': String(k === metric), onclick: () => {
+      if (k === metric) return;
+      metric = k; saveMetric(k); haptic('selection');
+      chipBtns.forEach((b, i) => { const on = METRICS[i][0] === k; b.classList.toggle('active', on); b.setAttribute('aria-selected', String(on)); });
+      dyn(k, !reducedMotion());
+    } }, t));
+    kids.push(h('section', { class: 'card chart-card' },
+      h('div', { class: 'card-head' }, h('div', { class: 'card-title' }, 'Динамика'), noteEl),
+      h('div', { class: 'mchips', role: 'tablist', 'aria-label': 'Показатель' }, chipBtns), chartBox, legendEl, capEl));
+    dyn(metric, animate);
 
-    const card = (title, chart, legend, caption) => h('section', { class: 'card chart-card' }, h('div', { class: 'card-title' }, title), chart, legend || null, cap(caption));
-    const legend = h('div', { class: 'legend' },
-      [['p', 'Белки'], ['f', 'Жиры'], ['c', 'Углеводы']].map(([k, t]) => h('span', null, h('i', { class: 'dot dot-' + k }), t)));
+    // ---- 5. Ссылка на разбор
+    const first = [];
+    if (s.days_logged) first.push(s.days_on_target / s.days_logged >= 0.7 ? `Калории держатся в норме: ${s.days_on_target} из ${s.days_logged} дн.` : `В норму по калориям попали ${s.days_on_target} из ${s.days_logged} дн.`);
+    if (wc != null) first.push(wc <= -0.2 ? `Тренд веса идёт вниз: ${fmtN(Math.abs(wc))} кг ${perWord}.` : wc >= 0.2 ? `Вес вырос на ${fmtN(wc)} кг ${perWord}.` : 'Вес держится на месте.');
+    const sub = first[0] || 'Что получилось и что поправить';
+    const aperiod = range === 'week' ? 'week' : 'month';
+    kids.push(h('button', { class: 'link-card', type: 'button', onclick: () => {
+      try { localStorage.setItem('an_period', aperiod); } catch (e) { /* ignore */ }
+      nav.go('/analysis');
+    } }, tile('sparkles', 'purple', 40),
+    h('span', { class: 'link-card-text' }, h('span', { class: 'link-card-title' }, `Разбор и советы за ${aperiod === 'week' ? 'неделю' : 'месяц'}`), h('span', { class: 'link-card-sub' }, sub)),
+    icon('next', 18)));
 
-    body.replaceChildren(
-      tiles, summary,
-      card('Вес и тренд, кг', lineChart({ points: days.map((d) => ({ label: lbl(d), y: d.weight, t: d.weight_trend })), decimals: 1, unit: 'кг', color: 'var(--c-accent)' }),
-        h('div', { class: 'legend' }, h('span', null, h('i', { class: 'dot dot-accent' }), 'Тренд'), h('span', null, h('i', { class: 'dot dot-faint' }), 'Взвешивания')), weightCap),
-      card('Калории и норма, ккал', barChart({ bars: days.map((d) => ({ label: lbl(d), v: d.kcal })), target, targetLabel: target ? 'норма ' + fmtKcal(target) : '', overTarget: true, color: 'var(--c-accent)' }), null, kcalCap),
-      card('Белки, жиры, углеводы, г', stackedBars({ bars: days.map((d) => ({ label: lbl(d), parts: d.kcal == null ? null : [d.protein, d.fat, d.carbs] })) }), legend, macroCap),
-      card('Вода, мл', barChart({ bars: days.map((d) => ({ label: lbl(d), v: d.water_ml })), target: wgoal, targetLabel: wgoal ? 'цель ' + fmtKcal(wgoal) : '', color: 'var(--c-water, #30b0c7)' }), null, waterCap),
-      card('Сон, часы', barChart({ bars: days.map((d) => ({ label: lbl(d), v: d.sleep_min == null ? null : d.sleep_min / 60 })), decimals: 1, target: 7, targetLabel: 'цель 7 ч', color: 'var(--c-sleep)', unitFmt: (v) => fmtDur(v * 60) }), null, sleepCap),
-      card('Шаги', barChart({ bars: days.map((d) => ({ label: lbl(d), v: d.steps })), target: goals.steps || 8000, targetLabel: 'цель ' + fmtKcal(goals.steps || 8000), color: 'var(--c-steps)' }), null, stepsCap),
-    );
+    body.replaceChildren(...kids);
+    if (animate) staggerIn(body);
   }
 
   await load();

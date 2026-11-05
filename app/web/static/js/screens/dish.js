@@ -2,7 +2,7 @@
 import { api } from '../api.js';
 import { dishPic } from '../pics.js';
 import {
-  h, icon, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, toggle, confirmDialog, errorState,
+  h, icon, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, toggle, confirmDialog, errorState, skeletonCards,
   photoImg, compressImage, DISH_KINDS, dishKind,
 } from '../ui.js';
 
@@ -12,14 +12,16 @@ export default async function render(root, ctx) {
   const isNew = ctx.params.id === 'new';
   const view = h('div', { class: 'screen' });
   root.append(view);
+  if (!isNew) view.append(pageHead('Посуда', { parent: '/menu/dishes' }), skeletonCards(3, 64));
   let dish = { kind: 'plate', is_default: false };
   if (!isNew) {
     try {
       dish = (await api.get('/dishes')).dishes.find((x) => String(x.id) === ctx.params.id);
       if (!dish) throw new Error('Посуда не найдена');
-    } catch (e) { const b = h('div'); view.append(pageHead('Посуда', { parent: '/menu/dishes' }), b); errorState(b, e); return; }
+    } catch (e) { const b = h('div'); view.replaceChildren(pageHead('Посуда', { parent: '/menu/dishes' }), b); errorState(b, e); return; }
   }
   if (!ctx.alive()) return;
+  view.replaceChildren();
 
   let isDefault = !!dish.is_default;
   let photoFile = null;

@@ -49,10 +49,7 @@ export function icon(name, size = 22) {
 }
 
 // Rounded-square tile with a white icon, flat iOS system colours (Settings style)
-export const TILE = {
-  blue: '#007aff', green: '#34c759', orange: '#ff9500', red: '#ff3b30', purple: '#af52de',
-  teal: '#30b0c7', pink: '#ff2d55', indigo: '#5856d6', yellow: '#ffcc00', gray: '#8e8e93',
-};
+export const TILE = Object.fromEntries(['blue', 'green', 'orange', 'red', 'purple', 'teal', 'pink', 'indigo', 'yellow', 'gray'].map((k) => [k, `var(--t-${k})`]));
 export function tile(name, color = 'blue', size = 30) {
   const t = h('span', { class: 'ticon', 'aria-hidden': 'true', style: { background: TILE[color] || color, width: size + 'px', height: size + 'px' } }, icon(name, Math.round(size * 0.63)));
   return t;
@@ -75,6 +72,31 @@ export function glyph(key, size = 36, color) {
   return t;
 }
 
+// --------------------------------------------------------------- hero / progress / stat tile
+/** Карточка-«герой» с мягким градиентом: tone = green | amber | peach | accent. */
+export function heroCard({ tone = 'accent', cls = '', children = [] } = {}) {
+  return h('section', { class: `hero-card tone-${tone}${cls ? ' ' + cls : ''}` }, children);
+}
+
+/** Одна полоска прогресса для Анализа и Статистики: status = good | ok | bad | none. Перебор: полная полоска + оранжевый хвост. */
+export function progressBar(value, target, { status = 'good', label = null } = {}) {
+  const t = target > 0 ? target : 0;
+  const v = Math.max(0, value || 0);
+  const max = Math.max(v, t) || 1;
+  const kids = [h('i', { class: 'pb-fill ' + status, style: { width: ((t ? Math.min(v, t) : v) / max) * 100 + '%' } })];
+  if (t && v > t * 1.0001) kids.push(h('i', { class: 'pb-over', style: { left: (t / max) * 100 + '%', width: ((v - t) / max) * 100 + '%' } }));
+  return h('div', { class: 'pb', role: 'progressbar', 'aria-label': label, 'aria-valuemin': 0, 'aria-valuemax': Math.round(max), 'aria-valuenow': Math.round(v) }, kids);
+}
+
+/** Плитка показателя: цветная иконка, название, значение, полоска «к цели», чип изменения и подпись. Все плитки в сетке одной высоты. */
+export function statTile({ icon: ic, color = 'blue', title, value, bar = null, status = 'good', delta = null, caption = null } = {}) {
+  return h('div', { class: 'stat-tile' },
+    h('div', { class: 'stat-tile-top' }, tile(ic, color, 28), h('span', { class: 'stat-tile-title' }, title)),
+    h('div', { class: 'stat-tile-val' }, value),
+    bar && bar[1] > 0 ? progressBar(bar[0], bar[1], { status, label: title }) : null,
+    h('div', { class: 'stat-tile-foot' }, delta || null, caption ? h('span', { class: 'muted small' }, caption) : null));
+}
+
 // --------------------------------------------------------------- formatters
 const nf = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 });
 export const fmtN = (n) => (n === null || n === undefined || isNaN(n) ? '—' : nf.format(Math.round(n * 10) / 10));
@@ -84,6 +106,44 @@ export function fmtDur(min) {
   const m = Math.round(min);
   return `${Math.floor(m / 60)} ч ${String(m % 60).padStart(2, '0')} м`;
 }
+// ------------------------------------------------------------------ motion
+export const reducedMotion = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+/** Плавно «досчитывает» число в el до `to` (easeOutCubic). При reduced-motion сразу показывает итог. */
+export function countUp(el, to, { ms = 700, fmt = fmtKcal, from = 0 } = {}) {
+  const set = (v) => { el.textContent = fmt(v); };
+  if (reducedMotion() || !isFinite(to) || from === to) { set(to); return; }
+  const t0 = performance.now();
+  set(from);
+  const step = (now) => {
+    if (!el.isConnected && now - t0 > 50) { set(to); return; }
+    const k = Math.min(1, (now - t0) / ms);
+    set(from + (to - from) * (1 - (1 - k) ** 3));
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+/** Карточки верхнего уровня container въезжают по очереди (stagger 40 мс, не больше 8). Класс .stg висит только на время анимации. */
+export function staggerIn(container, items) {
+  if (reducedMotion()) return;
+  const kids = (items || [...container.children]).filter((c) => c && !c.hidden).slice(0, 8);
+  kids.forEach((c, i) => {
+    c.style.setProperty('--i', i);
+    c.classList.add('stg');
+    setTimeout(() => { c.classList.remove('stg'); c.style.removeProperty('--i'); }, 500 + i * 40);
+  });
+}
+
+/** Тема: null = «как в системе», 'light' | 'dark'. «Авто» снимает ключ и просит main.js пересчитать схему. */
+export function getThemePref() {
+  try { const v = localStorage.getItem('theme'); return v === 'light' || v === 'dark' ? v : null; } catch (e) { return null; }
+}
+export function setThemePref(v) {
+  try { if (v === 'light' || v === 'dark') localStorage.setItem('theme', v); else localStorage.removeItem('theme'); } catch (e) { /* без хранилища */ }
+  window.dispatchEvent(new Event('app:theme'));
+}
+
 export const isDark = () => (inTelegram && tg && tg.colorScheme ? tg.colorScheme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches);
 export function plural(n, one, few, many) {
   const a = Math.abs(n) % 100; const b = a % 10;
@@ -145,6 +205,55 @@ export const dishKind = (k) => DISH_KINDS[k] || DISH_KINDS.other;
 
 export function macroLine(o) {
   return `Б ${fmtN(o.protein)} · Ж ${fmtN(o.fat)} · У ${fmtN(o.carbs)}`;
+}
+
+/** Чипы БЖУ с цветной точкой. `unit` дописывает « г»; `extra` — дополнительные чипы в конце; `pills` — крупные плашки как на экране приёма. */
+export function macroChips({ p, f, c }, { unit = '', extra = null, cls = '', pills = false } = {}) {
+  const defs = [['p', 'Б', p], ['f', 'Ж', f], ['c', 'У', c]];
+  if (pills) {
+    return h('div', { class: 'pills' + (cls ? ' ' + cls : '') },
+      defs.map(([k, letter, v]) => h('span', { class: 'pill pill-' + k }, letter + ' ', h('b', null, fmtN(v)), ' г')));
+  }
+  return h('span', { class: 'macs' + (cls ? ' ' + cls : '') },
+    defs.map(([k, letter, v]) => h('span', { class: 'mac ' + k }, h('i'), `${letter} ${fmtN(v)}${unit}`)), extra);
+}
+
+/** Переключатель дня «‹ дата ›»: стрелки, тап по дате (к сегодня) и свайп по шапке. onChange(date, dir): dir -1 назад, +1 вперёд. */
+export function dateSwitch(initial, onChange) {
+  let cur = initial;
+  const prev = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Предыдущий день', onclick: () => step(-1) }, icon('back'));
+  const next = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Следующий день', onclick: () => step(1) }, icon('next'));
+  const label = h('button', { class: 'date-label', type: 'button', onclick: () => {
+    if (cur === todayISO()) return;
+    cur = todayISO(); paint(); haptic('selection'); onChange(cur, 1);
+  } });
+  const el = h('div', { class: 'date-switch page-head' }, prev, label, next);
+  function paint() {
+    const isToday = cur === todayISO();
+    label.replaceChildren(h('span', { class: 'date-main' }, dateLabel(cur)),
+      h('span', { class: 'date-sub' }, isToday ? longDate(cur) : 'нажмите, чтобы вернуться к сегодня'));
+    next.disabled = isToday;
+  }
+  function step(n) {
+    const d = addDays(cur, n);
+    if (d > todayISO()) return;
+    cur = d; paint(); haptic('selection'); onChange(cur, n);
+  }
+  // Горизонтальный жест длиннее 60 px; вертикальную прокрутку не трогаем.
+  let x0 = 0, y0 = 0, tracking = false;
+  el.addEventListener('touchstart', (e) => {
+    tracking = e.touches.length === 1;
+    if (tracking) { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }
+  }, { passive: true });
+  el.addEventListener('touchend', (e) => {
+    if (!tracking) return;
+    tracking = false;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - x0; const dy = t.clientY - y0;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) step(dx > 0 ? -1 : 1);
+  }, { passive: true });
+  paint();
+  return { el, get: () => cur, set(d) { cur = d; paint(); } };
 }
 
 // Safe "simple markdown": escape everything (text nodes) and turn **bold** into <strong>.
@@ -461,6 +570,7 @@ export function segmented(options, value, onChange, label) {
       btns.forEach((x) => { x.classList.remove('active'); x.setAttribute('aria-selected', 'false'); });
       b.classList.add('active');
       b.setAttribute('aria-selected', 'true');
+      haptic('selection');
       onChange(val);
     } }, text);
     return b;

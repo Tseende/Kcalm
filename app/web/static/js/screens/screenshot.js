@@ -1,6 +1,6 @@
 // Upload a screenshot (sleep / steps / scales) -> parsed metrics -> optional confirm
 import { api } from '../api.js';
-import { h, icon, toast, haptic, nav, pageHead, compressImage, busyOverlay, fmtN, fmtDur, shortDate, parseISO } from '../ui.js';
+import { h, icon, toast, haptic, nav, pageHead, compressImage, busyOverlay, fmtN, fmtDur, shortDate, parseISO, todayISO } from '../ui.js';
 
 // Keys follow app/services/screens.py METRIC_RANGES (the backend's flat metrics).
 const n1 = (v) => fmtN(v);
@@ -71,11 +71,12 @@ export default async function render(root, ctx) {
     const actions = h('div', { class: 'stack-sm' });
     const status = h('div', { class: 'card status' });
     out.replaceChildren(h('img', { class: 'preview', src: url, alt: 'Выбранный скриншот' }),
-      h('div', { class: 'muted small' }, `Распознано за ${shortDate(r.date || new Date().toISOString().slice(0, 10))} · уверенность ${Math.round((r.confidence || 0) * 100)}%`),
+      h('div', { class: 'muted small' }, `Распознано за ${shortDate(r.date || todayISO())} · уверенность ${Math.round((r.confidence || 0) * 100)}%`),
       rows.length ? h('div', { class: 'list' }, rows) : h('div', { class: 'card muted' }, 'Не удалось найти данные на скриншоте.'),
       status, actions);
 
     if (r.applied) {
+      api._me = null;                                   // скриншот мог записать вес
       haptic('success');
       status.replaceChildren(icon('check', 20), 'Данные сохранены');
       status.classList.add('ok');
@@ -86,6 +87,7 @@ export default async function render(root, ctx) {
       const confirm = async (apply) => {
         try {
           await api.post('/screens/' + r.id + '/confirm', { apply });
+          api._me = null;
           haptic('success');
           toast(apply ? 'Данные сохранены' : 'Отменено', 'ok');
           nav.replace('/today');

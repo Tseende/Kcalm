@@ -1,7 +1,7 @@
 // "Мои продукты" list
 import { api } from '../api.js';
 import { foodPic, foodGroupOf, FOOD_GROUPS } from '../pics.js';
-import { h, icon, tile, nav, pageHead, sheet, skeletonCards, emptyState, errorState, debounce, fmtN, plural, mainButton } from '../ui.js';
+import { h, icon, tile, nav, pageHead, sheet, skeletonCards, emptyState, errorState, debounce, fmtN, plural, mainButton, macroChips } from '../ui.js';
 import { drinkPic } from '../pics.js';
 
 const PALETTE = ['blue', 'green', 'orange', 'purple', 'teal', 'pink', 'red'];
@@ -33,10 +33,6 @@ export default async function render(root, ctx) {
         h('span', { class: 'grow' }, h('span', { class: 'row-title' }, 'По этикетке или штрихкоду'), h('span', { class: 'row-sub' }, 'Несколько фото упаковки или поиск в Open Food Facts')))) });
   }
 
-  function macro(cls, letter, v) {
-    return h('span', { class: 'mac ' + cls }, h('i'), `${letter} ${fmtN(v)}`);
-  }
-
   function paint() {
     const groups = new Map();
     for (const p of all) {
@@ -58,7 +54,7 @@ export default async function render(root, ctx) {
       h('span', { class: 'grow' },
         h('span', { class: 'row-title' }, p.name),
         p.brand ? h('span', { class: 'row-sub' }, p.brand) : null,
-        h('span', { class: 'macs' }, macro('p', 'Б', p.protein), macro('f', 'Ж', p.fat), macro('c', 'У', p.carbs))),
+        macroChips({ p: p.protein, f: p.fat, c: p.carbs })),
       h('span', { class: 'prod-kcal' }, h('b', null, fmtN(p.kcal)), h('span', null, 'ккал'))))),
       h('div', { class: 'footnote' }, `${plural(shown.length, 'продукт', 'продукта', 'продуктов')} · значения на 100 г`));
   }
