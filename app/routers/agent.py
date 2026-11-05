@@ -52,11 +52,37 @@ async def run_intent(msg: Message, db: sqlite3.Connection, intent: intents.Inten
     elif name == "food_info":
         await msg.answer(assistant.food_info(db, arg))
     elif name == "help":
-        await msg.answer(esc(assistant.HELP_TEXT))
+        await msg.answer(esc(assistant.help_text()))
     elif name == "greeting":
         await msg.answer(esc(assistant.greeting(repo.get_user_by_tg(db, msg.from_user.id))))
     elif name == "thanks":
         await msg.answer(assistant.THANKS)
+
+
+# Намерения, которые пишут в дневник. Из свободного текста и голоса их не выполняем: чат с ботом
+# нужен для разговора, а еда, вода, сон и шаги попадают в базу через приложение и скриншоты.
+LOGGING_INTENTS = {"sleep_log", "steps_log", "workout_log"}
+
+
+async def discuss(msg: Message, db: sqlite3.Connection, user, text: str,
+                  status: Message | None = None) -> None:
+    """Свободная реплика в чате: ничего не записывается, ассистент продолжает разговор.
+
+    Явные команды (отчёты, «отмени последнее», правила, напоминания) работают как раньше;
+    «съел тост», «выпил воды», «спал 7 часов» — обычная реплика, а не запись."""
+    intent = intents.detect(text)
+    if intent is not None and intent.name not in LOGGING_INTENTS:
+        if status is not None:
+            try:
+                await status.delete()
+            except Exception:  # noqa: BLE001 — статус не критичен
+                pass
+        await run_intent(msg, db, intent)
+        return
+    if status is None:
+        status = await msg.answer("💭 думаю…")
+    reply = await assistant.answer(db, user, text)
+    await status.edit_text(reply[:4000])
 
 
 async def maybe_handle(msg: Message, db: sqlite3.Connection, user, text: str,

@@ -28,6 +28,7 @@ from app.routers import products as products_router
 from app.services import assistant
 from app.routers import craving as craving_router
 from app.adapters import off
+from app.config import get_config
 from app.services import barcode
 from app.services import food as foodsvc
 from app.services import products as prodsvc
@@ -147,6 +148,13 @@ async def on_text(msg: Message, db: sqlite3.Connection, user_row=None) -> None:
     uid = user["id"]
     text = (msg.text or "").strip()
 
+    if not get_config().chat_logs_food:
+        # чат только для разговора: «съел тост» не запись, а повод продолжить диалог
+        if await products_router.handle_draft_text(msg, db, user, text):
+            return
+        await agent.discuss(msg, db, user, text)
+        return
+
     if repo.latest_pending_input(db, uid, "screenshot_confirm", max_age_min=30):
         await msg.answer("Сначала подтверди или отклони предыдущий скриншот кнопкой выше.")
         return
@@ -265,7 +273,6 @@ async def on_voice(msg: Message, db: sqlite3.Connection, bot=None) -> None:
         return
     uid = user["id"]
     status = await msg.answer("🎙 распознаю голос…")
-    from app.config import get_config
     from app.llm import client as llm
     try:
         media = msg.voice or msg.audio
@@ -279,6 +286,9 @@ async def on_voice(msg: Message, db: sqlite3.Connection, bot=None) -> None:
             ogg, filename=getattr(media, "file_name", None) or "voice.ogg",
             model=get_config().model_asr, user_id=uid, db=db,
         )
+        if not get_config().chat_logs_food:
+            await _discuss_voice(msg, db, user, text, status)
+            return
         if await _try_refine(msg, db, user, text, voice=True):
             await status.delete()
             return
@@ -288,8 +298,16 @@ async def on_voice(msg: Message, db: sqlite3.Connection, bot=None) -> None:
         repo.save_pending_input(db, uid, "voice", {"tg_file_id": media.file_id})
         await status.edit_text(
             "Не смог распознать голосовое. Сохранил его: повтори позже командой /retry "
-            "или опиши еду текстом."
+            "или напиши текстом."
         )
+
+
+async def _discuss_voice(msg: Message, db: sqlite3.Connection, user, text: str,
+                         status: Message) -> None:
+    """Голос, как и текст, это разговор: тяга к еде или ответ ассистента, без записи в дневник."""
+    if await craving_router.maybe_handle(msg, db, user, text, status):
+        return
+    await agent.discuss(msg, db, user, text, status)
 
 
 # ------------------------------------------------------------------ фото
@@ -397,6 +415,11 @@ async def _ingest_image(msg: Message, db: sqlite3.Connection, file_id: str,
                                                status)
         return
 
+    if not get_config().chat_logs_food:
+        status = await msg.answer("📷 смотрю…")
+        await _screenshot_or_hint(msg, db, user, image, status)
+        return
+
     if caption and _caption_says_screen(caption):
         status = await msg.answer("📷 смотрю…")
         if not await _process_screenshot(msg, db, user, image.data, image.file_hash,
@@ -413,6 +436,19 @@ async def _ingest_image(msg: Message, db: sqlite3.Connection, file_id: str,
             return
     await _recognize_images(msg, db, user, [image], caption or None, status,
                             source="combo" if caption else "photo")
+
+
+NOT_A_SCREEN = ("Здесь я не вижу сна, активности или веса, поэтому ничего не записал. Скриншоты "
+                "сна, шагов, тренировок и весов записываю сам, а еду и воду вноси в приложении: "
+                "/app. А здесь можно просто поговорить.")
+
+
+async def _screenshot_or_hint(msg: Message, db: sqlite3.Connection, user, image: "_Image",
+                              status: Message) -> None:
+    """Картинка в чате без режима еды: в базу уходит только скриншот сна, активности или веса."""
+    if not await _process_screenshot(msg, db, user, image.data, image.file_hash,
+                                     image.photo_path, status):
+        await status.edit_text(NOT_A_SCREEN)
 
 
 async def _download_image(msg: Message, db: sqlite3.Connection, uid: int, file_id: str,
@@ -485,6 +521,11 @@ async def _flush_album(group: tuple[int, str]) -> None:
             status = await msg.answer("🥫 читаю этикетку…")
             await products_router.from_label_photo(
                 msg, db, user, base64.b64encode(album.images[0].data).decode(), status)
+            return
+        if not get_config().chat_logs_food:
+            for image in album.images:
+                status = await msg.answer("📷 смотрю…")
+                await _screenshot_or_hint(msg, db, user, image, status)
             return
         status = await msg.answer("📷 смотрю фото…")
         await _recognize_images(msg, db, user, album.images, album.caption or None, status,
@@ -1060,6 +1101,9 @@ async def cmd_retry(msg: Message, db: sqlite3.Connection) -> None:
         except Exception:  # noqa: BLE001
             repo.save_pending_input(db, user["id"], "voice", payload)
             await msg.answer("Повтор пока не удался; голосовое осталось в очереди.")
+            return
+        if not get_config().chat_logs_food:
+            await _discuss_voice(msg, db, user, text, await msg.answer("💭 думаю…"))
             return
         await _process_meal(msg, db, user, text, None, "voice", transcript=text)
         return

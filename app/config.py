@@ -50,6 +50,10 @@ class Config(BaseSettings):
     # поведение
     dedup_window_min: int = 10
     combo_window_sec: int = 90
+    # false (по умолчанию): чат только для разговора. Текст и голос ничего не пишут в дневник, а картинка
+    # попадает в базу только как скриншот сна, активности или веса. true: прежний режим, еда словами,
+    # голосом и по фото, вода, сон и шаги текстом.
+    chat_logs_food: bool = False
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     llm_timeout_s: float = 60.0
     max_media_bytes: int = 10 * 1024 * 1024
