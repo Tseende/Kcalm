@@ -9,7 +9,7 @@ import {
 } from '../ui.js';
 
 let curDate = todayISO();
-const waterUndo = []; // ids of water entries added in this session
+const waterUndo = []; // water entries added in this session: {ml, id, p}
 let firstPaint = true; // animate the ring once per visit, not on every refresh
 let oftenCache = null; // last /frequent answer, painted instantly on re-render
 
@@ -106,24 +106,38 @@ export default async function render(root, ctx) {
       waterBar.setAttribute('aria-valuenow', waterMl);
       undoBtn.disabled = !waterUndo.length || curDate !== todayISO();
     }
-    async function addWater(ml) {
+    // Оптимистично: цифра и полоска меняются сразу, сервер догоняет в фоне (облачная БД отвечает не мгновенно).
+    let waterPending = 0;
+    function addWater(ml) {
       if (curDate !== todayISO()) { toast('Воду можно добавлять только за сегодня'); return; }
-      try {
-        const r = await api.post('/water', { ml });
-        waterMl = r.water_ml;
-        waterUndo.push(r.id);
-        haptic('light');
+      const entry = { ml, id: null, p: null };
+      waterMl += ml;
+      waterUndo.push(entry);
+      haptic('light');
+      paintWater();
+      waterPending++;
+      entry.p = api.post('/water', { ml }).then((r) => {
+        entry.id = r.id;
+        if (--waterPending === 0) { waterMl = r.water_ml; paintWater(); }   // сверка с сервером, когда нет других в пути
+      }).catch((e) => {
+        waterPending--;
+        const i = waterUndo.indexOf(entry);
+        if (i >= 0) { waterUndo.splice(i, 1); waterMl -= ml; }
         paintWater();
-      } catch (e) { toast(e.message, 'error'); }
+        toast(e.message, 'error');
+      });
     }
     async function undoWater() {
-      const id = waterUndo.pop();
-      if (!id) return;
+      const entry = waterUndo.pop();
+      if (!entry) return;
+      waterMl -= entry.ml;
+      paintWater();
+      await entry.p;                                  // id приходит с ответом на добавление
+      if (entry.id == null) return;                   // добавление не удалось: уже откатили
       try {
-        const r = await api.del('/water/' + id);
-        waterMl = r.water_ml;
-        paintWater();
-      } catch (e) { waterUndo.push(id); toast(e.message, 'error'); }
+        const r = await api.del('/water/' + entry.id);
+        if (!waterPending) { waterMl = r.water_ml; paintWater(); }
+      } catch (e) { waterMl += entry.ml; waterUndo.push(entry); paintWater(); toast(e.message, 'error'); }
     }
     const waterCard = h('section', { class: 'card stack-sm water-card', 'aria-label': 'Вода' },
       h('div', { class: 'row-between' }, h('div', { class: 'water-head' }, h('span', { class: 'water-ico', 'aria-hidden': 'true' }, icon('droplet', 20)), h('div', null, h('div', { class: 'water-title' }, 'Вода'), waterSub)), waterNum),
