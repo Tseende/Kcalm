@@ -305,14 +305,15 @@ export default async function render(root, ctx) {
     capture.className = 'capture' + (has ? ' compact' : '');
     if (!has) {
       target = groups[0];
+      const act = (ic, label, sub, fn, main) => h('button', { class: 'cap-tile' + (main ? ' main' : ''), type: 'button', onclick: fn },
+        h('span', { class: 'cap-ico' }, icon(ic, 26)), h('span', { class: 'cap-label' }, label), h('span', { class: 'cap-sub' }, sub));
       capture.replaceChildren(
-        h('span', { class: 'capture-ico' }, icon('camera', 30)),
-        h('div', { class: 'capture-title' }, 'Сфотографируйте еду'),
-        h('div', { class: 'capture-sub' }, `Можно до ${MAX} фото: тарелка, упаковка, этикетка. Другое блюдо добавляется отдельно`),
-        h('div', { class: 'capture-actions' },
-          h('button', { class: 'btn btn-primary', type: 'button', onclick: () => pick(camera, groups[0]) }, icon('camera', 20), 'Снять'),
-          h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => pick(gallery, groups[0]) }, icon('image', 20), 'Галерея')),
-        h('button', { class: 'btn btn-tonal btn-block scan-quick', type: 'button', onclick: () => scanIng(null) }, icon('barcode', 20), 'Штрихкод продукта'));
+        h('div', { class: 'capture-title' }, 'Добавьте приём пищи'),
+        h('div', { class: 'capture-sub' }, `До ${MAX} фото: тарелка, упаковка, этикетка`),
+        h('div', { class: 'cap-grid' },
+          act('camera', 'Снять', 'еду', () => pick(camera, groups[0]), true),
+          act('image', 'Галерея', 'из фото', () => pick(gallery, groups[0])),
+          act('barcode', 'Штрихкод', 'продукт', () => scanIng(null))));
     } else {
       capture.replaceChildren(
         h('button', {
@@ -400,8 +401,9 @@ export default async function render(root, ctx) {
   view.append(
     pageHead('Приём пищи', { parent: '/today' }),
     h('div', { class: 'stack' },
-      quick, dishList, capture, noDishHint || document.createDocumentFragment(),
+      capture, dishList, noDishHint || document.createDocumentFragment(),
       h('label', { class: 'field compose-keep' }, textLabel, textTa),
+      quick,
       camera, gallery, codeShot));
 
   // Пока пишете словами, всё лишнее прячется: поле выходит наверх и не прячется за клавиатурой и кнопкой.
