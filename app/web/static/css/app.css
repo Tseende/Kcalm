@@ -984,7 +984,7 @@ input.time-in[type="time"] { width: 104px; flex: none; min-height: 36px; padding
 .fav-photo.ph { height: 110px; }
 
 /* ввод словами: поле наверху, остальное убрано (только когда открыта клавиатура) */
-body.kb-open .screen.compose .stack > :not(.compose-keep) { display: none; }
+body.kb-open .ck-hide { display: none !important; }
 body.kb-open .screen.compose textarea { min-height: 34vh; }
 .scan-quick { margin-top: 10px; }
 

@@ -406,10 +406,6 @@ export default async function render(root, ctx) {
       quick,
       camera, gallery, codeShot));
 
-  // Пока пишете словами, всё лишнее прячется: поле выходит наверх и не прячется за клавиатурой и кнопкой.
-  textTa.addEventListener('focus', () => { view.classList.add('compose'); window.scrollTo(0, 0); });
-  textTa.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== textTa) view.classList.remove('compose'); }, 80));
-
   mainButton.show('Сохранить приём', submit, { disabled: true });
   lastDisabled = true;
   paint();

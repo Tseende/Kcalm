@@ -7,6 +7,26 @@ const isField = (el) => !!el && ((el.tagName === 'TEXTAREA') || (el.tagName === 
 
 const KBBAR_H = 68; // высота кнопки над клавиатурой, см. .kbbar в app.css
 
+// Свободный текст (комментарий, описание): остальное на экране прячем, поле выходит наверх на всю высоту.
+let composed = [];
+function composeOn(ta) {
+  const screen = ta.closest('.screen');
+  if (!screen || ta.closest('.sheet')) return;
+  composeOff();
+  for (let a = ta; a && a !== screen; a = a.parentElement) {
+    for (const sib of a.parentElement.children) {
+      if (sib !== a && !sib.matches('.page-head, header, [hidden], input[type=file]')) { sib.classList.add('ck-hide'); composed.push(sib); }
+    }
+  }
+  screen.classList.add('compose');
+  composed.push(screen);
+  window.scrollTo(0, 0);
+}
+function composeOff() {
+  for (const el of composed) el.classList.remove('ck-hide', 'compose');
+  composed = [];
+}
+
 export function initKeyboard() {
   const root = document.documentElement;
   const body = document.body;
@@ -55,6 +75,7 @@ export function initKeyboard() {
     if (!isField(e.target)) return;
     focused = true;
     body.classList.add('kb-focus');
+    if (e.target.tagName === 'TEXTAREA') composeOn(e.target);
     update();
     reveal();
   });
@@ -63,6 +84,7 @@ export function initKeyboard() {
     setTimeout(() => {
       if (isField(document.activeElement)) return;
       focused = false;
+      composeOff();
       body.classList.remove('kb-focus');
       update();
       if (!open) mainButton.resume();
