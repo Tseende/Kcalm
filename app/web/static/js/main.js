@@ -181,14 +181,45 @@ async function boot() {
   buildTabbar();
   initKeyboard();
   nav._init();
+  let me = null;
   try {
-    await api.me();
+    me = await api.me();
   } catch (e) {
     if (e.status === 401 || e.status === 409 || e.code === 'network' || e.code === 'timeout') return showBlocking(e);
     console.error(e);
   }
   if (isMock()) mockBadge();
   $('#boot')?.remove();
+  if (me && me.onboarded === false) return startOnboarding(me);
+  startApp();
+}
+
+// Первый запуск: вместо вкладок показываем онбординг; по «Начать» запускается обычное приложение.
+async function startOnboarding(me) {
+  tabbar.hidden = true;
+  document.body.dataset.route = 'onb';
+  try {
+    const mod = await import('./screens/onboarding.js');
+    let stop = null;
+    stop = mod.default(view, {
+      me,
+      onDone: async () => {
+        if (stop) stop();
+        try { await api.me(true); } catch (e) { console.warn(e); }
+        view.replaceChildren();
+        startApp();
+      },
+    });
+  } catch (e) {
+    console.error(e);
+    errorState(view, e, () => location.reload());
+  }
+}
+
+let appStarted = false;
+function startApp() {
+  if (appStarted) return;
+  appStarted = true;
   // Кнопка из напоминания открывает нужный экран: ?screen=analysis. Хеш занят данными Telegram.
   const screen = new URLSearchParams(location.search).get('screen');
   if (screen) {
@@ -200,6 +231,10 @@ async function boot() {
   }
   window.addEventListener('hashchange', () => { nav._track(); render(); });
   render();
+  // подсказка над «+» после онбординга, один раз
+  let hint = false;
+  try { hint = localStorage.getItem('onb_hint_pending') === '1' && localStorage.getItem('onb_hint_done') !== '1'; } catch (e) { /* без хранилища */ }
+  if (hint) import('./screens/onboarding.js').then((m) => m.maybeShowPlusHint()).catch(() => {});
 }
 
 boot();

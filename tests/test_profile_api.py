@@ -75,4 +75,5 @@ async def test_delete_account_needs_confirmation(client, db, user_id):
     r = await client.delete("/api/me", json={"confirm": "удалить"}, headers=H)
     assert r.status == 200
     assert repo.get_user_by_tg(db, 1001) is None
-    assert (await client.get("/api/me", headers=H)).status == 409
+    assert (await (await client.get("/api/me", headers=H)).json())["onboarded"] is False
+    assert (await client.get("/api/profile", headers=H)).status == 409

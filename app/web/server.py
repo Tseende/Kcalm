@@ -31,6 +31,7 @@ from app.llm import client as llm
 from app.services import dishes as dishsvc
 from app.services import food as foodsvc
 from app.services import meals as meals_svc
+from app.services import onboarding as onboardingsvc
 from app.services import profile as profilesvc
 from app.services import screens as screens_svc
 from app.services import water as watersvc
@@ -138,6 +139,10 @@ def _unauthorized() -> ApiError:
     return ApiError(401, "unauthorized", "Откройте приложение из Telegram, чтобы войти.")
 
 
+# Только эти запросы доступны до онбординга: статус профиля и сама настройка.
+OPEN_BEFORE_ONBOARDING = {("GET", "/api/me"), ("POST", "/api/onboarding")}
+
+
 @web.middleware
 async def auth_middleware(request: web.Request, handler):
     if not request.path.startswith("/api/"):
@@ -164,9 +169,10 @@ async def auth_middleware(request: web.Request, handler):
     else:
         raise _unauthorized()
     user = repo.get_user_by_tg(db, tg_id)
-    if user is None or not user["onboarded"]:
+    if (user is None or not user["onboarded"]) and (request.method, request.path) not in OPEN_BEFORE_ONBOARDING:
         raise ApiError(409, "not_onboarded", "Сначала пройдите настройку в чате с ботом.")
     request["user"] = user
+    request["tg_id"] = tg_id
     request["first_name"] = first_name
     return await handler(request)
 
@@ -347,9 +353,13 @@ async def healthz(request: web.Request) -> web.Response:
 
 @routes.get("/api/me")
 async def api_me(request: web.Request) -> web.Response:
+    user = request["user"]
+    if user is None or not user["onboarded"]:
+        return ok({"onboarded": False, "user": {"first_name": request["first_name"]}})
     db, user, _ = ctx(request)
     today = now_local(user).date().isoformat()
     return ok({
+        "onboarded": True,
         "user": {"tg_id": user["tg_id"], "first_name": request["first_name"],
                  "sex": user["sex"], "height_cm": user["height_cm"],
                  "goal_weight_kg": user["goal_weight_kg"], "tz": user["tz"],
@@ -449,6 +459,74 @@ async def api_reminder_put(request: web.Request) -> web.Response:
     except profilesvc.ProfileError as exc:
         raise ApiError(404, "not_found", str(exc)) from None
     return ok({"reminders": profilesvc.reminders_json(db, user)})
+
+
+ONBOARDING_REMINDERS = ("morning", "midday", "evening", "weekly", "water", "weigh")
+
+
+@routes.post("/api/onboarding")
+async def api_onboarding(request: web.Request) -> web.Response:
+    """Первичная настройка из Mini App: профиль, норма, напоминания. Логика общая с чатом."""
+    db, config = request.app[DB], request.app[CONFIG]
+    user = request["user"]
+    if user is not None and user["onboarded"]:
+        raise ApiError(409, "already_onboarded", "Профиль уже настроен.")
+    data = await read_json(request)
+    if data.get("sex") not in ("male", "female"):
+        raise bad("Пол: male или female.", "bad_field")
+    tz = onboardingsvc.DEFAULT_TZ
+    if data.get("tz") is not None:
+        try:
+            tz = validate_timezone(str(data["tz"]))
+        except ValueError as exc:
+            raise bad(str(exc), "bad_tz") from None
+    year_now = foodsvc.local_now(tz).year
+    clean: dict = {"sex": data["sex"], "tz": tz,
+                   "birth_year": int(number(data, "birth_year", year_now - 100, year_now, required=True)),
+                   "height_cm": number(data, "height_cm", 120, 230, required=True),
+                   "weight_kg": number(data, "weight_kg", 35, 300, required=True),
+                   "goal_weight_kg": number(data, "goal_weight_kg", 30, 250),
+                   "rate_kg_week": number(data, "rate_kg_week", 0, 0.7)}
+    act = number(data, "activity", 1, 4)
+    clean["activity"] = int(act) if act is not None else 2
+    clean["eating_cutoff"] = config.eating_cutoff_default
+    if data.get("eating_cutoff") is not None:
+        try:
+            clean["eating_cutoff"] = validate_hhmm(str(data["eating_cutoff"]))
+        except ValueError as exc:
+            raise bad(str(exc), "bad_time") from None
+    care = data.get("care_mode", False)
+    if not isinstance(care, bool):
+        raise bad("care_mode: true или false.", "bad_field")
+    clean["care_mode"] = care
+    reminders = data.get("reminders")
+    if reminders is not None:
+        if not isinstance(reminders, dict) or any(
+                k not in ONBOARDING_REMINDERS or not isinstance(v, bool) for k, v in reminders.items()):
+            raise bad("reminders: объект вида {\"morning\": true, ...}.", "bad_field")
+        clean["reminders"] = reminders
+    try:
+        result = onboardingsvc.complete(db, request["tg_id"], clean)
+    except onboardingsvc.OnboardingError as exc:
+        raise bad(str(exc), exc.code) from None
+    await _announce_profile_ready(request, result, care)
+    return ok({k: result[k] for k in ("profile", "targets", "notes", "goal_date")})
+
+
+async def _announce_profile_ready(request: web.Request, result: dict, care: bool) -> None:
+    """Короткое сообщение в чат после настройки в приложении. Сбой отправки онбординг не ломает."""
+    bot, config = request.app[BOT], request.app[CONFIG]
+    if bot is None:
+        return
+    head = "Профиль готов. Норму посчитал, цифры буду показывать бережно." if care \
+        else f"Профиль готов, норма ≈{result['kcal']} ккал."
+    tail = ("Кидайте еду сюда текстом, фото или голосом." if config.chat_logs_food
+            else "Еду добавляйте в приложении кнопкой «+», а здесь можно поговорить, если вечером потянет к холодильнику.")
+    try:
+        from app.routers import menu
+        await bot.send_message(request["tg_id"], f"{head} {tail}", reply_markup=menu.main_kb())
+    except Exception:                                        # noqa: BLE001
+        log.warning("не удалось отправить сообщение о готовности профиля", exc_info=True)
 
 
 @routes.delete("/api/me")

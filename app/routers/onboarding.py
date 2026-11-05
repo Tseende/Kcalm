@@ -9,29 +9,17 @@ from aiogram import Router
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message
+from aiogram import F
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo
 
 from app.config import get_config
-from app.domain.targets import MIN_AGE, MIN_BMI, bmi, compute_target, min_goal_weight
+from app.domain.targets import MIN_AGE
 from app.routers import menu
+from app.services.onboarding import CARE_NOTE, HEALTH_NOTE, UNDERAGE_TEXT, complete
 from app.storage import repo
-from app.timeutils import local_today, minutes_before, validate_hhmm, validate_timezone
+from app.timeutils import local_today, validate_hhmm, validate_timezone
 
 router = Router(name="onboarding")
-
-UNDERAGE_TEXT = (
-    f"Бот считает дефицит калорий и рассчитан на взрослых ({MIN_AGE}+). "
-    "Детям и подросткам диету подбирает только врач: ограничения в питании "
-    "в этом возрасте могут навредить росту и здоровью."
-)
-CARE_NOTE = (
-    "Если у тебя был или есть опыт расстройства пищевого поведения или тебе тревожно от цифр, "
-    "включи осторожный режим: /care."
-)
-HEALTH_NOTE = (
-    "Если ты беременна или кормишь грудью, у тебя диабет, расстройство пищевого "
-    "поведения или другие хронические болезни — обсуди похудение с врачом."
-)
 
 QUESTIONS = [
     # (ключ, текст, дефолт-строка или None = обязателен)
@@ -55,6 +43,13 @@ def _question(index: int) -> tuple[str, str, str | None]:
     return key, text, (_cutoff_default() if key == "cutoff" else default)
 
 
+CHAT_FLOW_CB = "onb:chat"
+WELCOME_TEXT = (
+    "Привет! Я помогу вести дневник питания и не срываться вечером.\n"
+    "Настройка займёт минуту: пара касаний, без клавиатуры."
+)
+
+
 class Onboard(StatesGroup):
     q = State()
 
@@ -71,57 +66,18 @@ def _summary(data: dict) -> str:
 
 
 def _finish(db: sqlite3.Connection, tg_id: int, data: dict) -> tuple[int, int, str]:
-    user = repo.get_user_by_tg(db, tg_id)
-    uid = user["id"] if user else repo.create_user(db, tg_id)
-    sex = "male" if data.get("sex", "м").lower().startswith(("м", "m")) else "female"
-    today = local_today(data.get("tz", "Europe/Minsk"))
-    birth_year = today.year - int(data["age"])
-    weight = float(data["weight"])
-    height = float(data["height"])
+    """Ответы чата → общий расчёт (services.onboarding.complete). Возвращает (uid, ккал, заметки)."""
+    tz = data.get("tz", "Europe/Minsk")
     rate = abs(float(data.get("rate", "0.5")))
-    safety_notes: list[str] = []
-    if bmi(weight, height) < MIN_BMI:
-        # ИМТ уже ниже нормы: дефицит не ставим, цель — поддержание веса
-        rate = 0.0
-        safety_notes.append(f"ИМТ {bmi(weight, height):.1f} ниже нормы — дефицит не включаю, "
-                            "цель считаю на поддержание веса.")
-    goal_weight = round(weight - rate * 12, 1)
-    floor_weight = min_goal_weight(height)
-    if rate and goal_weight < floor_weight:
-        goal_weight = min(weight, floor_weight)         # ниже ИМТ 18.5 цель не ставим
-        safety_notes.append(f"Целевой вес ограничил {goal_weight:g} кг (ИМТ 18.5).")
-    repo.update_user(
-        db, uid,
-        sex=sex,
-        birth_date=f"{birth_year}-01-01",
-        height_cm=float(data["height"]),
-        start_weight_kg=float(data["weight"]),
-        tz=data.get("tz", "Europe/Minsk"),
-        eating_cutoff=data.get("cutoff") or _cutoff_default(),
-        activity_pa={"1": 1.0, "2": 1.12, "3": 1.27, "4": 1.54}
-        .get(data.get("activity", "2"), 1.12),
-        goal_weight_kg=goal_weight,
-        target_rate_kg_week=-rate,
-        onboarded=1,
-    )
-    t = compute_target(
-        sex=sex, age=int(data["age"]), weight_kg=float(data["weight"]),
-        height_cm=float(data["height"]),
-        pal={"1": 1.25, "2": 1.5, "3": 1.75, "4": 2.2}.get(data.get("activity", "2"), 1.5),
-        rate_kg_week=-rate,
-        goal_weight_kg=goal_weight,
-    )
-    kcal = int(t.kcal_target)
-    repo.insert_target(db, uid, today.isoformat(), kcal,
-                       t.protein_g, t.fat_g, t.carbs_g, t.tdee_est, "onboarding")
-    for kind, lt in [("morning", "08:30"), ("midday", "13:30"),
-                     ("kitchen_close", minutes_before(data.get("cutoff") or _cutoff_default(), 15)), ("evening", "21:30"),
-                     ("weekly", "19:00"), ("water", "16:00"), ("weigh", "07:30")]:
-        repo.set_reminder(db, uid, kind, lt)
-    if t.floor_applied:
-        safety_notes.append("Расчётная цель была ниже безопасного минимума — поднял до порога.")
-    note = "".join(f"\n⚠️ {n}" for n in safety_notes)
-    return uid, kcal, note
+    res = complete(db, tg_id, {
+        "sex": "male" if data.get("sex", "м").lower().startswith(("м", "m")) else "female",
+        "birth_year": local_today(tz).year - int(data["age"]),
+        "height_cm": float(data["height"]), "weight_kg": float(data["weight"]),
+        "rate_kg_week": rate, "tz": tz, "eating_cutoff": data.get("cutoff") or _cutoff_default(),
+        "activity": int(data.get("activity", "2")),
+    }, log_weight=False)
+    note = "".join(f"\n⚠️ {n}" for n in res["notes"])
+    return res["uid"], res["kcal"], note
 
 
 @router.message(CommandStart())
@@ -135,6 +91,19 @@ async def start(msg: Message, state: FSMContext, db: sqlite3.Connection) -> None
             reply_markup=menu.bottom_kb(),
         )
         return
+    url = get_config().webapp_url
+    if url:
+        # новому человеку сначала предлагаем настройку в приложении; чат остаётся запасным путём
+        await state.clear()
+        await msg.answer(WELCOME_TEXT, reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="✨ Настроить за минуту", web_app=WebAppInfo(url=url))],
+            [InlineKeyboardButton(text="Ответить в чате", callback_data=CHAT_FLOW_CB)],
+        ]))
+        return
+    await _begin_chat_flow(msg, state)
+
+
+async def _begin_chat_flow(msg: Message, state: FSMContext) -> None:
     await state.set_state(Onboard.q)
     await state.update_data(qi=0, answers={})
     await msg.answer(
@@ -142,6 +111,15 @@ async def start(msg: Message, state: FSMContext, db: sqlite3.Connection) -> None
         "все оценки приблизительные. Настрою профиль — 8 коротких вопросов, "
         "необязательные можно взять дефолтом словом «ок».\n\n" + QUESTIONS[0][1]
     )
+
+
+@router.callback_query(F.data == CHAT_FLOW_CB)
+async def start_chat_flow(cb: CallbackQuery, state: FSMContext, db: sqlite3.Connection) -> None:
+    await cb.answer()
+    user = repo.get_user_by_tg(db, cb.from_user.id)
+    if cb.message is None or (user and user["onboarded"]):
+        return
+    await _begin_chat_flow(cb.message, state)
 
 
 @router.message(Onboard.q)

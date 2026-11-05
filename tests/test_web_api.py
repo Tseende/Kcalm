@@ -254,7 +254,7 @@ async def test_empty_whitelist_denies_by_default(make_client, db, tmp_path):
 
 async def test_not_onboarded_is_409(client, db):
     add_user(db, 1002, onboarded=0)
-    resp = await client.get("/api/me", headers=auth(1002))
+    resp = await client.get("/api/profile", headers=auth(1002))
     assert resp.status == 409 and (await resp.json())["error"] == "not_onboarded"
     assert (await client.get("/api/me", headers=auth(1002 + 1))).status == 401   # не в whitelist
 

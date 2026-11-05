@@ -164,7 +164,8 @@ export function rich(text) {
 export function haptic(type = 'success') {
   try {
     if (!tg || !tg.HapticFeedback) return;
-    if (['success', 'error', 'warning'].includes(type)) tg.HapticFeedback.notificationOccurred(type);
+    if (type === 'selection') tg.HapticFeedback.selectionChanged();
+    else if (['success', 'error', 'warning'].includes(type)) tg.HapticFeedback.notificationOccurred(type);
     else tg.HapticFeedback.impactOccurred(type);
   } catch (e) { /* ignore */ }
 }

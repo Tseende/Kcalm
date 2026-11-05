@@ -304,11 +304,33 @@ function weekGoalMock() {
     cells: states.map((state, i) => ({ date: '2026-11-0' + (2 + i), state })), message: achieved ? 'Цель недели выполнена. Это уже привычка, а не случайность.' : `Осталось ${weekGoal.target - done} дня из запланированных.` } };
 }
 
+// ?onb=1: приложение открывается как у нового человека (онбординг); после POST /onboarding — обычные данные.
+let onbPending = /[?&]onb=1\b/.test(location.search);
+
+function mockOnboarding(b) {
+  const age = new Date().getFullYear() - b.birth_year;
+  if (age < 18) { const e = new Error('Бот считает дефицит калорий и рассчитан на взрослых (18+).'); e.name = 'ApiError'; e.status = 400; e.code = 'underage'; throw e; }
+  const bmr = 10 * b.weight_kg + 6.25 * b.height_cm - 5 * age + (b.sex === 'male' ? 5 : -161);
+  const pal = [1.25, 1.5, 1.75, 2.2][(b.activity || 2) - 1];
+  const rate = b.care_mode ? Math.min(b.rate_kg_week, 0.25) : b.rate_kg_week;
+  const kcal = Math.round((bmr * pal - rate * 1100) / 10) * 10;
+  const protein = Math.round(1.6 * b.goal_weight_kg), fat = Math.round(0.8 * b.goal_weight_kg);
+  const carbs = Math.max(50, Math.round((kcal - protein * 4 - fat * 9) / 4));
+  const lose = rate > 0 && b.goal_weight_kg < b.weight_kg;
+  const goalDate = lose ? iso(addDays(new Date(), Math.ceil(((b.weight_kg - b.goal_weight_kg) / rate) * 7))) : null;
+  Object.assign(TARGETS, { kcal, protein, fat, carbs });
+  Object.assign(prof, { sex: b.sex, birth_year: b.birth_year, height_cm: b.height_cm, goal_weight_kg: b.goal_weight_kg, activity: b.activity, rate_kg_week: rate });
+  onbPending = false;
+  return { profile: mockProfile(), targets: { kcal, protein, fat, carbs, water_ml: Math.round(b.weight_kg * 30 / 50) * 50 }, notes: [], goal_date: goalDate };
+}
+
 const routes = [
-  ['GET', /^\/me$/, () => ({
+  ['GET', /^\/me$/, () => onbPending ? { onboarded: false, user: { first_name: 'Аня' } } : ({
+    onboarded: true,
     user: { tg_id: 1, first_name: 'Жан', sex: 'm', height_cm: 178, goal_weight_kg: 76, tz: 'Europe/Moscow', eating_cutoff: '21:00' },
     targets: TARGETS, weight: { latest: 82.4, trend: body.get(todayISO()).trend, start: 88.0 },
   })],
+  ['POST', /^\/onboarding$/, (m, q, b) => mockOnboarding(b)],
   ['GET', /^\/profile$/, () => ({ profile: mockProfile(), targets: TARGETS, first_name: 'Жан' })],
   ['PATCH', /^\/profile$/, (m, q, b) => {
     const old = TARGETS.kcal;
