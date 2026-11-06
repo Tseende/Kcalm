@@ -169,12 +169,13 @@ export default async function render(root, ctx) {
         h('button', { class: 'btn btn-primary', type: 'button', onclick: () => nav.go('/add/meal') }, 'Добавить приём'));
 
     const isToday = curDate === todayISO();
+    const often = isToday ? oftenRow() : null;
     const kids = [kcalCard, waterCard, miniRow, ...(isToday ? [weekGoalBlock(ctx, { compact: true })] : []),
       sectionTitle('Приёмы пищи', isToday ? h('button', { class: 'btn-link section-add', type: 'button', onclick: () => nav.go('/add/meal') }, icon('plus', 14), 'Добавить') : null), mealsList,
-      ...(isToday ? [sectionTitle('Повторить'), oftenRow()] : [])];
+      ...(isToday ? [sectionTitle('Повторить'), often, ...(often._ph ? [often._ph] : [])] : [])];
     body.replaceChildren(...kids);
     const oh = body.querySelector('.often');
-    if (oh && oh.hidden && oh.previousElementSibling) oh.previousElementSibling.hidden = true;
+    if (oh && oh.hidden && !oh._ph && oh.previousElementSibling) oh.previousElementSibling.hidden = true;
     if (dir && !reducedMotion()) {
       body.style.setProperty('--dx', (dir > 0 ? 12 : -12) + 'px');
       body.classList.remove('day-in'); void body.offsetWidth; body.classList.add('day-in');
@@ -188,10 +189,13 @@ export default async function render(root, ctx) {
       const m = /^(.*?)\s\+(\d+)$/.exec(f.title || '');
       return m ? `${m[1]} и ещё ${m[2]}` : (f.title || (f.names && f.names[0]) || '');
     };
+    // Пока список не пришёл (первый заход за сессию), вместо него заглушка: заголовок не «выпрыгивает» позже.
+    const pending = oftenCache === null;
+    if (pending) row._ph = h('div', { class: 'often-ph', 'aria-hidden': 'true' }, h('i', { class: 'skel' }), h('i', { class: 'skel' }), h('i', { class: 'skel' }));
     const paint = (items) => {
       row.hidden = !items.length;
       const head = row.previousElementSibling;
-      if (head && head.classList.contains('section-title')) head.hidden = !items.length;
+      if (head && head.classList.contains('section-title')) head.hidden = !items.length && !row._ph;
       row.replaceChildren(...items.map((f) => {
         const names = f.names || [];
         const pic = mealIcon({ items: names.map((name) => ({ name, kcal: 0 })), type: 'snack' }, 32);
@@ -206,10 +210,12 @@ export default async function render(root, ctx) {
       }));
     };
     paint(oftenCache || []);                          // last known list first: no jump on reload
+    const settle = () => { if (row._ph) { row._ph.remove(); row._ph = null; } };
     api.get('/frequent').then(({ items }) => {
       oftenCache = items;
+      settle();
       if (ctx.alive() && row.isConnected) paint(items);
-    }).catch(() => { /* optional row: keep what is shown */ });
+    }).catch(() => { settle(); if (row.isConnected) paint(oftenCache || []); }); // необязательная строка: оставляем что было
     return row;
   }
 

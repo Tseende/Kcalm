@@ -1,7 +1,7 @@
 // Simple add forms: weight, sleep, activity (вода и напитки живут в drinks.js)
 import { api } from '../api.js';
 import {
-  h, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, segmented, fmtN, todayISO,
+  h, icon, tile, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, numSet, numCheck, segmented, fmtN, todayISO,
 } from '../ui.js';
 
 export default async function render(root, ctx) {
@@ -11,7 +11,7 @@ export default async function render(root, ctx) {
   root.append(view);
   const { title, body, submit } = builders[kind]();
   let busy = false;
-  view.append(pageHead(title, { parent: '/today' }), h('form', { class: 'stack', onsubmit: (e) => { e.preventDefault(); go(); } }, body, h('button', { type: 'submit', hidden: true })));
+  view.append(pageHead(title, { parent: '/today' }), h('form', { class: 'stack', novalidate: true, onsubmit: (e) => { e.preventDefault(); go(); } }, body, h('button', { type: 'submit', hidden: true })));
 
   async function go() {
     if (busy) return;
@@ -35,12 +35,44 @@ export default async function render(root, ctx) {
 
 function invalid(msg) { toast(msg, 'error'); return false; }
 
+// Крупное поле: значение по центру, подпись единицы рядом.
+function bigField(input, unit) {
+  return h('label', { class: 'bigfield' }, input, h('span', { class: 'bigfield-unit' }, unit));
+}
+
 function weight() {
-  const w = numInput({ min: 25, max: 400, step: 0.1, placeholder: '82,4', 'aria-label': 'Вес в килограммах' });
-  api.me().then((m) => { if (m.weight && m.weight.latest && !w.value) w.placeholder = fmtN(m.weight.latest); }).catch(() => {});
+  const w = numInput({ min: 25, max: 400, step: 0.1, placeholder: '82,4', 'aria-label': 'Вес в килограммах', class: 'bigfield-input' });
+  let latest = null;
+  const sub = h('div', { class: 'wform-sub', 'aria-live': 'polite' });
+  const last = h('button', { class: 'chip wform-last', type: 'button', hidden: true, onclick: () => { if (latest) { numSet(w, latest); haptic('light'); } } });
+  const bump = (d) => {
+    const base = numVal(w) ?? latest ?? 70;
+    numSet(w, Math.min(400, Math.max(25, Math.round((base + d) * 10) / 10)));
+    haptic('light');
+  };
+  const step = (d, label, ic) => h('button', { class: 'step wform-step', type: 'button', 'aria-label': label, onclick: () => bump(d) }, icon(ic, 22));
+  api.me().then((m) => {
+    const lw = m.weight && m.weight.latest;
+    if (!lw) return;
+    latest = lw;
+    if (!w.value) w.placeholder = fmtN(lw);
+    const goal = m.user && m.user.goal_weight_kg;
+    const parts = [];
+    if (m.weight.trend) parts.push(`Тренд ${fmtN(m.weight.trend)} кг`);
+    if (goal && lw > goal) parts.push(`до цели ${fmtN(Math.round((lw - goal) * 10) / 10)} кг`);
+    sub.textContent = parts.join(' · ');
+    last.replaceChildren(icon('scale', 16), `Как в прошлый раз: ${fmtN(lw)} кг`);
+    last.hidden = false;
+  }).catch(() => {});
   return {
     title: 'Вес',
-    body: [group([frow('Вес, кг', w)], 'Лучше взвешиваться утром, натощак.')],
+    body: [
+      h('section', { class: 'card wform' },
+        h('div', { class: 'wform-cap' }, 'Вес сегодня'),
+        h('div', { class: 'wform-row' }, step(-0.1, 'Минус 100 граммов', 'minus'), bigField(w, 'кг'), step(0.1, 'Плюс 100 граммов', 'plus')),
+        sub, last),
+      h('div', { class: 'footnote wform-note' }, 'Лучше взвешиваться утром, натощак: так цифры сравнимы день ко дню.'),
+    ],
     async submit() {
       const v = numVal(w);
       if (!v || v < 25 || v > 400) return invalid('Введите вес от 25 до 400 кг');
@@ -53,25 +85,49 @@ function weight() {
 
 function sleep() {
   let mode = 'dur';
-  const hh = numInput({ min: 0, max: 24, step: 1, placeholder: '7', inputmode: 'numeric', 'aria-label': 'Часы' });
-  const mm = numInput({ min: 0, max: 59, step: 5, placeholder: '30', inputmode: 'numeric', 'aria-label': 'Минуты' });
-  const start = h('input', { type: 'time', value: '23:30', 'aria-label': 'Лёг' });
-  const end = h('input', { type: 'time', value: '07:10', 'aria-label': 'Встал' });
+  const hh = numInput({ min: 0, max: 24, step: 1, placeholder: '7', inputmode: 'numeric', 'aria-label': 'Часы', class: 'bigfield-input' });
+  const mm = numInput({ min: 0, max: 59, step: 5, placeholder: '30', inputmode: 'numeric', 'aria-label': 'Минуты', class: 'bigfield-input' });
+  const start = h('input', { type: 'time', value: '23:30', 'aria-label': 'Лёг', class: 'bigfield-input' });
+  const end = h('input', { type: 'time', value: '07:10', 'aria-label': 'Встал', class: 'bigfield-input' });
   const score = numInput({ min: 0, max: 100, step: 1, placeholder: 'необязательно', inputmode: 'numeric', 'aria-label': 'Оценка сна' });
-  const durBox = group([frow('Часы', hh), frow('Минуты', mm)]);
-  const rangeBox = group([frow('Лёг', start), frow('Встал', end)]);
+  const rangeSum = h('div', { class: 'wform-sub', 'aria-live': 'polite' });
+  const spanMin = () => {
+    if (!start.value || !end.value) return null;
+    const [a, b] = start.value.split(':').map(Number);
+    const [c, d] = end.value.split(':').map(Number);
+    return (((c * 60 + d) - (a * 60 + b)) % 1440 + 1440) % 1440;
+  };
+  const paintRange = () => {
+    const m = spanMin();
+    rangeSum.textContent = m === null ? '' : `Спал ${Math.floor(m / 60)} ч ${m % 60} мин`;
+  };
+  start.addEventListener('input', paintRange);
+  end.addEventListener('input', paintRange);
+  paintRange();
+  const durBox = h('section', { class: 'card wform' },
+    h('div', { class: 'wform-cap' }, 'Сколько спали'),
+    h('div', { class: 'wform-pair' }, bigField(hh, 'ч'), bigField(mm, 'мин')));
+  const rangeBox = h('section', { class: 'card wform' },
+    h('div', { class: 'wform-cap' }, 'Лёг и встал'),
+    h('div', { class: 'wform-pair' },
+      h('label', { class: 'bigfield time' }, h('span', { class: 'bigfield-cap' }, 'Лёг'), start),
+      h('label', { class: 'bigfield time' }, h('span', { class: 'bigfield-cap' }, 'Встал'), end)),
+    rangeSum);
   rangeBox.hidden = true;
   return {
     title: 'Сон',
     body: [
       segmented([['dur', 'Длительность'], ['range', 'Лёг и встал']], mode, (v) => { mode = v; durBox.hidden = v !== 'dur'; rangeBox.hidden = v !== 'range'; }, 'Способ ввода'),
-      durBox, rangeBox, group([frow('Оценка, 0–100', score)], 'Из часов или приложения, если есть.'),
+      durBox, rangeBox,
+      group([h('label', { class: 'frow' }, tile('moon', 'indigo', 30), h('span', { class: 'frow-label' }, 'Оценка, 0–100'), score)], 'Из часов или приложения, если есть.'),
     ],
     async submit() {
       const payload = { date: todayISO() };
       if (mode === 'dur') {
+        const e = numCheck(hh, 'Часы') || numCheck(mm, 'Минуты');
+        if (e) return invalid(e);
         const total = (numVal(hh) || 0) * 60 + (numVal(mm) || 0);
-        if (total < 10 || total > 1440) return invalid('Укажите длительность сна');
+        if (total < 10 || total > 1440) return invalid('Укажите длительность сна: от 10 минут до 24 часов');
         payload.duration_min = Math.round(total);
       } else {
         if (!start.value || !end.value) return invalid('Укажите время');
@@ -79,7 +135,7 @@ function sleep() {
         payload.end = end.value;
       }
       const sc = numVal(score);
-      if (sc !== null) { if (sc < 0 || sc > 100) return invalid('Оценка от 0 до 100'); payload.score = Math.round(sc); }
+      if (sc !== null) { const e = numCheck(score, 'Оценка сна'); if (e) return invalid(e); payload.score = Math.round(sc); }
       await api.post('/sleep', payload);
       return 'Сон записан';
     },
@@ -94,10 +150,15 @@ function activity() {
   return {
     title: 'Активность',
     body: [
-      group([frow('Шаги', steps), frow('Активные ккал', kcal), frow('Активные минуты', mins)]),
-      group([frow('Тренировка', workout)]),
+      group([
+        h('label', { class: 'frow' }, tile('walk', 'green', 30), h('span', { class: 'frow-label' }, 'Шаги'), steps),
+        h('label', { class: 'frow' }, tile('flame', 'orange', 30), h('span', { class: 'frow-label' }, 'Активные ккал'), kcal),
+        h('label', { class: 'frow' }, tile('clock', 'blue', 30), h('span', { class: 'frow-label' }, 'Активные минуты'), mins)]),
+      group([h('label', { class: 'frow' }, tile('run', 'red', 30), h('span', { class: 'frow-label' }, 'Тренировка'), workout)], 'Название по желанию: бег, силовая, плавание.'),
     ],
     async submit() {
+      const bad = numCheck(steps, 'Шаги') || numCheck(kcal, 'Активные ккал') || numCheck(mins, 'Активные минуты');
+      if (bad) return invalid(bad);
       const payload = { date: todayISO() };
       const s = numVal(steps), k = numVal(kcal), m = numVal(mins);
       if (s !== null) payload.steps = Math.round(s);

@@ -357,29 +357,5 @@ export default function onboarding(root, { me, onDone }) {
   };
 }
 
-/** Подсказка над «+» на экране «Сегодня»: показывается один раз после онбординга. */
-export function maybeShowPlusHint() {
-  let pending = false, done = false;
-  try { pending = localStorage.getItem('onb_hint_pending') === '1'; done = localStorage.getItem('onb_hint_done') === '1'; } catch (e) { return; }
-  if (!pending || done) return;
-  setTimeout(() => {
-    const plus = document.querySelector('.tab-plus .plus-circle');
-    if (!plus || document.body.dataset.route !== 'today') return;
-    const r = plus.getBoundingClientRect();
-    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-    const pulse = h('div', { class: 'onb-pulse', style: { left: cx - 22 + 'px', top: cy - 22 + 'px' } });
-    const bw = Math.min(280, window.innerWidth - 32);
-    const left = Math.min(window.innerWidth - bw - 16, Math.max(16, cx - bw / 2));
-    const bubble = h('div', { class: 'onb-bubble', role: 'status', style: { left: left + 'px', bottom: window.innerHeight - r.top + 14 + 'px', '--ax': cx - left + 'px' } },
-      'Начните с первого приёма пищи — сфотографируйте или опишите словами');
-    document.body.append(pulse, bubble);
-    const close = () => {
-      pulse.remove(); bubble.remove();
-      document.removeEventListener('pointerdown', close, true);
-      window.removeEventListener('hashchange', close);
-      try { localStorage.setItem('onb_hint_done', '1'); localStorage.removeItem('onb_hint_pending'); } catch (e) { /* ignore */ }
-    };
-    document.addEventListener('pointerdown', close, true);
-    window.addEventListener('hashchange', close);
-  }, 700);
-}
+/** Подсказка над «+» переехала в тур на «Сегодня» (js/coach.js, шаг today.plus, флаги onb_hint_* те же). Заглушка для совместимости. */
+export function maybeShowPlusHint() { /* см. coach.js */ }

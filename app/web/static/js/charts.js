@@ -26,6 +26,13 @@ function niceMax(v) {
   return n * p;
 }
 
+// Шаг оси из ряда 1 / 2 / 5 × 10^k, ближайший сверху к «сырому».
+function niceStep(rough) {
+  const p = 10 ** Math.floor(Math.log10(Math.max(rough, 1e-6)));
+  const f = rough / p;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
+}
+
 function xLabels(labels, x, y, n = 4) {
   const out = [];
   const len = labels.length;
@@ -136,14 +143,17 @@ export function lineChart({ points, height = 190, decimals = 1, color = 'var(--c
   const mn = Math.min(...vals);
   const mx = Math.max(...vals);
   const span = Math.max((mx - mn) * 0.25, 0.4);
-  const lo = mn - span;
-  const hi = mx + span;
+  // Ось по «круглым» значениям (80 / 82 / 84), а не по случайным (81,1 / 83,2 / 85,3).
+  const step = niceStep((mx - mn + 2 * span) / 3);
+  const lo = Math.floor((mn - span) / step + 1e-9) * step;
+  const hi = Math.ceil((mx + span) / step - 1e-9) * step;
   const iw = W - pad.l - pad.r;
   const ih = height - pad.t - pad.b;
   const n = points.length;
   const x = (i) => pad.l + (n === 1 ? iw / 2 : (i * iw) / (n - 1));
   const yOf = (v) => pad.t + ih - ((v - lo) / (hi - lo)) * ih;
-  const ticks = [0, 1, 2].map((i) => lo + ((hi - lo) * i) / 2);
+  const ticks = [];
+  for (let t = lo; t <= hi + step / 1000; t += step) ticks.push(Math.round(t / step) * step);
   const svg = s('svg', { viewBox: `0 0 ${W} ${height}`, class: 'chart', role: 'img', 'aria-label': 'График веса', style: `--ch:${color}` });
   const gid = uid('ag');
   svg.append(s('defs', null, s('linearGradient', { id: gid, x1: '0', y1: '0', x2: '0', y2: '1' },

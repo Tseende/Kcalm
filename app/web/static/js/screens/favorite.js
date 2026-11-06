@@ -1,7 +1,7 @@
 // Избранное: создание и правка блюда (название, ккал и БЖУ порции, комментарий). Из списка избранного.
 import { api } from '../api.js';
 import { foodPic, mealPic } from '../pics.js';
-import { h, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, confirmDialog, errorState, skeletonCards, photoImg } from '../ui.js';
+import { h, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, numCheck, confirmDialog, errorState, skeletonCards, photoImg } from '../ui.js';
 
 export default async function render(root, ctx) {
   const isNew = ctx.params.id === 'new';
@@ -36,6 +36,8 @@ export default async function render(root, ctx) {
     if (!t) { toast('Назовите блюдо', 'error'); title.focus(); return; }
     const k = numVal(kcal);
     if (k === null || k === undefined || Number.isNaN(k)) { toast('Укажите калории порции', 'error'); kcal.focus(); return; }
+    const bad = numCheck(kcal, 'Калории') || numCheck(pr, 'Белки') || numCheck(fat, 'Жиры') || numCheck(carb, 'Углеводы');
+    if (bad) { toast(bad, 'error'); return; }
     const body = { title: t, note: note.value.trim(), kcal: k, protein: numVal(pr) || 0, fat: numVal(fat) || 0, carbs: numVal(carb) || 0 };
     busy = true; mainButton.setLoading(true);
     try {
@@ -51,7 +53,7 @@ export default async function render(root, ctx) {
   view.append(...[
     pageHead(isNew ? 'Новое избранное' : 'Избранное', { parent: '/menu/favorites' }),
     isNew ? null : pic,
-    h('form', { class: 'stack', onsubmit: (e) => { e.preventDefault(); save(); } },
+    h('form', { class: 'stack', novalidate: true, onsubmit: (e) => { e.preventDefault(); save(); } },
       group([frow('Название', title)]),
       h('div', { class: 'section-label' }, 'Одна порция'),
       group([frow('Калории, ккал', kcal), frow('Белки, г', pr), frow('Жиры, г', fat), frow('Углеводы, г', carb)]),

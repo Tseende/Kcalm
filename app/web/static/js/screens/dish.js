@@ -2,7 +2,7 @@
 import { api } from '../api.js';
 import { dishPic } from '../pics.js';
 import {
-  h, icon, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, toggle, confirmDialog, errorState, skeletonCards,
+  h, icon, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, numCheck, toggle, confirmDialog, errorState, skeletonCards,
   photoImg, compressImage, DISH_KINDS, dishKind,
 } from '../ui.js';
 
@@ -59,7 +59,8 @@ export default async function render(root, ctx) {
     const n = name.value.trim();
     if (!n) { toast('Введите название', 'error'); name.focus(); return; }
     const d = numVal(diam), dp = numVal(depth), v = numVal(vol);
-    if ([d, dp, v].some((x) => x !== null && x <= 0)) { toast('Размеры должны быть больше нуля', 'error'); return; }
+    const bad = numCheck(diam, 'Диаметр, см') || numCheck(depth, 'Глубина, см') || numCheck(vol, 'Объём, мл');
+    if (bad) { toast(bad, 'error'); return; }
     busy = true; mainButton.setLoading(true);
     try {
       if (isNew) {
@@ -83,7 +84,7 @@ export default async function render(root, ctx) {
   }
 
   view.append(...[pageHead(isNew ? 'Новая посуда' : 'Посуда', { parent: '/menu/dishes' }),
-    h('form', { class: 'stack', onsubmit: (e) => { e.preventDefault(); save(); } },
+    h('form', { class: 'stack', novalidate: true, onsubmit: (e) => { e.preventDefault(); save(); } },
       h('div', { class: 'hint-card small' }, 'Размер посуды помогает точнее оценить порцию. Достаточно диаметра, а для глубоких тарелок и кружек добавьте объём.'),
       preview,
       group([frow('Название', name)]),

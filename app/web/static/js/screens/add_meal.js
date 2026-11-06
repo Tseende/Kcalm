@@ -1,7 +1,7 @@
 // Add meal: dishes (each = several photos + one plate) and/or a text description. Time and meal type are set by the server (now).
 import { api } from '../api.js';
 import {
-  h, icon, tile, toast, haptic, nav, mainButton, draft, pageHead, compressImage, busyOverlay, dishKind, sheet, fmtN, numInput, numVal, frow,
+  h, icon, tile, toast, haptic, nav, mainButton, draft, pageHead, compressImage, busyOverlay, dishKind, sheet, fmtN, numInput, numVal, numCheck, codeInput, frow,
 } from '../ui.js';
 import { scanBarcode, decodeFile, validBarcode } from '../scanner.js';
 import { dishInfo } from './dishes.js';
@@ -15,7 +15,9 @@ export default async function render(root, ctx) {
   let dishes = [];
   // Блюдо = несколько фото (тарелка, упаковка, этикетка) + одна посуда. Блюд в приёме может быть несколько.
   // note — уточнение словами (состав, готовка), ings — продукты из базы/штрихкода: [{name, brand, kcal, protein, fat, carbs}]
-  const groups = [{ photos: [], dishId: null, note: '', ings: [] }]; // photos: [{file, url}]
+  let gidSeq = 0;
+  const newGroup = (dishId = null) => ({ id: ++gidSeq, photos: [], dishId, note: '', ings: [] });
+  const groups = [newGroup()]; // photos: [{file, url}]
   const allPhotos = () => groups.flatMap((g) => g.photos);
   let target = groups[0];
   let busy = false;
@@ -27,7 +29,7 @@ export default async function render(root, ctx) {
 
   const camera = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, onchange: () => addFiles(camera) });
   const gallery = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, onchange: () => addFiles(gallery) });
-  const textTa = h('textarea', { rows: 3, placeholder: 'Например: овсянка на молоке 250 г, банан, кофе без сахара', oninput: () => { sync(); if (quickPaint) quickPaint(); } });
+  const textTa = h('textarea', { rows: 3, placeholder: 'Например: овсянка на молоке 250 г, банан, кофе без сахара', oninput: () => { sync(); quickVisibility(); } });
   const textLabel = h('span', { class: 'field-label' }, 'Что съели');
   const clearDraft = draft('meal-text', textTa);
   const dishList = h('div', { class: 'stack' });
@@ -39,8 +41,9 @@ export default async function render(root, ctx) {
     let items = [];
     try { items = (await api.get('/frequent', { limit: 20 })).items || []; } catch (e) { return; }
     if (!ctx.alive()) return;
+    quickVisibility = () => { quick.hidden = !items.length || allPhotos().length > 0 || !!textTa.value.trim(); };
     const paintQuick = () => {
-      quick.hidden = !items.length || allPhotos().length > 0 || !!textTa.value.trim();
+      quickVisibility();
       const rows = items.map((f) => {
         const star = h('button', {
           class: 'quick-star' + (f.favorite_id ? ' on' : ''), type: 'button',
@@ -78,6 +81,7 @@ export default async function render(root, ctx) {
     paintQuick();
   }
   let quickPaint = null;
+  let quickVisibility = () => {};
 
   async function addFiles(input) {
     const files = [...input.files];
@@ -152,7 +156,7 @@ export default async function render(root, ctx) {
   }
   function quickPortion(d) {
     const per = d.default_grams || d.unit_grams || 100;
-    const grams = numInput({ value: per, min: 1, max: 3000, step: 1, 'aria-label': 'Граммы' });
+    const grams = numInput({ value: per, min: 1, max: 3000, decimals: 1, 'aria-label': 'Граммы' });
     const total = h('span', { class: 'row-title' });
     const calc = () => {
       const g = numVal(grams) || 0;
@@ -162,7 +166,9 @@ export default async function render(root, ctx) {
     calc();
     const add = h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: async () => {
       const g = numVal(grams);
-      if (!g || g <= 0) { toast('Укажите граммы', 'error'); return; }
+      if (!g || g <= 0) { toast('Укажите граммы', 'error'); grams.focus(); return; }
+      const bad = numCheck(grams, 'Граммы');
+      if (bad) { toast(bad, 'error'); return; }
       add.disabled = true;
       try {
         const r = await api.post('/meals/product', { name: d.name, brand: d.brand, grams: g, kcal: d.kcal, protein: d.protein, fat: d.fat, carbs: d.carbs });
@@ -193,7 +199,7 @@ export default async function render(root, ctx) {
     }
   }
   function typeCode(g) {
-    const inp = h('input', { type: 'text', inputMode: 'numeric', maxLength: 14, placeholder: '13 цифр под штрихкодом', autocomplete: 'off', 'aria-label': 'Штрихкод' });
+    const inp = codeInput({ placeholder: '13 цифр под штрихкодом', 'aria-label': 'Штрихкод' });
     const go = () => { const v = inp.value; sh.close(); ingByCode(g, v); };
     inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
     const sh = sheet({ title: 'Штрихкод с упаковки', content: h('div', { class: 'stack' }, inp,
@@ -246,6 +252,7 @@ export default async function render(root, ctx) {
       'aria-label': `Состав и готовка блюда ${n}`,
       oninput: () => { g.note = note.value; },
     });
+    note.dataset.gid = String(g.id);
     note.value = g.note;
     const ings = g.ings.length ? h('div', { class: 'list ing-list' }, g.ings.map((d, i) => h('div', { class: 'row' },
       h('span', { class: 'grow' }, h('span', { class: 'row-title' }, d.name),
@@ -292,8 +299,15 @@ export default async function render(root, ctx) {
   }
 
   function paint() {
+    // Перерисовка (фото досжалось, добавили ингредиент) не должна выбивать фокус из поля уточнения.
+    const a = document.activeElement;
+    const keep = a && a.dataset && a.dataset.gid ? { gid: a.dataset.gid, s: a.selectionStart, e: a.selectionEnd } : null;
     const filled = groups.filter((g) => g.photos.length);
     dishList.replaceChildren(...filled.map((g, gi) => groupCard(g, gi)));
+    if (keep) {
+      const n = dishList.querySelector(`textarea[data-gid="${keep.gid}"]`);
+      if (n) { n.focus({ preventScroll: true }); try { n.setSelectionRange(keep.s, keep.e); } catch (e) { /* ignore */ } }
+    }
     paintCapture(filled);
     if (quickPaint) quickPaint();
     sync();
@@ -320,7 +334,7 @@ export default async function render(root, ctx) {
           class: 'btn btn-secondary btn-block', type: 'button',
           onclick: () => {
             if (allPhotos().length >= MAX) { toast(`Не больше ${MAX} фото`); return; }
-            const g = { photos: [], dishId: filled[filled.length - 1].dishId, note: '', ings: [] };
+            const g = newGroup(filled[filled.length - 1].dishId);
             groups.push(g);
             haptic('light');
             pick(camera, g);

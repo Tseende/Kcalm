@@ -1,7 +1,7 @@
 // Drinks: water plus a catalog with calories. Water goes to /water, everything else to /drinks (saved as a meal).
 import { api } from '../api.js';
 import {
-  h, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, fmtN, TILE, errorState, skeletonCards,
+  h, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, numSet, fmtN, TILE, errorState, skeletonCards, icon, reloadRoute,
 } from '../ui.js';
 import { drinkPic } from '../pics.js';
 
@@ -21,7 +21,7 @@ export default async function render(root, ctx) {
   try {
     catalog = [WATER, ...((await api.get('/drinks')).drinks || [])];
   } catch (e) {
-    if (ctx.alive()) errorState(body, e, () => nav.replace('/add/drink'));
+    if (ctx.alive()) errorState(body, e, reloadRoute);
     return;
   }
   if (!ctx.alive()) return;
@@ -35,15 +35,16 @@ export default async function render(root, ctx) {
   let sugar = 0;
   let busy = false;
 
-  const ml = numInput({ min: 30, max: 1500, step: 10, value: cur.sizes[Math.min(1, cur.sizes.length - 1)], inputmode: 'numeric', 'aria-label': 'Миллилитры' });
+  // Границы зависят от напитка (вода 10..3000, остальное 30..1500): поле пускает до 4 цифр, точно проверяет go().
+  const ml = numInput({ max: WATER_ML[1], value: cur.sizes[Math.min(1, cur.sizes.length - 1)], inputmode: 'numeric', 'aria-label': 'Миллилитры' });
   const sizes = h('div', { class: 'chips wrap' });
   const sugarVal = h('b', { class: 'step-val' }, '0');
   const sugarBox = h('div', { class: 'drink-sugar card' },
     h('div', { class: 'grow' }, h('div', { class: 'row-title' }, 'Сахар'), h('div', { class: 'muted small' }, 'чайных ложек, по 20 ккал')),
     h('div', { class: 'stepper' },
-      h('button', { type: 'button', class: 'step', 'aria-label': 'Меньше сахара', onclick: () => setSugar(sugar - 1) }, '−'),
+      h('button', { type: 'button', class: 'step', 'aria-label': 'Меньше сахара', onclick: () => setSugar(sugar - 1) }, icon('minus', 18)),
       sugarVal,
-      h('button', { type: 'button', class: 'step', 'aria-label': 'Больше сахара', onclick: () => setSugar(sugar + 1) }, '+')));
+      h('button', { type: 'button', class: 'step', 'aria-label': 'Больше сахара', onclick: () => setSugar(sugar + 1) }, icon('plus', 18))));
   const sumKcal = h('div', { class: 'drink-kcal' });
   const sumSub = h('div', { class: 'muted' });
   const sumWater = h('div', { class: 'drink-water' });
@@ -52,6 +53,7 @@ export default async function render(root, ctx) {
   const cards = catalog.map((d) => {
     const b = h('button', { type: 'button', class: 'drink-card', 'aria-pressed': 'false', onclick: () => select(d) },
       drinkPic(d.id) || h('span', { class: 'drink-emo', style: { background: TILE[d.color] || TILE.blue } }, d.emoji),
+      h('span', { class: 'drink-check', 'aria-hidden': 'true' }, icon('check', 12)),
       h('span', { class: 'drink-name' }, d.name),
       h('span', { class: 'drink-sub' }, d.id === 'water' ? 'без калорий' : d.kcal_100 < 1 ? '0 ккал' : `${fmtN(Math.round(d.kcal_100))} ккал`));
     b.dataset.id = d.id;
@@ -69,7 +71,13 @@ export default async function render(root, ctx) {
       b.classList.toggle('active', on);
       b.setAttribute('aria-pressed', String(on));
     });
-    sizes.replaceChildren(...cur.sizes.map((v) => h('button', { type: 'button', class: 'chip' + (numVal(ml) === v ? ' active' : ''), onclick: () => { ml.value = v; haptic('light'); paint(); } }, v + ' мл')));
+    sizes.replaceChildren(...cur.sizes.map((v) => h('button', { type: 'button', class: 'chip' + (numVal(ml) === v ? ' active' : ''), 'data-ml': v, onclick: () => { numSet(ml, v); haptic('light'); paintSum(); } }, v + ' мл')));
+    paintSum();
+  }
+
+  // Что зависит от введённого объёма: пересчитывается на каждый символ, но ничего не пересоздаёт (поле не теряет фокус).
+  function paintSum() {
+    [...sizes.children].forEach((b) => b.classList.toggle('active', numVal(ml) === Number(b.dataset.ml)));
     sugarBox.hidden = !cur.sugar;
     sugarVal.textContent = String(sugar);
     const v = numVal(ml) || 0;
@@ -89,7 +97,7 @@ export default async function render(root, ctx) {
     if (d.id === cur.id) return;
     cur = d;
     sugar = 0;
-    ml.value = d.sizes[Math.min(1, d.sizes.length - 1)];
+    numSet(ml, d.sizes[Math.min(1, d.sizes.length - 1)]);
     haptic('light');
     paint();
   }
@@ -100,13 +108,13 @@ export default async function render(root, ctx) {
     paint();
   }
 
-  ml.addEventListener('input', paint);
+  ml.addEventListener('input', paintSum);
 
   async function go() {
     if (busy) return;
     const v = numVal(ml);
     const [lo, hi] = cur.id === 'water' ? WATER_ML : DRINK_ML;
-    if (!v || v < lo || v > hi) { toast(`Укажите объём от ${lo} до ${hi} мл`, 'error'); return; }
+    if (!v || v < lo || v > hi) { toast(`${cur.id === 'water' ? 'Воды' : 'Напитка'} за раз: от ${lo} до ${hi} мл`, 'error'); ml.focus(); return; }
     busy = true;
     mainButton.setLoading(true);
     try {

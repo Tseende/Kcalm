@@ -8,23 +8,38 @@ const isField = (el) => !!el && ((el.tagName === 'TEXTAREA') || (el.tagName === 
 const KBBAR_H = 68; // высота кнопки над клавиатурой, см. .kbbar в app.css
 
 // Свободный текст (комментарий, описание): остальное на экране прячем, поле выходит наверх на всю высоту.
+// Положение прокрутки запоминаем и возвращаем, когда поле отпустили: страница не «улетает» наверх насовсем.
 let composed = [];
+let composedScreen = null;
+let savedY = null;
 function composeOn(ta) {
   const screen = ta.closest('.screen');
   if (!screen || ta.closest('.sheet')) return;
-  composeOff();
+  // Набор нового списка скрываемых узлов; прежние, которых в нём нет, показываем. Так при смене поля или
+  // перерисовке карточки (фокус переехал в новый textarea) ничего не мигает.
+  const next = [];
   for (let a = ta; a && a !== screen; a = a.parentElement) {
     for (const sib of a.parentElement.children) {
-      if (sib !== a && !sib.matches('.page-head, header, [hidden], input[type=file]')) { sib.classList.add('ck-hide'); composed.push(sib); }
+      if (sib !== a && !sib.matches('.page-head, header, [hidden], input[type=file]')) next.push(sib);
     }
   }
+  const hide = new Set(next);
+  for (const el of composed) if (el !== screen && !hide.has(el)) el.classList.remove('ck-hide');
+  next.forEach((el) => el.classList.add('ck-hide'));
   screen.classList.add('compose');
-  composed.push(screen);
-  window.scrollTo(0, 0);
+  const fresh = composedScreen !== screen;
+  composed = [...next, screen];
+  composedScreen = screen;
+  // После сворачивания остального поле оказывается у верха страницы: прокрутка нужна, только если мы были ниже.
+  if (fresh && window.scrollY > 0) { savedY = window.scrollY; window.scrollTo({ top: 0, behavior: 'instant' }); }
 }
 function composeOff() {
   for (const el of composed) el.classList.remove('ck-hide', 'compose');
+  const had = composed.length > 0;
   composed = [];
+  composedScreen = null;
+  if (had && savedY !== null) window.scrollTo({ top: savedY, behavior: 'instant' });
+  savedY = null;
 }
 
 export function initKeyboard() {

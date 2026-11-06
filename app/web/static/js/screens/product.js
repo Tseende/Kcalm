@@ -1,7 +1,7 @@
 // Product add/edit form (also reused by the label screen)
 import { api } from '../api.js';
 import { foodPic, foodGroupOf, FOOD_ICONS, FOOD_GROUPS } from '../pics.js';
-import { h, icon, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, confirmDialog, errorState, skeletonCards } from '../ui.js';
+import { h, icon, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, numCheck, codeInput, confirmDialog, errorState, skeletonCards } from '../ui.js';
 
 const val = (v) => (v === null || v === undefined ? '' : v);
 
@@ -14,7 +14,7 @@ export function productForm(p = {}) {
   const fat = numInput({ value: val(p.fat), min: 0, max: 100, step: 0.1, 'aria-label': 'Жиры на 100 г' });
   const carb = numInput({ value: val(p.carbs), min: 0, max: 100, step: 0.1, 'aria-label': 'Углеводы на 100 г' });
   const dg = numInput({ value: val(p.default_grams), min: 1, max: 5000, step: 1, placeholder: 'например, 150', 'aria-label': 'Порция по умолчанию' });
-  const barcode = h('input', { type: 'text', inputMode: 'numeric', value: val(p.barcode), maxLength: 14, placeholder: 'Необязательно', autocomplete: 'off', 'aria-label': 'Штрихкод' });
+  const barcode = codeInput({ value: val(p.barcode), placeholder: 'Необязательно', 'aria-label': 'Штрихкод' });
   const un = h('input', { type: 'text', value: val(p.unit_name), maxLength: 30, placeholder: 'пачка, шт, ломтик', 'aria-label': 'Название единицы' });
   const ug = numInput({ value: val(p.unit_grams), min: 1, max: 5000, step: 1, placeholder: 'г в единице', 'aria-label': 'Грамм в единице' });
   let iconVal = FOOD_ICONS.includes(p.icon) ? p.icon : null;
@@ -76,6 +76,8 @@ export function productForm(p = {}) {
     if (macros.reduce((a, m) => a + (m || 0), 0) > 100.5) { toast('Сумма Б+Ж+У не может быть больше 100 г', 'error'); return null; }
     const bc = barcode.value.replace(/\D/g, '');
     if (bc && ![8, 12, 13, 14].includes(bc.length)) { toast('Штрихкод: 8, 12 или 13 цифр', 'error'); barcode.focus(); return null; }
+    const bad = numCheck(dg, 'Порция по умолчанию') || numCheck(ug, 'Грамм в единице');
+    if (bad) { toast(bad, 'error'); return null; }
     const grams = (inp) => { const v = numVal(inp); return v && v > 0 ? Math.round(v) : null; };
     return {
       name: n, brand: brand.value.trim() || null, barcode: bc || null, kcal: Math.round(k),
@@ -118,7 +120,7 @@ export default async function render(root, ctx) {
     try { await api.del('/products/' + product.id); haptic('success'); toast('Удалено'); mainButton.hide(); nav.replace('/menu/products'); } catch (e) { toast(e.message, 'error'); }
   }
   view.append(...[pageHead(isNew ? 'Новый продукт' : 'Продукт', { parent: '/menu/products' }),
-    h('form', { class: 'stack', onsubmit: (e) => { e.preventDefault(); save(); } }, form.el, h('button', { type: 'submit', hidden: true })),
+    h('form', { class: 'stack', novalidate: true, onsubmit: (e) => { e.preventDefault(); save(); } }, form.el, h('button', { type: 'submit', hidden: true })),
     isNew ? null : h('button', { class: 'btn btn-danger-ghost btn-block', type: 'button', onclick: remove }, 'Удалить продукт'),
     !isNew && product.times_used ? h('div', { class: 'muted small center' }, `Использован в приёмах: ${product.times_used}`) : null].filter(Boolean));
   mainButton.show('Сохранить', save);

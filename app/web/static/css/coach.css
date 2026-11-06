@@ -1,0 +1,44 @@
+/* Одноразовые подсказки по интерфейсу (js/coach.js): подсветка цели, пузырь со стрелкой, «1 из 3».
+   Язык тот же, что у подсказки онбординга: синий пузырь (--c-btn), радиус 16-18, мягкая тень. */
+.coach { position: fixed; inset: 0; z-index: 75; pointer-events: none; opacity: 0; transition: opacity .25s ease; --coach-dim: rgba(0, 0, 0, .5); }
+.coach.on { opacity: 1; }
+.coach.out { opacity: 0; transition-duration: .18s; }
+html.scheme-dark .coach { --coach-dim: rgba(0, 0, 0, .68); }
+
+/* «Дыра» в затемнении: огромная тень вокруг прозрачного скруглённого прямоугольника */
+.coach-hole { position: fixed; left: 0; top: 0; width: 0; height: 0; border-radius: 18px; pointer-events: none;
+  box-shadow: 0 0 0 200vmax var(--coach-dim);
+  transition: left .32s var(--ease-spring, cubic-bezier(.2, .8, .2, 1)), top .32s var(--ease-spring, cubic-bezier(.2, .8, .2, 1)), width .32s var(--ease-spring, cubic-bezier(.2, .8, .2, 1)), height .32s var(--ease-spring, cubic-bezier(.2, .8, .2, 1)), border-radius .32s ease; }
+.coach.no-tr .coach-hole { transition: none; }
+.coach-hole::after { content: ""; position: absolute; inset: -2px; border-radius: inherit; border: 2px solid rgba(255, 255, 255, .92); animation: coach-ring 1.6s ease-out infinite; }
+@keyframes coach-ring { 0% { transform: scale(1); opacity: .95; } 100% { transform: scale(1.12, 1.3); opacity: 0; } }
+
+/* Прозрачные «ловцы» вокруг подсветки: тап по затемнению = дальше, прокрутка под ним заблокирована; сама подсветка кликабельна */
+.coach-catch { position: fixed; pointer-events: auto; background: transparent; touch-action: none; -webkit-tap-highlight-color: transparent; }
+
+.coach-bubble { position: fixed; z-index: 1; box-sizing: border-box; pointer-events: auto; padding: 14px 16px 12px; border-radius: 18px; background: var(--c-btn); color: var(--c-btn-text);
+  font-size: 15px; line-height: 1.35; box-shadow: 0 10px 30px rgba(0, 0, 0, .3); opacity: 0; transform: scale(.94) translateY(6px); will-change: transform, opacity; }
+.coach-bubble.above { transform: scale(.94) translateY(-6px); }
+.coach-bubble.in { opacity: 1; transform: none; transition: opacity .22s ease, transform .34s var(--ease-spring, cubic-bezier(.2, .8, .2, 1)); }
+.coach-bubble::after { content: ""; position: absolute; left: var(--ax, 50%); width: 14px; height: 14px; background: inherit; transform: translateX(-50%) rotate(45deg); border-radius: 3px; }
+.coach-bubble.below::after { top: -6px; }
+.coach-bubble.above::after { bottom: -6px; }
+.coach-bubble.float::after { display: none; }
+
+.coach-prog { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; font-size: 12px; font-variant-numeric: tabular-nums; opacity: .9; }
+.coach-dots { display: inline-flex; gap: 5px; }
+.coach-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, .4); transition: background .2s, transform .25s var(--ease-spring, ease); }
+.coach-dots i.on { background: #fff; transform: scale(1.25); }
+.coach-title { font-size: 16px; font-weight: 600; line-height: 1.25; margin-bottom: 4px; }
+.coach-text { opacity: .96; overflow-wrap: anywhere; }
+.coach-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
+.coach-skip { min-height: 34px; padding: 0 4px; border: 0; background: transparent; color: rgba(255, 255, 255, .82); font-size: 13px; }
+.coach-next { min-height: 36px; padding: 0 18px; border: 0; border-radius: 999px; background: #fff; color: var(--c-btn); font-size: 15px; font-weight: 600; margin-left: auto; }
+.coach-next:active, .coach-skip:active { opacity: .7; }
+.coach-bubble button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .coach, .coach-hole, .coach-bubble, .coach-bubble.in, .coach-dots i { transition: none !important; }
+  .coach-hole::after { animation: none; opacity: .9; }
+  .coach-bubble { transform: none; }
+}

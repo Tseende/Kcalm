@@ -1,6 +1,7 @@
 // Menu sub-pages: data (export, delete), help + about
 import { api, downloadCsv, isMock, inTelegram, tg } from '../api.js';
-import { h, icon, tile, toast, nav, pageHead, sheet } from '../ui.js';
+import { h, icon, tile, toast, nav, pageHead, sheet, haptic } from '../ui.js';
+import { reset as resetCoach } from '../coach.js';
 
 export default async function render(root, ctx) {
   const view = h('div', { class: 'screen' });
@@ -61,6 +62,11 @@ function help(view) {
       step('target', 'red', 'Цели', 'Норму калорий и БЖУ считает приложение по профилю. Измените данные, и она пересчитается.'),
       step('bell', 'purple', 'Напоминания', 'Бот пришлёт сообщение в чат в выбранное время: вода, вес, итоги дня.')),
     h('div', { class: 'footnote' }, 'Калории и КБЖУ по фото оценочные: смотрите на диапазон, а не на одно число. Приложение не заменяет врача или диетолога. Вопрос или ошибка? Напишите боту в чате.'),
+    h('div', { class: 'section-label' }, 'Подсказки'),
+    h('div', { class: 'list tiles' },
+      h('button', { class: 'row', type: 'button', onclick: () => { resetCoach(); haptic('success'); toast('Подсказки включены. Они появятся, когда зайдёшь на нужный экран', 'ok'); } },
+        tile('sparkles', 'purple'),
+        h('span', { class: 'grow' }, h('span', { class: 'row-title' }, 'Показать подсказки заново'), h('span', { class: 'row-sub' }, 'Короткие советы по экранам появятся снова')))),
     h('div', { class: 'section-label' }, 'О приложении'),
     h('div', { class: 'list tiles' },
       h('div', { class: 'row static' }, tile('info-circle', 'blue'), h('span', { class: 'grow' }, 'Версия'), h('span', { class: 'muted' }, '2.0')),

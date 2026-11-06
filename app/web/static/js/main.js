@@ -125,6 +125,8 @@ async function render() {
     const res = await mod.default(view, ctx);
     if (my !== rid) { if (typeof res === 'function') res(); return; }
     if (typeof res === 'function') cleanup = res;
+    // одноразовые подсказки по экрану (js/coach.js); сбой подсказок не должен ломать экран
+    import('./coach.js').then((m) => { if (my === rid) m.maybeShow({ path, tab: r.tab, params }); }).catch(() => {});
   } catch (e) {
     console.error(e);
     if (my === rid) errorState(view, e, render);
@@ -231,10 +233,7 @@ function startApp() {
   }
   window.addEventListener('hashchange', () => { nav._track(); render(); });
   render();
-  // подсказка над «+» после онбординга, один раз
-  let hint = false;
-  try { hint = localStorage.getItem('onb_hint_pending') === '1' && localStorage.getItem('onb_hint_done') !== '1'; } catch (e) { /* без хранилища */ }
-  if (hint) import('./screens/onboarding.js').then((m) => m.maybeShowPlusHint()).catch(() => {});
+  // подсказка над «+» теперь последний шаг тура на «Сегодня» (coach.js, id today.plus; флаги onb_hint_* совместимы)
 }
 
 boot();

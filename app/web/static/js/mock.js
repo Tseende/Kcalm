@@ -381,9 +381,11 @@ const routes = [
     return recalcMeal(x);
   }],
   ['PATCH', /^\/items\/(\d+)$/, async (m, q, b) => {
-    await sleep(120);
+    // Разброс задержки (до ~1.2 с; ?slow=1 — до 3 с): так видно, что ответы не перезаписывают поле.
+    await sleep(80 + Math.random() * (/[?&]slow=1\b/.test(location.search) ? 3000 : 1100));
     const x = itemMeal(+m[1]); if (!x) throw notFound();
     const it = x.items.find((i) => i.id === +m[1]);
+    if (!(b.grams >= 1 && b.grams <= 5000)) throw err(422, 'validation', 'Граммы: от 1 до 5000.');
     it.grams = b.grams; it.edited = true; calcItem(it);
     return recalcMeal(x);
   }],

@@ -1,6 +1,6 @@
 // Новый продукт по упаковке: сканер штрихкода, фото этикетки (до 4) или цифры вручную -> черновик -> сохранить
 import { api } from '../api.js';
-import { h, icon, tile, toast, haptic, nav, mainButton, pageHead, compressImage, busyOverlay } from '../ui.js';
+import { h, icon, tile, toast, haptic, nav, mainButton, pageHead, compressImage, busyOverlay, codeInput } from '../ui.js';
 import { scanBarcode, decodeFile, validBarcode } from '../scanner.js';
 import { productForm } from './product.js';
 
@@ -15,7 +15,7 @@ export default async function render(root) {
   const out = h('div', { class: 'stack' });
   const start = h('div', { class: 'stack' });
   const manual = h('div', { class: 'card manual', hidden: true });
-  const barcodeIn = h('input', { type: 'text', inputMode: 'numeric', maxLength: 14, placeholder: '13 цифр под штрихкодом', autocomplete: 'off', 'aria-label': 'Штрихкод' });
+  const barcodeIn = codeInput({ placeholder: '13 цифр под штрихкодом', 'aria-label': 'Штрихкод' });
   barcodeIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); lookup(barcodeIn.value); } });
   manual.append(
     h('div', { class: 'barcode-row' }, barcodeIn,
@@ -133,7 +133,7 @@ export default async function render(root) {
     }
     start.hidden = true;
     out.replaceChildren(...[
-      h('button', { class: 'btn-link', type: 'button', onclick: () => { out.replaceChildren(); start.hidden = false; mainButton.hide(); } }, '‹ Другой способ'),
+      h('button', { class: 'btn-link back-link', type: 'button', onclick: () => { out.replaceChildren(); start.hidden = false; mainButton.hide(); } }, icon('back', 16), 'Другой способ'),
       r.confidence != null ? h('div', { class: 'muted small' }, `Уверенность распознавания: ${Math.round((r.confidence || 0) * 100)}%. Это черновик, проверьте значения.`) : null,
       r.existing_id ? h('div', { class: 'hint-card small' }, 'Такой продукт у вас уже есть. ', h('a', { href: '#/menu/product/' + r.existing_id }, 'Открыть')) : null,
       (r.notes || []).length ? h('ul', { class: 'notes' }, r.notes.map((n) => h('li', null, n))) : null,

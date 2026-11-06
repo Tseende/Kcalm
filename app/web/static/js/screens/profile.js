@@ -1,7 +1,7 @@
 // Профиль и цели: данные, из которых бот считает норму, и сама норма (расчётная или ручная).
 import { api } from '../api.js';
 import {
-  h, icon, toast, haptic, mainButton, pageHead, frow, group, numInput, numVal, segmented, sheet,
+  h, icon, toast, haptic, mainButton, pageHead, frow, group, numInput, numVal, numCheck, segmented, sheet,
   fmtN, fmtKcal, errorState, skeletonCards, dataChanged, plural, macroChips,
 } from '../ui.js';
 
@@ -29,6 +29,7 @@ export default async function render(root, ctx) {
   const targetCard = h('div', { class: 'card target-card' });
   const nearest = (list, v) => list.reduce((a, b) => (Math.abs(b[0] - v) < Math.abs(a[0] - v) ? b : a))[0];
   cur.rate_kg_week = nearest(RATES, cur.rate_kg_week || 0);
+  init.rate_kg_week = cur.rate_kg_week; // привязка к кнопкам темпа не считается правкой пользователя
 
   function paintTargets() {
     targetCard.replaceChildren(
@@ -48,6 +49,9 @@ export default async function render(root, ctx) {
     };
     const done = (r, text) => { api._me = null; targets = r.targets; paintTargets(); dataChanged(); s.close(); haptic('success'); toast(text, 'ok'); };
     const save = async () => {
+      const bad = numCheck(f.kcal, 'Калории') || numCheck(f.protein, 'Белки') || numCheck(f.fat, 'Жиры') || numCheck(f.carbs, 'Углеводы');
+      if (bad) { toast(bad, 'error'); return; }
+      if (numVal(f.kcal) === null) { toast('Укажите калории', 'error'); f.kcal.focus(); return; }
       try {
         const r = await api.put('/targets', { kcal: numVal(f.kcal), protein: numVal(f.protein), fat: numVal(f.fat), carbs: numVal(f.carbs) });
         done(r, r.result.raised ? `Калории подняты до безопасного минимума: ${r.targets.kcal}` : 'Норма сохранена');
@@ -95,13 +99,23 @@ export default async function render(root, ctx) {
   const KEYS = ['sex', 'birth_year', 'height_cm', 'goal_weight_kg', 'activity', 'rate_kg_week', 'eating_cutoff', 'tz'];
   const diff = () => KEYS.filter((k) => cur[k] !== init[k] && !(cur[k] == null && init[k] == null) && !(typeof cur[k] === 'number' && Number.isNaN(cur[k])));
   let busy = false;
-  function changed() { mainButton.setDisabled(busy || diff().length === 0); }
+  // Кнопку трогаем только когда её состояние меняется: в Telegram каждое enable/disable пересчитывает окно.
+  let lastOff = true;
+  function changed() {
+    const off = busy || diff().length === 0;
+    if (off === lastOff) return;
+    lastOff = off;
+    mainButton.setDisabled(off);
+  }
 
   async function save() {
     const keys = diff();
     if (busy || !keys.length) return;
+    const bad = numCheck(year, 'Год рождения') || numCheck(height, 'Рост') || numCheck(goal, 'Цель');
+    if (bad) { toast(bad, 'error'); return; }
     const body = {};
     keys.forEach((k) => { if (cur[k] !== null && cur[k] !== '') body[k] = cur[k]; });
+    if (!Object.keys(body).length) { toast('Заполните изменённое поле или верните прежнее значение', 'error'); return; }
     busy = true; mainButton.setLoading(true);
     try {
       const r = await api.patch('/profile', body);
@@ -120,7 +134,7 @@ export default async function render(root, ctx) {
     targetCard,
     h('div', { class: 'muted small target-note' }, 'Расход считается по формуле Института медицины США (IOM, 2005) с учётом пола, возраста, роста, веса и активности. Из него вычитается дефицит по выбранному темпу, у цели он плавно убывает. Ниже безопасного минимума норма не опускается.'),
     h('div', { class: 'section-label' }, 'О вас'),
-    group([h('div', { class: 'frow static' }, h('span', { class: 'frow-label' }, 'Пол'), h('b', null, cur.sex === 'female' ? 'Женский' : 'Мужской')), frow('Год рождения', year), frow('Рост, см', height), h('div', { class: 'frow static' }, h('span', { class: 'frow-label' }, 'Вес сейчас'), h('b', null, cur.weight_kg ? `${fmtN(cur.weight_kg)} кг` : '—')), frow('Цель, кг', goal)]),
+    group([h('div', { class: 'frow static' }, h('span', { class: 'frow-label' }, 'Пол'), h('span', { class: 'frow-val' }, cur.sex === 'female' ? 'Женский' : 'Мужской')), frow('Год рождения', year), frow('Рост, см', height), h('div', { class: 'frow static' }, h('span', { class: 'frow-label' }, 'Вес сейчас'), h('span', { class: 'frow-val' }, cur.weight_kg ? `${fmtN(cur.weight_kg)} кг` : '—')), frow('Цель, кг', goal)]),
     ageHint,
     h('div', { class: 'section-label' }, 'Активность'), act, actHint,
     h('div', { class: 'section-label' }, 'Темп снижения, кг в неделю'), rate, rateHint,

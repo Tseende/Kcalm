@@ -437,8 +437,21 @@ export const nav = {
 };
 
 // -------------------------------------------------------------- components
+const GENERIC_ERR = 'Что-то пошло не так. Попробуйте ещё раз.';
+/** Текст ошибки для пользователя: русские сообщения сервера показываем как есть, технический текст (TypeError и т.п.) прячем в консоль. */
+export function friendly(err, fallback = GENERIC_ERR) {
+  const m = typeof err === 'string' ? err : err && err.message;
+  if (typeof m === 'string' && /[а-яё]/i.test(m)) return m;
+  if (err) console.warn('[app]', err);
+  return fallback;
+}
+
+/** Перерисовать текущий экран (для «Повторить»): main.js слушает hashchange. */
+export function reloadRoute() { window.dispatchEvent(new HashChangeEvent('hashchange')); }
+
 // `undo`: an async function; the toast then shows «Отменить» and stays longer.
 export function toast(msg, kind = '', { undo } = {}) {
+  if (kind === 'error') msg = friendly(msg);
   const ms = undo ? 5000 : 3000;
   const t = h('div', { class: 'toast ' + kind + (undo ? ' has-action' : ''), role: 'status' }, h('span', null, msg));
   if (undo) {
@@ -451,7 +464,7 @@ export function toast(msg, kind = '', { undo } = {}) {
         await undo();
         haptic('light');
         dataChanged();
-      } catch (e) { toast(e.message, 'error'); }
+      } catch (e) { toast(e, 'error'); }
     } }, 'Отменить'));
   }
   $('#toasts').append(t);
@@ -547,7 +560,8 @@ export function emptyState(iconName, title, text, action) {
 }
 
 export function errorState(root, err, retry) {
-  root.replaceChildren(emptyState('mood-sad', 'Что-то пошло не так', err && err.message ? err.message : 'Не удалось загрузить данные.',
+  if (err) console.error(err);
+  root.replaceChildren(emptyState('mood-sad', 'Не получилось загрузить', friendly(err, 'Проверьте соединение и попробуйте ещё раз.'),
     retry ? h('button', { class: 'btn btn-secondary', type: 'button', onclick: retry }, 'Повторить') : null));
 }
 
@@ -596,19 +610,127 @@ export function group(rows, footnote) {
   return h('div', { class: 'fgroup' }, h('div', { class: 'list form' }, rows), footnote ? h('div', { class: 'footnote' }, footnote) : null);
 }
 
+// ------------------------------------------------------------------ числовые поля
+// Не type=number: в iOS WebKit он теряет запятую (значение становится пустым), плохо выделяется,
+// каретка прыгает, а Enter включает встроенную проверку step/min/max. Здесь обычный текст с цифровой
+// клавиатурой: лишнее вырезаем на лету, каретку сохраняем, границы проверяет код экрана (numCheck).
+const fmtDec = (v) => (v === null || v === undefined || v === '' || (typeof v === 'number' && isNaN(v)) ? '' : String(v).replace('.', ','));
+export { fmtDec as numFmt };
+
+// Выделить всё при фокусе, в том числе на iOS, где select() сразу после фокуса не срабатывает.
+function selectAllOnFocus(el) {
+  let fresh = 0;
+  const sel = () => { if (document.activeElement === el) { try { el.setSelectionRange(0, el.value.length); } catch (e) { /* тип не поддерживает */ } } };
+  el.addEventListener('focus', () => { fresh = Date.now(); sel(); setTimeout(sel, 0); setTimeout(sel, 80); });
+  // Тап, который дал фокус, не должен сразу сбросить выделение кареткой.
+  el.addEventListener('mouseup', (e) => { if (Date.now() - fresh < 400) e.preventDefault(); });
+  el.addEventListener('click', () => { if (Date.now() - fresh < 400) setTimeout(sel, 0); });
+}
+
+// Enter на цифровой клавиатуре = «Готово»: фокус уходит, значение остаётся.
+function doneOnEnter(el) {
+  el.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); el.blur(); } });
+}
+
+function setClean(el, out, caret) {
+  if (out === el.value) return;
+  el.value = out;
+  try { el.setSelectionRange(caret, caret); } catch (e) { /* ignore */ }
+}
+
+// props: min, max, step задают границы для numCheck и число разрядов (нативными атрибутами не ставятся);
+// integer; decimals; select (по умолчанию true: фокус выделяет всё); value (число или строка).
 export function numInput(props = {}) {
-  return h('input', { type: 'number', inputmode: 'decimal', step: 'any', ...props });
+  const { min, max, step, value, inputmode, integer, decimals, select = true, ...rest } = props;
+  const int = integer ?? inputmode === 'numeric';
+  const stepDec = step != null && String(step).includes('.') ? String(step).split('.')[1].length : 0;
+  const dec = int ? 0 : Math.max(1, decimals ?? stepDec);
+  const maxInt = max != null ? String(Math.trunc(Math.abs(max))).length : Infinity;
+  const el = h('input', { type: 'text', inputmode: int ? 'numeric' : 'decimal', autocomplete: 'off', ...rest });
+  el.setAttribute('enterkeyhint', 'done');
+  el.setAttribute('autocorrect', 'off');
+  el.setAttribute('autocapitalize', 'off');
+  el.setAttribute('spellcheck', 'false');
+  el.value = fmtDec(value);
+  el._num = { min: min ?? null, max: max ?? null, int, dec };
+
+  el.addEventListener('input', (e) => {
+    if (e.isComposing) return;
+    const raw = el.value;
+    const caret = el.selectionStart ?? raw.length;
+    let out = '', kept = 0, sep = false, intLen = 0, fracLen = 0;
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i];
+      let k = null;
+      if (ch >= '0' && ch <= '9') {
+        if (sep) { if (fracLen < dec) { k = ch; fracLen++; } } else if (intLen < maxInt) { k = ch; intLen++; }
+      } else if (!int && (ch === ',' || ch === '.') && !sep) { k = ','; sep = true; }
+      if (k !== null) { out += k; if (i < caret) kept++; }
+    }
+    // «007» -> «7», «,5» -> «0,5»
+    while (out.length > 1 && out[0] === '0' && out[1] !== ',') { out = out.slice(1); if (kept > 0) kept--; }
+    if (out[0] === ',') { out = '0' + out; kept++; }
+    setClean(el, out, kept);
+  });
+  el.addEventListener('blur', () => { if (el.value.endsWith(',')) el.value = el.value.slice(0, -1); });
+  doneOnEnter(el);
+  if (select) selectAllOnFocus(el);
+  return el;
+}
+
+// Поле из одних цифр (штрихкод): нули в начале сохраняются, лишнее вырезается, каретка не прыгает.
+export function codeInput(props = {}) {
+  const { maxlength = 14, select = true, ...rest } = props;
+  const el = h('input', { type: 'text', inputmode: 'numeric', autocomplete: 'off', maxLength: maxlength, ...rest });
+  el.setAttribute('enterkeyhint', 'go');
+  el.setAttribute('autocorrect', 'off');
+  el.setAttribute('spellcheck', 'false');
+  el.addEventListener('input', (e) => {
+    if (e.isComposing) return;
+    const raw = el.value;
+    const caret = el.selectionStart ?? raw.length;
+    const out = raw.replace(/\D/g, '').slice(0, maxlength);
+    const kept = raw.slice(0, caret).replace(/\D/g, '').length;
+    setClean(el, out, Math.min(kept, out.length));
+  });
+  if (select) selectAllOnFocus(el);
+  return el;
 }
 
 export function numVal(input) {
-  const v = parseFloat(String(input.value).replace(',', '.'));
-  return isNaN(v) ? null : v;
+  const s = String(input.value).replace(/[\s ]/g, '').replace(',', '.');
+  if (s === '' || s === '.') return null;
+  const v = Number(s);
+  return Number.isFinite(v) ? v : null;
+}
+
+// Записать число в поле (с запятой, как видит пользователь).
+export function numSet(input, v) { input.value = fmtDec(v); }
+
+// Проверка границ из numInput: текст ошибки или null. Пустое поле не ошибка, это решает экран.
+export function numCheck(input, label) {
+  const v = numVal(input);
+  if (v === null) return String(input.value).trim() ? `${label}: введите число` : null;
+  const { min, max } = input._num || {};
+  if ((min != null && v < min) || (max != null && v > max)) {
+    if (min != null && max != null) return `${label}: от ${fmtDec(min)} до ${fmtDec(max)}`;
+    return max != null ? `${label}: не больше ${fmtDec(max)}` : `${label}: не меньше ${fmtDec(min)}`;
+  }
+  return null;
 }
 
 // <img> that supports Authorization-protected photo URLs
+// Пока фото грузится, у <img> фон-заглушка (.img-wait); если не загрузилось, на его месте плитка с иконкой.
 export function photoImg(url, cls = '', alt = '') {
-  const img = h('img', { class: cls, alt, loading: 'lazy', decoding: 'async' });
-  api.imageUrl(url).then((u) => { img.src = u; }).catch(() => { img.classList.add('broken'); });
+  const img = h('img', { class: (cls ? cls + ' ' : '') + 'img-wait', alt, loading: 'lazy', decoding: 'async' });
+  const fail = () => {
+    img.classList.add('broken');
+    if (img.nextElementSibling && img.nextElementSibling.classList.contains('img-ph')) return;
+    img.after(h('span', { class: 'img-ph', role: 'img', 'aria-label': alt ? alt + ': не загрузилось' : 'Фото не загрузилось' }, icon('photo', 28)));
+  };
+  img.addEventListener('load', () => img.classList.remove('img-wait'));
+  img.addEventListener('error', fail);
+  api.imageUrl(url).then((u) => { img.src = u; }).catch(fail);
   return img;
 }
 

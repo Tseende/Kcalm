@@ -3,7 +3,7 @@ import { api } from '../api.js';
 import { weekGoalBlock } from './weekgoal.js';
 import { ring, sparkline } from '../charts.js';
 import { onbImg } from '../onb/controls.js';
-import { h, icon, tile, glyph, nav, segmented, shortDate, fmtN, skeletonCards, emptyState, errorState, sectionTitle, todayISO, dateSwitch, countUp, staggerIn, reducedMotion, heroCard, progressBar, statTile } from '../ui.js';
+import { h, icon, tile, glyph, nav, pageHead, segmented, shortDate, fmtN, skeletonCards, emptyState, errorState, sectionTitle, todayISO, dateSwitch, countUp, staggerIn, reducedMotion, heroCard, progressBar, statTile } from '../ui.js';
 
 let curDate = todayISO();
 const PERIODS = [['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц']];
@@ -90,7 +90,7 @@ export default async function render(root, ctx) {
   const sw = dateSwitch(curDate, (d) => { curDate = d; load(); });
   const dateRow = sw.el;
   const seg = segmented(PERIODS, period, (v) => { period = v; savePeriod(v); sync(); load(); }, 'Период анализа');
-  view.append(seg, dateRow, body);
+  view.append(pageHead('Анализ', { back: false }), seg, dateRow, body);
   const sync = () => { dateRow.hidden = period !== 'day'; };
   sync();
 
@@ -116,19 +116,20 @@ export default async function render(root, ctx) {
       if (!ctx.alive() || asked !== period) return;
       drawPeriod(data);
     } catch (e) {
-      if (ctx.alive()) errorState(body, e, load);
+      if (ctx.alive()) errorState(body, e, loadPeriodView);
     }
   }
 
   function drawPeriod(a) {
     const word = a.period === 'week' ? 'неделю' : 'месяц';
-    const range = `${shortDate(a.from)} — ${shortDate(a.to)}`;
+    const nb = (t) => t.replace(/ /g, '\u00A0');   // «6 нояб.» не рвётся на две строки
+    const range = `${nb(shortDate(a.from))} — ${nb(shortDate(a.to))}`;
     if (!a.logged_days) {
       body.replaceChildren(emptyState('sparkles', 'Пока мало данных', `За ${word} нет записей о еде. Записывайте приёмы пищи, и здесь появится разбор по всем показателям.`,
         h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => nav.go('/add/meal') }, 'Добавить приём пищи')));
       return;
     }
-    const kids = [heroVerdict(a.metrics, a.headline, `Разбор за ${word}: ${range}`)];
+    const kids = [heroVerdict(a.metrics, a.headline, [`Разбор за ${word}`, h('span', { class: 'an-hero-range' }, range)])];
     if (a.focus) kids.push(focusCard(a.period === 'week' ? 'Главное на следующую неделю' : 'Главное на ближайшее время', a.focus));
     if (a.metrics.length) {
       kids.push(sectionTitle('Показатели'),

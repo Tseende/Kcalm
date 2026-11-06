@@ -4,8 +4,12 @@ import { mealIcon, mealPic } from '../pics.js';
 import { scanBarcode, decodeFile, validBarcode } from '../scanner.js';
 import {
   h, icon, toast, haptic, nav, sheet, confirmDialog, pageHead, sectionTitle, skeletonCards, errorState, photoImg,
-  fmtN, fmtKcal, longDate, mealType, MEAL_TYPES, dishKind, numVal, busyOverlay, macroChips,
+  fmtN, fmtKcal, longDate, mealType, MEAL_TYPES, dishKind, numInput, numVal, numSet, codeInput, busyOverlay, macroChips, reloadRoute,
 } from '../ui.js';
+
+const G_MIN = 1;
+const G_MAX = 5000; // как на сервере (PATCH /items/:id)
+const r1 = (v) => Math.round(v * 10) / 10;
 
 export default async function render(root, ctx) {
   const id = ctx.params.id;
@@ -20,7 +24,7 @@ export default async function render(root, ctx) {
     meal = m;
     d.dishes.forEach((x) => { dishNames[x.id] = x; });
   } catch (e) {
-    if (ctx.alive()) { view.replaceChildren(pageHead('Приём пищи')); const b = h('div'); view.append(b); errorState(b, e, () => nav.replace('/meal/' + id)); }
+    if (ctx.alive()) { view.replaceChildren(pageHead('Приём пищи')); const b = h('div'); view.append(b); errorState(b, e, reloadRoute); }
     return;
   }
   if (!ctx.alive()) return;
@@ -28,61 +32,152 @@ export default async function render(root, ctx) {
   let comps = new Map();
   const totalsEl = h('section', { class: 'card totals' });
 
+  // Итоги = ответ сервера + локальные поправки по строкам, которые правят прямо сейчас (оптимистично).
   function paintTotals() {
-    const range = meal.kcal_low != null && meal.kcal_high != null ? `диапазон ${fmtKcal(meal.kcal_low)}–${fmtKcal(meal.kcal_high)} ккал` : '';
+    const d = { kcal: 0, protein: 0, fat: 0, carbs: 0 };
+    comps.forEach((c) => { const x = c.delta(); d.kcal += x.kcal; d.protein += x.protein; d.fat += x.fat; d.carbs += x.carbs; });
+    const kcal = meal.kcal + d.kcal;
+    const k = meal.kcal > 0 ? kcal / meal.kcal : 1;
+    const range = meal.kcal_low != null && meal.kcal_high != null ? `диапазон ${fmtKcal(meal.kcal_low * k)}–${fmtKcal(meal.kcal_high * k)} ккал` : '';
     totalsEl.replaceChildren(
-      h('div', { class: 'totals-kcal' }, h('span', { class: 'big' }, fmtKcal(meal.kcal)), ' ккал'),
+      h('div', { class: 'totals-kcal' }, h('span', { class: 'big' }, fmtKcal(kcal)), ' ккал'),
       range ? h('div', { class: 'range-hint small' }, range) : null,
-      macroChips({ p: meal.protein, f: meal.fat, c: meal.carbs }, { pills: true }),
+      macroChips({ p: meal.protein + d.protein, f: meal.fat + d.fat, c: meal.carbs + d.carbs }, { pills: true }),
       meal.confidence != null ? h('div', { class: 'muted small' }, `Уверенность распознавания: ${Math.round(meal.confidence * 100)}%`) : null);
   }
 
   function onMeal(m, redraw) {
     meal = m;
-    paintTotals();
     if (redraw) { draw(); return; }
     m.items.forEach((it) => comps.get(it.id)?.update(it));
     for (const [iid, c] of comps) if (!m.items.some((i) => i.id === iid)) { c.el.remove(); comps.delete(iid); }
     if (!m.items.length && !view.querySelector('.items-empty')) itemsBox.append(h('div', { class: 'muted items-empty pad' }, 'Позиций не осталось.'));
+    paintTotals();
+  }
+
+  // Правки граммов уходят на сервер по одной и по порядку: ответы не обгоняют друг друга, а последний
+  // ответ отражает все записи. Поле с ожидающей правкой ответ не перезаписывает (см. update у строки).
+  const queued = new Map(); // id позиции -> граммы, ещё не отправлено
+  let sendingId = null;
+  let pumping = false;
+  async function pump() {
+    if (pumping) return;
+    pumping = true;
+    try {
+      while (queued.size) {
+        const [iid, v] = queued.entries().next().value;
+        queued.delete(iid);
+        sendingId = iid;
+        let m = null;
+        try { m = await api.patch('/items/' + iid, { grams: v }); } catch (e) {
+          toast(e.message, 'error');
+          try { m = await api.get('/meals/' + id); } catch (e2) { /* останутся прежние значения */ }
+        }
+        sendingId = null;
+        if (m && ctx.alive()) onMeal(m);
+      }
+    } finally { pumping = false; sendingId = null; }
   }
 
   const itemsBox = h('div', { class: 'list items' });
 
   function itemCard(initial) {
-    let it = initial;
-    let timer;
-    const input = h('input', { type: 'number', inputmode: 'decimal', min: 1, step: 10, value: it.grams, class: 'g-input', 'aria-label': 'Граммы: ' + it.name });
+    let it = initial;      // последнее состояние с сервера
+    let local = it.grams;  // что показываем; именно это уйдёт на сервер
+    let sent = it.grams;   // что уже отправлено или стоит в очереди
+    let timer = null;
+    const input = numInput({ value: it.grams, max: G_MAX, decimals: 1, class: 'g-input', 'aria-label': 'Граммы: ' + it.name });
+    const field = h('span', { class: 'g-field' }, input, h('span', { class: 'g-unit', 'aria-hidden': 'true' }, 'г'));
     const nameEl = h('span', { class: 'item-title' });
     const kcalEl = h('div', { class: 'item-kcal' });
     const macEl = h('div', { class: 'muted small' });
     const flag = h('span', { class: 'edited', title: 'Изменено вручную' }, icon('pencil', 14));
+    const ratio = () => (it.grams > 0 ? local / it.grams : 1);
+    // Поле нельзя перезаписывать ответом сервера, пока пользователь его правит или правка ещё не доехала.
+    const dirty = () => document.activeElement === input || timer !== null || local !== sent || queued.has(it.id) || sendingId === it.id;
     function paint() {
+      const k = ratio();
       nameEl.textContent = it.name;
-      kcalEl.replaceChildren(fmtKcal(it.kcal), h('small', null, ' ккал'));
-      macEl.textContent = `Б ${fmtN(it.protein)} · Ж ${fmtN(it.fat)} · У ${fmtN(it.carbs)}`;
-      flag.hidden = !it.edited;
+      kcalEl.replaceChildren(fmtKcal(it.kcal * k), h('small', null, ' ккал'));
+      macEl.textContent = `Б ${fmtN(it.protein * k)} · Ж ${fmtN(it.fat * k)} · У ${fmtN(it.carbs * k)}`;
+      flag.hidden = !(it.edited || local !== it.grams);
     }
-    async function commit(v) {
-      try { onMeal(await api.patch('/items/' + it.id, { grams: v })); haptic('light'); } catch (e) { toast(e.message, 'error'); input.value = it.grams; }
+    function setLocal(v) { local = v; paint(); paintTotals(); }
+    function feedback(msg) {
+      toast(msg);
+      haptic('warning');
+      field.classList.add('clamped');
+      setTimeout(() => field.classList.remove('clamped'), 900);
     }
-    let pending = null;
-    function schedule(v) { clearTimeout(timer); pending = v; timer = setTimeout(flush, 600); }
-    // Правка не должна пропадать, если ушли с экрана или свернули приложение раньше, чем сработал таймер.
     function flush() {
       clearTimeout(timer);
-      if (pending === null) return;
-      const v = pending;
-      pending = null;
-      commit(v);
+      timer = null;
+      if (document.activeElement === input) { const v = numVal(input); if (v !== null && v >= G_MIN && v <= G_MAX) setLocal(r1(v)); }
+      if (local === sent) return;
+      sent = local;
+      queued.set(it.id, local);
+      pump();
     }
-    function step(d) {
-      const cur = numVal(input) ?? it.grams;
-      const v = Math.max(1, Math.round((cur + d) * 10) / 10);
-      input.value = v;
-      schedule(v);
+    function schedule(ms) { clearTimeout(timer); timer = setTimeout(flush, ms); }
+    // Круглим к десяткам в сторону нажатия: 121 → 130 / 120, а 120 → 130 / 110.
+    function step(dir) {
+      let cur = numVal(input);
+      if (cur === null || cur < G_MIN || cur > G_MAX) cur = local;
+      let v = cur % 10 !== 0 ? (dir > 0 ? Math.ceil(cur / 10) : Math.floor(cur / 10)) * 10 : cur + dir * 10;
+      v = Math.min(G_MAX, Math.max(G_MIN, v));
+      if (v === cur) { haptic('warning'); return false; }
+      numSet(input, v);
+      if (document.activeElement === input) input.select();
+      setLocal(v);
+      haptic('selection');
+      schedule(500);
+      return true;
     }
-    input.addEventListener('input', () => { const v = numVal(input); if (v !== null && v >= 1) schedule(v); });
-    input.addEventListener('blur', flush);
+    input.addEventListener('input', () => {
+      const v = numVal(input);
+      if (v === null || v < G_MIN || v > G_MAX) { clearTimeout(timer); timer = null; return; }
+      setLocal(r1(v));
+      schedule(600);
+    });
+    // Правка закончена: пустое поле возвращает прежнее значение, выход за границы поджимается с подсказкой.
+    input.addEventListener('blur', () => {
+      const v = numVal(input);
+      if (v !== null) {
+        if (v < G_MIN) { setLocal(G_MIN); feedback(`Минимум ${G_MIN} г`); }
+        else if (v > G_MAX) { setLocal(G_MAX); feedback(`Максимум ${G_MAX} г`); }
+        else setLocal(r1(v));
+      }
+      numSet(input, local);
+      flush();
+      if (!dirty()) update(it);
+    });
+    function update(n) {
+      it = n;
+      if (!dirty()) { local = n.grams; sent = n.grams; numSet(input, n.grams); }
+      paint();
+    }
+    function delta() {
+      const k = ratio() - 1;
+      return { kcal: it.kcal * k, protein: it.protein * k, fat: it.fat * k, carbs: it.carbs * k };
+    }
+    // Нажатие и удержание: сразу шаг, затем повтор с ускорением. С клавиатуры (click без указателя) один шаг.
+    function holdRepeat(btn, dir) {
+      let t = null;
+      let n = 0;
+      const stop = () => { clearTimeout(t); t = null; };
+      const tick = () => { if (!step(dir)) { stop(); return; } n++; t = setTimeout(tick, n > 14 ? 55 : n > 6 ? 90 : 140); };
+      btn.addEventListener('pointerdown', (e) => {
+        if (e.button) return;
+        e.preventDefault(); // фокус и клавиатура остаются как были
+        n = 0;
+        if (!step(dir)) return;
+        t = setTimeout(tick, 420);
+      });
+      ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => btn.addEventListener(ev, stop));
+      btn.addEventListener('contextmenu', (e) => e.preventDefault());
+      btn.addEventListener('click', (e) => { if (e.detail === 0) step(dir); });
+      return btn;
+    }
     async function saveProduct() {
       try { await api.post('/items/' + it.id + '/save_product', {}); haptic('success'); toast('Сохранено в «Мои продукты»', 'ok'); } catch (e) { toast(e.message, 'error'); }
     }
@@ -103,7 +198,7 @@ export default async function render(root, ctx) {
       }
     }
     function typeCode() {
-      const inp = h('input', { type: 'text', inputMode: 'numeric', maxLength: 14, placeholder: '13 цифр под штрихкодом', autocomplete: 'off', 'aria-label': 'Штрихкод' });
+      const inp = codeInput({ placeholder: '13 цифр под штрихкодом', 'aria-label': 'Штрихкод' });
       const go = () => { const v = inp.value; s.close(); applyCode(v); };
       inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
       const s = sheet({ title: 'Штрихкод с упаковки', content: h('div', { class: 'stack' }, inp,
@@ -131,6 +226,7 @@ export default async function render(root, ctx) {
     }
     async function remove() {
       if (!(await confirmDialog(`Удалить «${it.name}»?`))) return;
+      clearTimeout(timer); timer = null; queued.delete(it.id);
       try { onMeal(await api.del('/items/' + it.id)); } catch (e) { toast(e.message, 'error'); }
     }
     const el = h('div', { class: 'item' },
@@ -138,9 +234,9 @@ export default async function render(root, ctx) {
       macEl,
       h('div', { class: 'item-ctl' },
         h('div', { class: 'stepper' },
-          h('button', { type: 'button', class: 'step', 'aria-label': 'Уменьшить на 10 грамм', onclick: () => step(-10) }, icon('minus', 18)),
-          h('span', { class: 'g-field' }, input, h('span', { class: 'g-unit' }, 'г')),
-          h('button', { type: 'button', class: 'step', 'aria-label': 'Увеличить на 10 грамм', onclick: () => step(10) }, icon('plus', 18))),
+          holdRepeat(h('button', { type: 'button', class: 'step', 'aria-label': 'Уменьшить на 10 грамм' }, icon('minus', 18)), -1),
+          field,
+          holdRepeat(h('button', { type: 'button', class: 'step', 'aria-label': 'Увеличить на 10 грамм' }, icon('plus', 18)), 1)),
         h('div', { class: 'item-actions' }, shot,
           h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Уточнить по штрихкоду упаковки', title: 'Сканер штрихкода', onclick: scan }, icon('barcode', 20)),
           h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Сохранить в мои продукты', title: 'В мои продукты', onclick: saveProduct }, icon('save', 20)),
@@ -149,7 +245,8 @@ export default async function render(root, ctx) {
     return {
       el,
       flush,
-      update(n) { it = n; paint(); if (document.activeElement !== input) input.value = n.grams; },
+      update,
+      delta,
     };
   }
 

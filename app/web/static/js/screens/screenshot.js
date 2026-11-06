@@ -63,9 +63,9 @@ export default async function render(root, ctx) {
   }
 
   function result(r, url) {
-    const rows = Object.entries(r.metrics || {}).filter(([, v]) => v !== null && v !== undefined).map(([k, v]) => {
+    const rows = Object.entries(r.metrics || {}).filter(([k, v]) => METRICS[k] && v !== null && v !== undefined).map(([k, v]) => {   // неизвестные ключи бэкенда не показываем
       const m = METRICS[k];
-      return h('div', { class: 'row static' }, h('span', { class: 'grow' }, m ? m[0] : k), h('b', null, m ? m[1](v) : String(v)));
+      return h('div', { class: 'row static' }, h('span', { class: 'grow' }, m[0]), h('b', null, m[1](v)));
     });
     const reasons = Array.isArray(r.reasons) ? r.reasons.filter(Boolean) : [];
     const actions = h('div', { class: 'stack-sm' });

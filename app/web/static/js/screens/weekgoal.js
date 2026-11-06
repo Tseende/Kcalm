@@ -111,6 +111,8 @@ export function weekGoalBlock(ctx, { withRecap = false, compact = false } = {}) 
   if (lastData) {                                     // last known state first: no jump on reload
     recap = lastData.recap;
     draw(lastData);
+  } else {                                            // первый заход: заглушка вместо пустоты
+    box.append(h('div', { class: 'skel wg-ph' + (compact ? ' compact' : ''), 'aria-hidden': 'true' }));
   }
   api.get('/week-goal').then((d) => {
     lastData = d;
