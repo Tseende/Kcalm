@@ -182,3 +182,31 @@ async def test_keepalive_ping_only_when_active(monkeypatch):
     scheduler.touch_activity()
     await scheduler.keepalive_ping()
     assert calls == ["https://x.onrender.com/healthz"]
+
+
+def test_keepalive_hours_default_depends_on_render(monkeypatch):
+    from app.config import Config
+    for var in ("RENDER", "RENDER_EXTERNAL_URL", "KEEPALIVE_HOURS"):
+        monkeypatch.delenv(var, raising=False)
+    assert Config(_env_file=None).keepalive_hours is None
+    assert Config(_env_file=None).keepalive_hours_effective == 0          # локально выкл.
+    monkeypatch.setenv("RENDER", "true")
+    assert Config(_env_file=None).keepalive_hours_effective == 1.0         # на Render по умолчанию 1 ч
+    monkeypatch.delenv("RENDER")
+    monkeypatch.setenv("RENDER_EXTERNAL_URL", "https://x.onrender.com")
+    assert Config(_env_file=None).keepalive_hours_effective == 1.0
+    monkeypatch.setenv("KEEPALIVE_HOURS", "0")
+    assert Config(_env_file=None).keepalive_hours_effective == 0           # явный 0 выключает
+    monkeypatch.setenv("KEEPALIVE_HOURS", "3")
+    assert Config(_env_file=None).keepalive_hours_effective == 3.0
+
+
+def test_build_scheduler_registers_keepalive_by_default_on_render(monkeypatch):
+    from app.config import Config
+    for var in ("RENDER", "RENDER_EXTERNAL_URL", "KEEPALIVE_HOURS"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("RENDER_EXTERNAL_URL", "https://x.onrender.com")
+    monkeypatch.setattr(scheduler, "get_config", lambda: Config(_env_file=None))
+    assert scheduler.build_scheduler(None, None).get_job("keepalive") is not None
+    monkeypatch.setenv("KEEPALIVE_HOURS", "0")
+    assert scheduler.build_scheduler(None, None).get_job("keepalive") is None

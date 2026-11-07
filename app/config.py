@@ -1,6 +1,8 @@
 """Конфигурация приложения. Секреты — только из .env (pydantic-settings)."""
 from __future__ import annotations
 
+import os
+
 from pathlib import Path
 
 from pydantic import AliasChoices, Field, field_validator
@@ -67,7 +69,7 @@ class Config(BaseSettings):
     webhook_base_url: str = ""        # https://<сервис>.onrender.com: если задан, бот работает по webhook, а не polling
     keepalive_window: str = ""        # «08:00-23:30»: в эти часы (по keepalive_tz) бот пингует сам себя, чтобы Render не усыплял
     keepalive_tz: str = "Europe/Minsk"
-    keepalive_hours: float = 0        # >0: после любой активности (приложение, сообщение боту) бот пингует себя ещё столько часов; без активности засыпает
+    keepalive_hours: float | None = None   # не задано: на Render 1 ч, иначе 0. >0: после любой активности (приложение, сообщение боту) бот пингует себя ещё столько часов; 0 = выключено
     webhook_secret: str = ""          # секрет заголовка Telegram (A-Za-z0-9_-, до 256 символов)
     web_dev_tg_id: int = 0            # только локальная разработка: запросы с 127.0.0.1 без initData
 
@@ -80,6 +82,14 @@ class Config(BaseSettings):
     @classmethod
     def _valid_cutoff(cls, value: str) -> str:
         return validate_hhmm(value)
+
+    @property
+    def keepalive_hours_effective(self) -> float:
+        """KEEPALIVE_HOURS, а если не задан: 1 ч на Render (RENDER=true или RENDER_EXTERNAL_URL), вне Render 0."""
+        if self.keepalive_hours is not None:
+            return max(self.keepalive_hours, 0.0)
+        on_render = os.environ.get("RENDER", "").lower() == "true" or bool(os.environ.get("RENDER_EXTERNAL_URL"))
+        return 1.0 if on_render else 0.0
 
     @property
     def webhook_secret_value(self) -> str:

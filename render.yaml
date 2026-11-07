@@ -38,7 +38,7 @@ services:
         sync: false
       - key: TZ
         value: Europe/Minsk
-      - key: KEEPALIVE_HOURS      # после любого захода в приложение или сообщения боту не спим ещё столько часов; без активности сервис засыпает
+      - key: KEEPALIVE_HOURS      # после захода в приложение или сообщения боту не спим ещё столько часов (по умолчанию на Render и так 1; 0 = выключить)
         value: "1"
       - key: MODEL_TEXT
         value: deepseek/deepseek-v4.1-flash-1017

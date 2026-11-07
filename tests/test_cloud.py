@@ -84,6 +84,8 @@ async def test_webhook_route_checks_secret(tmp_path, monkeypatch):
     from aiogram import Bot, Dispatcher
     from app.web.server import WEBHOOK_PATH, build_app
 
+    from app import scheduler
+    monkeypatch.setattr(scheduler, "_last_activity", None)
     cfg = Config(_env_file=None, telegram_bot_token="123456:TESTTOKEN", webhook_base_url="https://x.onrender.com")
     db = dbmod.connect(tmp_path / "w.db")
     dbmod.migrate(db)
@@ -95,7 +97,10 @@ async def test_webhook_route_checks_secret(tmp_path, monkeypatch):
         ok = await client.post(WEBHOOK_PATH, json={"update_id": 1},
                                headers={"X-Telegram-Bot-Api-Secret-Token": cfg.webhook_secret_value})
         assert ok.status == 200
+        assert scheduler._last_activity is not None    # апдейт Telegram продлевает окно keep-alive
+        monkeypatch.setattr(scheduler, "_last_activity", None)
         assert (await client.get("/healthz")).status == 200
+        assert scheduler._last_activity is None        # health-check и самопинг не считаются активностью
     await bot.session.close()
     db.close()
 

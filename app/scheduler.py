@@ -38,9 +38,14 @@ def build_scheduler(db: sqlite3.Connection, bot) -> AsyncIOScheduler:
         misfire_grace_time=50,
     )
     cfg_ = get_config()
-    if (cfg_.keepalive_window or cfg_.keepalive_hours > 0) and (cfg_.webhook_base_url or os.environ.get("RENDER_EXTERNAL_URL")):
+    hours = cfg_.keepalive_hours_effective
+    if (cfg_.keepalive_window or hours > 0) and (cfg_.webhook_base_url or os.environ.get("RENDER_EXTERNAL_URL")):
+        parts = ([f"{hours:g} ч после активности"] if hours > 0 else []) + ([f"окно {cfg_.keepalive_window}"] if cfg_.keepalive_window else [])
+        log.info("keepalive: %s", ", ".join(parts))
         sched.add_job(keepalive_ping, "interval", minutes=9, id="keepalive", name="keepalive",
                       coalesce=True, max_instances=1, misfire_grace_time=60)
+    else:
+        log.info("keepalive: выключен")
     if cfg_.backup_in_process and not cfg_.turso_database_url:   # в облаке данные уже в Turso
         sched.add_job(
             run_daily_backup,
@@ -86,7 +91,7 @@ async def keepalive_ping() -> None:
     """Запрос на собственный публичный адрес: Render считает его входящим трафиком и не усыпляет сервис."""
     import httpx
     cfg = get_config()
-    if not (recently_active(cfg.keepalive_hours)
+    if not (recently_active(cfg.keepalive_hours_effective)
             or (cfg.keepalive_window and in_keepalive_window(cfg.keepalive_window, cfg.keepalive_tz))):
         return
     base = (cfg.webhook_base_url or os.environ.get("RENDER_EXTERNAL_URL", "")).rstrip("/")
