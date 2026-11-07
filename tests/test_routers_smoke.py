@@ -213,15 +213,18 @@ async def test_undo_removes_day_total(db):
 
 
 async def test_stranger_gets_no_data(db):
-    """Whitelist: чужой tg_id не получает ответов, когда whitelist включён."""
+    """Whitelist: чужой tg_id получает одно вежливое сообщение с ID и не попадает в базу."""
     from app.config import Config, set_config, get_config
+    from app import middleware
+    middleware._notified.clear()
     old = get_config()
     set_config(Config(_env_file=None, telegram_bot_token="t", openrouter_api_key="k", allowed_tg_ids="1"))
     try:
         bot, dp, session = build(db)
-        before = len(session.names())
         await send(dp, bot, "/start", uid=999)
-        assert len(session.names()) == before, "постороннему ответили"
+        await send(dp, bot, "/start", uid=999)
+        assert len(session.texts) == 1 and "999" in session.texts[0], session.texts
+        assert repo.get_user_by_tg(db, 999) is None
     finally:
         set_config(old)
 

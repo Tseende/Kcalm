@@ -70,7 +70,7 @@ def _finish(db: sqlite3.Connection, tg_id: int, data: dict) -> tuple[int, int, s
     tz = data.get("tz", "Europe/Minsk")
     rate = abs(float(data.get("rate", "0.5")))
     res = complete(db, tg_id, {
-        "sex": "male" if data.get("sex", "м").lower().startswith(("м", "m")) else "female",
+        "sex": "male" if (parse_sex(str(data.get("sex", "м"))) or "м") == "м" else "female",
         "birth_year": local_today(tz).year - int(data["age"]),
         "height_cm": float(data["height"]), "weight_kg": float(data["weight"]),
         "rate_kg_week": rate, "tz": tz, "eating_cutoff": data.get("cutoff") or _cutoff_default(),
@@ -78,6 +78,99 @@ def _finish(db: sqlite3.Connection, tg_id: int, data: dict) -> tuple[int, int, s
     }, log_weight=False)
     note = "".join(f"\n⚠️ {n}" for n in res["notes"])
     return res["uid"], res["kcal"], note
+
+
+OK_WORDS = ("ок", "окей", "ok", "okay")
+TZ_HINT = "Часовой пояс нужен в виде «Europe/Moscow» или «Europe/Minsk». Если не знаешь, напиши «ок», возьму Europe/Minsk."
+SEX_HINT = "Не поняла ответ: напиши «м» или «ж»."
+_MALE = re.compile(r"^(м|муж\w*|m|male|man)$")
+_FEMALE = re.compile(r"^(ж|жен\w*|f|female|woman)$")
+
+# Допустимые границы и подсказки: одни и те же для вопросов и для правок «рост 5000».
+HEIGHT_RANGE = (100, 230)
+WEIGHT_RANGE = (35, 300)
+
+
+def parse_sex(text: str) -> str | None:
+    """«м» / «ж» из свободного ответа; всё остальное (в том числе «ок») — None."""
+    t = (text or "").strip().lower().rstrip(".!")
+    if _MALE.match(t):
+        return "м"
+    if _FEMALE.match(t):
+        return "ж"
+    return None
+
+
+def parse_age(text: str) -> int | None:
+    t = (text or "").strip()
+    return int(t) if t.isdigit() and int(t) <= 100 else None
+
+
+def parse_number(text: str, low: float, high: float) -> float | None:
+    try:
+        v = float((text or "").strip().replace(",", "."))
+    except ValueError:
+        return None
+    return v if low <= v <= high else None          # nan и inf сюда не проходят
+
+
+def parse_rate(text: str) -> str | None:
+    t = (text or "").strip().lower()
+    if t in OK_WORDS:
+        return "0.5"
+    try:
+        v = float(t.replace(",", "."))
+    except ValueError:
+        return None
+    return str(min(0.7, max(0.4, v))) if v == v else None
+
+
+def parse_tz(text: str) -> str | None:
+    try:
+        return validate_timezone((text or "").strip())
+    except ValueError:
+        return None
+
+
+def parse_answer(key: str, text: str, default: str | None):
+    """Разобрать ответ на вопрос key. None — не подошло. Слово «ок» берёт дефолт там, где он есть."""
+    t = (text or "").strip()
+    if key == "sex":
+        return parse_sex(t)
+    if key == "age":
+        return parse_age(t)
+    if key == "height":
+        return parse_number(t, *HEIGHT_RANGE)
+    if key == "weight":
+        return parse_number(t, *WEIGHT_RANGE)
+    if key == "rate":
+        return parse_rate(t)
+    if key == "cutoff":
+        if t.lower() in OK_WORDS:
+            return default
+        try:
+            return validate_hhmm(t)
+        except ValueError:
+            return None
+    if key == "activity":
+        return t if t in ("1", "2", "3", "4") else (default if t.lower() in OK_WORDS or not t else None)
+    if key == "tz":
+        if not t or t.lower() in OK_WORDS:
+            return default
+        return parse_tz(t)
+    return None
+
+
+RETRY_HINTS = {
+    "sex": SEX_HINT,
+    "age": "Не поняла ответ. Напиши возраст числом, например 35.",
+    "height": f"Рост нужен числом в сантиметрах, от {HEIGHT_RANGE[0]} до {HEIGHT_RANGE[1]}.",
+    "weight": f"Вес нужен числом в килограммах, от {WEIGHT_RANGE[0]} до {WEIGHT_RANGE[1]}.",
+    "rate": "Темп нужен числом, от 0.4 до 0.7 кг в неделю, или «ок».",
+    "cutoff": "Время нужно в формате ЧЧ:ММ, например 21:00, или «ок».",
+    "activity": "Выбери цифру от 1 до 4 или напиши «ок».",
+    "tz": TZ_HINT,
+}
 
 
 @router.message(CommandStart())
@@ -122,7 +215,18 @@ async def start_chat_flow(cb: CallbackQuery, state: FSMContext, db: sqlite3.Conn
     await _begin_chat_flow(cb.message, state)
 
 
-@router.message(Onboard.q)
+@router.message(Onboard.q, ~F.text)
+async def onboard_not_text(msg: Message, state: FSMContext) -> None:
+    """Стикер, фото, голос посреди настройки: не принимаем за ответ, повторяем вопрос."""
+    data = await state.get_data()
+    qi = data.get("qi", 0)
+    if qi >= len(QUESTIONS):
+        await msg.answer("Напиши «да» — сохраню, или исправь пункт: «рост 180».")
+        return
+    await msg.answer("Мне нужен ответ текстом.\n" + _question(qi)[1])
+
+
+@router.message(Onboard.q, F.text)
 async def onboard_answer(msg: Message, state: FSMContext, db: sqlite3.Connection) -> None:
     data = await state.get_data()
     qi = data["qi"]
@@ -158,37 +262,14 @@ async def onboard_answer(msg: Message, state: FSMContext, db: sqlite3.Connection
                   "пояс": "tz"}
         if m:
             key, val = keymap[m.group(1)], m.group(2).strip()
-            if key == "sex":
-                answers[key] = "м" if val.startswith(("м", "m")) else "ж"
-            elif key in ("age",):
-                if val.isdigit() and int(val) < MIN_AGE:
-                    await msg.answer(UNDERAGE_TEXT)
-                    return
-                if val.isdigit() and int(val) <= 100:
-                    answers[key] = int(val)
-            elif key in ("height", "weight"):
-                try:
-                    answers[key] = float(val.replace(",", "."))
-                except ValueError:
-                    pass
-            elif key == "rate":
-                try:
-                    answers[key] = str(min(0.7, max(0.4, float(val.replace(",", ".")))))
-                except ValueError:
-                    pass
-            elif key == "cutoff":
-                try:
-                    answers[key] = validate_hhmm(val)
-                except ValueError:
-                    pass
-            elif key == "activity":
-                if val in ("1", "2", "3", "4"):
-                    answers[key] = val
-            elif key == "tz":
-                try:
-                    answers[key] = validate_timezone(val)
-                except ValueError:
-                    pass
+            if key == "age" and val.isdigit() and int(val) < MIN_AGE:
+                await msg.answer(UNDERAGE_TEXT)
+                return
+            parsed = parse_answer(key, val, _question([k for k, _, _ in QUESTIONS].index(key))[2])
+            if parsed is None:
+                await msg.answer(RETRY_HINTS[key])
+                return
+            answers[key] = parsed
             await state.update_data(answers=answers)
             await msg.answer("Обновил. Всё верно?\n" + _summary(answers))
             return
@@ -196,58 +277,14 @@ async def onboard_answer(msg: Message, state: FSMContext, db: sqlite3.Connection
         return
 
     key, _, default = _question(qi)
-    ok = True
-    if key == "sex":
-        answers[key] = "м" if text.lower().startswith(("м", "m")) else "ж"
-    elif key == "age":
-        if text.isdigit() and int(text) < MIN_AGE:
-            await msg.answer(UNDERAGE_TEXT)
-            return
-        if text.isdigit() and int(text) <= 100:
-            answers[key] = int(text)
-        else:
-            ok = False
-    elif key == "height":
-        try:
-            v = float(text.replace(",", "."))
-            assert 100 <= v <= 230
-            answers[key] = v
-        except (ValueError, AssertionError):
-            ok = False
-    elif key == "weight":
-        try:
-            v = float(text.replace(",", "."))
-            assert 35 <= v <= 300
-            answers[key] = v
-        except (ValueError, AssertionError):
-            ok = False
-    elif key == "rate":
-        try:
-            v = float(text.replace(",", ".")) if text.lower() not in ("ок", "окей") else 0.5
-            answers[key] = str(min(0.7, max(0.4, v)))
-        except ValueError:
-            ok = False
-    elif key == "cutoff":
-        if text.lower() in ("ок", "окей"):
-            answers[key] = default
-        else:
-            try:
-                answers[key] = validate_hhmm(text)
-            except ValueError:
-                ok = False
-    elif key == "activity":
-        answers[key] = text if text.strip() in ("1", "2", "3", "4") else default
-    elif key == "tz":
-        try:
-            answers[key] = validate_timezone(text) if text else default
-        except ValueError:
-            ok = False
-
-    if not ok and key in ("age", "height", "weight"):
-        await msg.answer("Не понял ответ. Напиши числом.")
+    if key == "age" and text.isdigit() and int(text) < MIN_AGE:
+        await msg.answer(UNDERAGE_TEXT)
         return
-    if not ok:
-        answers[key] = default
+    parsed = parse_answer(key, text, default)
+    if parsed is None:
+        await msg.answer(RETRY_HINTS[key] + "\n\n" + _question(qi)[1])
+        return
+    answers[key] = parsed
 
     qi += 1
     await state.update_data(qi=qi, answers=answers)

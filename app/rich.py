@@ -241,6 +241,11 @@ async def edit(target: Message, content: str | Doc, reply_markup=None):
 
 # ------------------------------------------------- единое оформление для всех сообщений
 
+def strip_tags(text: str) -> str:
+    """HTML бота → простой текст: теги убраны, сущности раскрыты (последний запасной вариант отправки)."""
+    return htmllib.unescape(re.sub(r"<[^>]+>", "", text or ""))
+
+
 class RichMiddleware(BaseRequestMiddleware):
     """Любой обычный текст бота (в том числе напоминания планировщика) уходит rich-сообщением.
 
@@ -257,7 +262,14 @@ class RichMiddleware(BaseRequestMiddleware):
             return await make_request(bot, converted)
         except (TelegramBadRequest, TelegramNotFound):
             log.info("rich отклонён для %s, шлю обычным текстом", type(method).__name__)
+        try:
             return await make_request(bot, method)
+        except TelegramBadRequest as e:
+            if "parse" not in str(e).lower() and "entities" not in str(e).lower():
+                raise
+            log.warning("HTML не разобран и в обычном сообщении, шлю без разметки: %s", type(method).__name__)
+            return await make_request(bot, method.model_copy(update={
+                "text": strip_tags(method.text), "parse_mode": None}))
 
 
 def _plain_markup(markup) -> bool:

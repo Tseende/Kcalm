@@ -420,15 +420,20 @@ export function confirmDialog(message) {
 let depth = 0;
 let replacing = false;
 export const nav = {
+  dir: 'fwd',   // как пришли на экран: 'fwd' (новый переход / replace), 'back' (назад по истории), 'same' (перерисовка)
   go: (p) => { location.hash = '#' + p; },
   replace: (p) => { replacing = true; location.replace('#' + p); },
   back: (fallback = '/today') => (depth > 0 ? history.back() : nav.replace(fallback)),
   _track() {
     if (replacing) {
       replacing = false;
+      nav.dir = 'fwd';
       history.replaceState({ d: depth }, '');
-    } else if (history.state && typeof history.state.d === 'number') depth = history.state.d;
-    else {
+    } else if (history.state && typeof history.state.d === 'number') {
+      nav.dir = history.state.d < depth ? 'back' : history.state.d > depth ? 'fwd' : 'same';
+      depth = history.state.d;
+    } else {
+      nav.dir = 'fwd';
       depth += 1;
       history.replaceState({ d: depth }, '');
     }
@@ -550,6 +555,18 @@ export function skel(height = 16, width = '100%', extra = '') {
 export function skeletonCards(n = 3, height = 90) {
   return h('div', { class: 'stack' }, Array.from({ length: n }, () => skel(height, '100%', 'skel-card')));
 }
+/** Скелетон по реальной раскладке экрана: список высот карточек (число) или готовых элементов. */
+export function skeletonBlocks(heights) {
+  return h('div', { class: 'stack' }, heights.map((x) => (typeof x === 'number' ? skel(x, '100%', 'skel-card') : x)));
+}
+
+/** Повторная загрузка блока: старое содержимое остаётся (страница не схлопывается, прокрутка не прыгает), высота фиксируется.
+ *  Возвращает release(): вызвать после отрисовки нового содержимого или ошибки. */
+export function holdHeight(box) {
+  box.style.minHeight = box.offsetHeight + 'px';
+  box.classList.add('is-loading');
+  return () => { box.classList.remove('is-loading'); box.style.minHeight = ''; };
+}
 
 export function emptyState(iconName, title, text, action) {
   return h('div', { class: 'empty' },
@@ -559,8 +576,17 @@ export function emptyState(iconName, title, text, action) {
     action || null);
 }
 
+/** Кнопка для истёкшей сессии: «Обновить» перезагрузила бы страницу с теми же устаревшими данными, помогает только повторное открытие из чата. */
+export function sessionExpiredButton() {
+  return h('button', { class: 'btn btn-primary', type: 'button', onclick: () => { try { tg.close(); } catch (e) { location.reload(); } } }, 'Закрыть приложение');
+}
+
 export function errorState(root, err, retry) {
   if (err) console.error(err);
+  if (err && err.expired) {
+    root.replaceChildren(emptyState('lock', 'Сессия устарела', err.message, sessionExpiredButton()));
+    return;
+  }
   root.replaceChildren(emptyState('mood-sad', 'Не получилось загрузить', friendly(err, 'Проверьте соединение и попробуйте ещё раз.'),
     retry ? h('button', { class: 'btn btn-secondary', type: 'button', onclick: retry }, 'Повторить') : null));
 }

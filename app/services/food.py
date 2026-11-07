@@ -10,6 +10,7 @@ import json
 from collections import OrderedDict
 import logging
 import sqlite3
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -78,11 +79,22 @@ def _uses_dish(raw: dict, dish_photos: set[int] | None) -> bool:
     return index is None or int(index) in dish_photos
 
 
+_BAD_SHAPE = (TypeError, AttributeError, ValueError, KeyError, IndexError, OverflowError)
+
+
 def understanding_from_json(data: dict, dish_photos: set[int] | None = None) -> MealUnderstanding:
     """Нормализация ответа LLM к MealUnderstanding с диапазонами.
 
     dish_photos — номера фото (с 1), на которых была известная посуда: у позиций,
-    посчитанных по её заполненности, диапазон сужается до ±15 %."""
+    посчитанных по её заполненности, диапазон сужается до ±15 %.
+    Ответ неожиданной формы (items не список, строка вместо числа) — это LLMError, а не падение."""
+    try:
+        return _understanding_from_json(data, dish_photos)
+    except _BAD_SHAPE as e:
+        raise llm.LLMError(f"LLM вернул ответ неожиданной формы: {type(e).__name__}") from e
+
+
+def _understanding_from_json(data: dict, dish_photos: set[int] | None = None) -> MealUnderstanding:
     items: list[IngredientEstimate] = []
     for raw in data.get("items", []):
         amount = raw.get("amount") or {}
@@ -209,15 +221,18 @@ async def refine_meal(items: list[dict], comment: str, user_id: int | None,
         temperature=0.1, user_id=user_id, db=db,
     )
     by_name = {c["name_ru"].strip().lower(): c["grams"] for c in current}
-    for raw in data.get("items", []):
-        if not isinstance(raw.get("amount"), dict):
-            raw["amount"] = {}
-        if not raw["amount"].get("grams"):
-            kept = by_name.get(str(raw.get("name_ru", "")).strip().lower())
-            if kept:
-                raw["amount"]["grams"] = kept
+    try:
+        for raw in data.get("items", []):
+            if not isinstance(raw.get("amount"), dict):
+                raw["amount"] = {}
+            if not raw["amount"].get("grams"):
+                kept = by_name.get(str(raw.get("name_ru", "")).strip().lower())
+                if kept:
+                    raw["amount"]["grams"] = kept
+        changes = [str(c).strip() for c in data.get("changes", []) if str(c).strip()][:5]
+    except _BAD_SHAPE as e:
+        raise llm.LLMError(f"LLM вернул ответ неожиданной формы: {type(e).__name__}") from e
     u = understanding_from_json(data)
-    changes = [str(c).strip() for c in data.get("changes", []) if str(c).strip()][:5]
     return u, changes
 
 
@@ -259,6 +274,28 @@ def _groups_note(groups: list[int] | None, n: int) -> list[str]:
 
 VISION_MAX_SIDE = 1600       # длинная сторона фото для vision-модели
 VISION_JPEG_QUALITY = 85
+MAX_IMAGE_PIXELS = 40_000_000    # больше — отказ: распаковка такой картинки съедает сотни МБ (Render free: 512 МБ)
+IMAGE_TOO_LARGE_TEXT = ("Картинка слишком большая по размеру (больше 40 мегапикселей). "
+                        "Пришли, пожалуйста, обычное фото с камеры или скриншот.")
+_IMAGE_SEM = threading.BoundedSemaphore(2)   # одновременно не больше двух распаковок: пик памяти ограничен
+
+
+def image_too_large(data: bytes) -> bool:
+    """Слишком ли много пикселей. Смотрит только заголовок файла, картинку не распаковывает.
+    Нечитаемое Pillow считаем не-слишком-большим: дальше это поймает остальной код."""
+    try:
+        from PIL import Image
+    except ImportError:
+        return False
+    Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+    try:
+        with Image.open(io.BytesIO(data)) as im:
+            width, height = im.size
+        return width * height > MAX_IMAGE_PIXELS
+    except Image.DecompressionBombError:
+        return True
+    except Exception:                                # noqa: BLE001
+        return False
 
 
 def shrink_b64(b64: str, max_side: int = VISION_MAX_SIDE) -> str:
@@ -268,12 +305,15 @@ def shrink_b64(b64: str, max_side: int = VISION_MAX_SIDE) -> str:
     возвращаем оригинал как есть. Оригиналы на диске и в БД не трогаем."""
     try:
         from PIL import Image, ImageOps
+        Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
         raw = base64.b64decode(b64)
-        with Image.open(io.BytesIO(raw)) as im:
+        with _IMAGE_SEM, Image.open(io.BytesIO(raw)) as im:
             if max(im.size) <= max_side:
                 return b64
+            if im.format == "JPEG":
+                im.draft("RGB", (max_side, max_side))   # JPEG декодируется сразу в 1/2, 1/4, 1/8 размера
+            im.thumbnail((max_side, max_side), Image.LANCZOS)   # сначала уменьшаем, потом поворачиваем
             im = ImageOps.exif_transpose(im)         # поворот из EXIF, иначе после пережатия он потеряется
-            im.thumbnail((max_side, max_side), Image.LANCZOS)
             if im.mode != "RGB":
                 im = im.convert("RGB")
             out = io.BytesIO()

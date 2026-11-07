@@ -1,9 +1,12 @@
 """Профиль, цели и напоминания для Mini App: те же расчёты, что и в онбординге бота."""
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import date
+from pathlib import Path
 
+from app.config import get_config
 from app.domain.targets import (
     MAX_RATE, bmi, compute_target, kcal_floor_check, min_goal_weight, pal_from_pa,
 )
@@ -148,15 +151,59 @@ def set_reminder(db: sqlite3.Connection, user, kind: str, time: str | None, enab
                       bool(cur["enabled"]) if cur and enabled is None else (True if enabled is None else enabled))
 
 
-def delete_all_data(db: sqlite3.Connection, user) -> None:
-    """Полное удаление: пользователь и всё, что связано (каскадом), плюс таблицы без внешнего ключа."""
-    uid = user["id"]
-    for sql in ("DELETE FROM recent_files WHERE user_id=?", "DELETE FROM chat_messages WHERE user_id=?",
-                "DELETE FROM llm_calls WHERE user_id=?", "DELETE FROM model_usage_daily WHERE user_id=?",
-                "DELETE FROM audit_events WHERE user_id=?", "DELETE FROM foods WHERE owner_user_id=?",
-                "DELETE FROM users WHERE id=?"):
+def _photo_paths(db: sqlite3.Connection, uid: int) -> set[str]:
+    """Пути файлов, которые принадлежат человеку: фото приёмов, посуды, скриншоты, отложенные фото."""
+    out: set[str] = set()
+    for sql in ("SELECT photo_path FROM meals WHERE user_id=?",
+                "SELECT mp.path FROM meal_photos mp JOIN meals m ON m.id=mp.meal_id WHERE m.user_id=?",
+                "SELECT photo_path FROM dishes WHERE user_id=?",
+                "SELECT file_path FROM raw_observations WHERE user_id=?"):
+        out.update(r[0] for r in db.execute(sql, (uid,)).fetchall() if r[0])
+    for r in db.execute("SELECT payload_json FROM pending_inputs WHERE user_id=?", (uid,)).fetchall():
         try:
-            db.execute(sql, (uid,))
-        except sqlite3.OperationalError:
+            path = json.loads(r[0]).get("path")
+        except (ValueError, AttributeError):
             continue
-    db.commit()
+        if isinstance(path, str) and path:
+            out.add(path)
+    return out
+
+
+def _still_referenced(db: sqlite3.Connection, path: str) -> bool:
+    """Ссылается ли на файл кто-то ещё: имена файлов по хешу содержимого, один снимок мог прийти двоим."""
+    for sql in ("SELECT 1 FROM meals WHERE photo_path=? LIMIT 1", "SELECT 1 FROM meal_photos WHERE path=? LIMIT 1",
+                "SELECT 1 FROM dishes WHERE photo_path=? LIMIT 1",
+                "SELECT 1 FROM raw_observations WHERE file_path=? LIMIT 1",
+                "SELECT 1 FROM pending_inputs WHERE payload_json LIKE ? LIMIT 1"):
+        arg = f'%"{path}"%' if "LIKE" in sql else path
+        if db.execute(sql, (arg,)).fetchone():
+            return True
+    return False
+
+
+def delete_all_data(db: sqlite3.Connection, user) -> None:
+    """Полное удаление: пользователь и всё, что связано, одной транзакцией (сбой откатывает всё).
+
+    Сначала таблицы с внешними ключами без ON DELETE (избранное, посуда), потом остальное, в конце
+    сам пользователь: его приёмы, вода, сон и прочее уходят каскадом. Файлы фото и их копии в
+    photo_blobs удаляются только если на них больше никто не ссылается."""
+    uid = user["id"]
+    root = Path(get_config().photos_dir).resolve()
+    with db:
+        paths = _photo_paths(db, uid)
+        for sql in ("DELETE FROM favorite_meals WHERE user_id=?", "DELETE FROM dishes WHERE user_id=?",
+                    "DELETE FROM recent_files WHERE user_id=?", "DELETE FROM chat_messages WHERE user_id=?",
+                    "DELETE FROM llm_calls WHERE user_id=?", "DELETE FROM model_usage_daily WHERE user_id=?",
+                    "DELETE FROM audit_events WHERE user_id=?", "DELETE FROM foods WHERE owner_user_id=?",
+                    "DELETE FROM users WHERE id=?"):
+            db.execute(sql, (uid,))
+        orphans = [p for p in paths if not _still_referenced(db, p)]
+        for p in orphans:
+            db.execute("DELETE FROM photo_blobs WHERE path=?", (p,))
+    for p in orphans:                                       # файлы после коммита: откат не потеряет фото
+        try:
+            path = Path(p).resolve()
+            if root in path.parents and path.is_file():
+                path.unlink()
+        except OSError:
+            pass

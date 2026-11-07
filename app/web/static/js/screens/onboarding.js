@@ -163,16 +163,21 @@ export default function onboarding(root, { me, onDone }) {
   }
 
   function buildYear() {
-    if (!a.birth_year) a.birth_year = nowYear - 35;
+    const shown = a.birth_year || nowYear - 35;      // стартовая позиция барабана; ответом считается только после выбора
     const years = [];
     for (let y = nowYear - 90; y <= nowYear - 10; y++) years.push({ v: y, label: String(y) });
     const age = h('div', { class: 'onb-age', 'aria-live': 'polite' });
-    const paintAge = () => { const n = nowYear - a.birth_year; age.replaceChildren(h('b', null, plural(n, 'год', 'года', 'лет'))); };
+    const paintAge = () => {
+      if (!a.year_set) { age.replaceChildren(h('span', { class: 'muted' }, 'Прокрутите и выберите год')); return; }
+      const n = nowYear - a.birth_year; age.replaceChildren(h('b', null, plural(n, 'год', 'года', 'лет')));
+    };
+    const pick = (v) => { a.birth_year = v; a.year_set = true; save(); paintAge(); mainButton.setDisabled(false); };
     paintAge();
-    const d = drum(years, a.birth_year, (v) => { a.birth_year = v; save(); paintAge(); }, { cls: 'wide' });
+    const d = drum(years, shown, (v) => pick(v), { cls: 'wide' });
+    d.el.addEventListener('click', () => { if (!a.year_set) pick(d.get()); });   // тап по текущему году тоже подтверждает выбор
     return {
       el: h('div', null, head(null, 'Год рождения', 'Возраст влияет на расчёт нормы.'), h('div', { class: 'onb-pick' }, d.el, age)),
-      main: { text: 'Дальше', fn: () => { if (nowYear - a.birth_year < 18) show('stop', 'fwd'); else goNext(); } },
+      main: { text: 'Дальше', disabled: !a.year_set, fn: () => { if (!a.year_set) return; if (nowYear - a.birth_year < 18) show('stop', 'fwd'); else goNext(); } },
     };
   }
 
@@ -294,7 +299,7 @@ export default function onboarding(root, { me, onDone }) {
     const lose = willLose(a);
     const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined; } catch (e) { return undefined; } })();
     const body = {
-      sex: a.sex || 'female', birth_year: a.birth_year || nowYear - 35, height_cm: a.height_cm, weight_kg: a.weight_kg,
+      sex: a.sex, birth_year: a.birth_year, height_cm: a.height_cm, weight_kg: a.weight_kg,
       goal_weight_kg: lose ? a.goal_weight_kg : a.weight_kg, rate_kg_week: lose ? (a.rate || 0.5) : 0,
       activity: a.activity || 2, eating_cutoff: a.cutoff || '21:00', care_mode: !!a.care, goal: a.goal || 'lose',
       reminders: { ...a.reminders, weigh: a.care ? false : a.reminders.weigh },
@@ -304,6 +309,8 @@ export default function onboarding(root, { me, onDone }) {
   }
 
   function submit() {
+    if (!a.sex) { show('sex', 'back'); return; }
+    if (!a.year_set || !a.birth_year) { show('year', 'back'); return; }
     if (!a.height_cm || !a.weight_kg) { show(!a.height_cm ? 'height' : 'weight', 'back'); return; }
     mainButton.hide();
     backButton.hide();

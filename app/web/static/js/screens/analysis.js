@@ -3,7 +3,7 @@ import { api } from '../api.js';
 import { weekGoalBlock } from './weekgoal.js';
 import { ring, sparkline } from '../charts.js';
 import { onbImg } from '../onb/controls.js';
-import { h, icon, tile, glyph, nav, pageHead, segmented, shortDate, fmtN, skeletonCards, emptyState, errorState, sectionTitle, todayISO, dateSwitch, countUp, staggerIn, reducedMotion, heroCard, progressBar, statTile } from '../ui.js';
+import { h, icon, tile, glyph, nav, pageHead, segmented, shortDate, fmtN, skeletonCards, holdHeight, emptyState, errorState, sectionTitle, todayISO, dateSwitch, countUp, staggerIn, reducedMotion, heroCard, progressBar, statTile } from '../ui.js';
 
 let curDate = todayISO();
 const PERIODS = [['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц']];
@@ -97,26 +97,39 @@ export default async function render(root, ctx) {
   async function load() {
     if (period !== 'day') return loadPeriodView();
     sw.set(curDate);
-    body.replaceChildren(skeletonCards(3, 110));
+    const release = pending();
     const date = curDate;
     try {
       const data = await api.get('/analysis', { date });
-      if (!ctx.alive() || date !== curDate) return;
+      if (!ctx.alive() || date !== curDate || period !== 'day') return;
       draw(data);
+      release();
     } catch (e) {
-      if (ctx.alive()) errorState(body, e, load);
+      if (!ctx.alive() || date !== curDate || period !== 'day') return;
+      errorState(body, e, load);
+      release();
     }
   }
 
-  async function loadPeriodView() {
+  // Первый показ: скелетон. Повторная загрузка (день/период): старое содержимое остаётся, высота зафиксирована.
+  function pending() {
+    if (body.hasChildNodes()) return holdHeight(body);
     body.replaceChildren(skeletonCards(3, 110));
+    return () => {};
+  }
+
+  async function loadPeriodView() {
+    const release = pending();
     const asked = period;
     try {
       const data = await api.get('/analysis', { period: asked });
       if (!ctx.alive() || asked !== period) return;
       drawPeriod(data);
+      release();
     } catch (e) {
-      if (ctx.alive()) errorState(body, e, loadPeriodView);
+      if (!ctx.alive() || asked !== period) return;
+      errorState(body, e, loadPeriodView);
+      release();
     }
   }
 

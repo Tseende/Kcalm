@@ -135,7 +135,7 @@ async def search_branded(name: str, brand: str,
         resp.raise_for_status()
         products = resp.json().get("products") or []
     except Exception as e:  # noqa: BLE001
-        log.warning("OFF search %r: %s: %s", name, type(e).__name__, e)
+        log.warning("OFF search: %s", type(e).__name__)   # без названия и текста ошибки: в них бывает URL с запросом
         return None
     finally:
         if temporary:

@@ -2,7 +2,7 @@
 import { api } from '../api.js';
 import {
   h, icon, toast, haptic, mainButton, pageHead, frow, group, numInput, numVal, numCheck, segmented, sheet,
-  fmtN, fmtKcal, errorState, skeletonCards, dataChanged, plural, macroChips,
+  fmtN, fmtKcal, errorState, skeletonBlocks, dataChanged, plural, macroChips,
 } from '../ui.js';
 
 const ACTIVITY = [
@@ -15,7 +15,7 @@ const RATES = [[0, 'Держать'], [0.25, '0,25'], [0.5, '0,5'], [0.7, '0,7']
 
 export default async function render(root, ctx) {
   const view = h('div', { class: 'screen' });
-  const box = h('div', { class: 'stack' }, skeletonCards(3, 80));
+  const box = h('div', { class: 'stack' }, skeletonBlocks([112, 150, 230]));
   view.append(pageHead('Профиль и цели', { parent: '/menu' }), box);
   root.append(view);
 
@@ -48,7 +48,16 @@ export default async function render(root, ctx) {
       carbs: numInput({ min: 0, max: 900, step: 1, value: targets.carbs, inputmode: 'numeric', 'aria-label': 'Углеводы' }),
     };
     const done = (r, text) => { api._me = null; targets = r.targets; paintTargets(); dataChanged(); s.close(); haptic('success'); toast(text, 'ok'); };
-    const save = async () => {
+    // Один запрос за раз: двойной тап не отправляет дважды, кнопки на время запроса заблокированы.
+    let inflight = false;
+    const guarded = (fn) => async () => {
+      if (inflight) return;
+      inflight = true;
+      btns.forEach((b) => { b.disabled = true; });
+      try { await fn(); } finally { inflight = false; btns.forEach((b) => { b.disabled = false; }); }
+    };
+    const btns = [];
+    const save = guarded(async () => {
       const bad = numCheck(f.kcal, 'Калории') || numCheck(f.protein, 'Белки') || numCheck(f.fat, 'Жиры') || numCheck(f.carbs, 'Углеводы');
       if (bad) { toast(bad, 'error'); return; }
       if (numVal(f.kcal) === null) { toast('Укажите калории', 'error'); f.kcal.focus(); return; }
@@ -56,19 +65,21 @@ export default async function render(root, ctx) {
         const r = await api.put('/targets', { kcal: numVal(f.kcal), protein: numVal(f.protein), fat: numVal(f.fat), carbs: numVal(f.carbs) });
         done(r, r.result.raised ? `Калории подняты до безопасного минимума: ${r.targets.kcal}` : 'Норма сохранена');
       } catch (e) { toast(e.message, 'error'); }
-    };
-    const auto = async () => {
+    });
+    const auto = guarded(async () => {
       try {
         const r = await api.patch('/profile', { recalc: true });
         const t = r.result.target;
         done(r, t ? `Пересчитал: ${t.old ?? '—'} → ${t.new} ккал` : 'Без изменений');
       } catch (e) { toast(e.message, 'error'); }
-    };
+    });
+    const saveBtn = h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: save }, 'Сохранить норму');
+    const autoBtn = h('button', { class: 'btn btn-secondary btn-block', type: 'button', onclick: auto }, 'Пересчитать по профилю');
+    btns.push(saveBtn, autoBtn);
     const s = sheet({ title: 'Норма на день', content: h('div', { class: 'stack' },
       group([frow('Калории, ккал', f.kcal), frow('Белки, г', f.protein), frow('Жиры, г', f.fat), frow('Углеводы, г', f.carbs)],
         'Калории ниже безопасного минимума поднимаются автоматически.'),
-      h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: save }, 'Сохранить норму'),
-      h('button', { class: 'btn btn-secondary btn-block', type: 'button', onclick: auto }, 'Пересчитать по профилю')) });
+      saveBtn, autoBtn) });
   }
 
   // --- данные профиля

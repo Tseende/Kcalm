@@ -56,7 +56,11 @@ def validate_init_data(init_data: str, bot_token: str, max_age_s: int = MAX_AGE_
     received = fields.pop("hash", None)
     if not received:
         raise InitDataError("no_hash")
-    if not hmac.compare_digest(compute_hash(fields, bot_token), received.lower()):
+    try:
+        same = hmac.compare_digest(compute_hash(fields, bot_token).encode(), received.lower().encode())
+    except (TypeError, UnicodeError):
+        same = False
+    if not same:
         raise InitDataError("bad_hash")
 
     try:

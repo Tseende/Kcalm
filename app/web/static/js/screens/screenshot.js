@@ -84,18 +84,22 @@ export default async function render(root, ctx) {
     } else if (r.needs_confirm) {
       status.replaceChildren('Проверьте значения. Если всё верно, подтвердите: данные запишутся в дневник.',
         reasons.length ? h('ul', { class: 'notes' }, reasons.map((x) => h('li', null, x))) : null);
+      let sending = false;
       const confirm = async (apply) => {
+        if (sending) return;                          // двойной тап: один запрос
+        sending = true;
+        btnOk.disabled = btnNo.disabled = true;
         try {
           await api.post('/screens/' + r.id + '/confirm', { apply });
           api._me = null;
           haptic('success');
           toast(apply ? 'Данные сохранены' : 'Отменено', 'ok');
           nav.replace('/today');
-        } catch (e) { toast(e.message, 'error'); }
+        } catch (e) { toast(e.message, 'error'); sending = false; btnOk.disabled = btnNo.disabled = false; }
       };
-      actions.append(
-        h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: () => confirm(true) }, icon('check', 20), 'Подтвердить'),
-        h('button', { class: 'btn btn-secondary btn-block', type: 'button', onclick: () => confirm(false) }, 'Отмена'));
+      const btnOk = h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: () => confirm(true) }, icon('check', 20), 'Подтвердить');
+      const btnNo = h('button', { class: 'btn btn-secondary btn-block', type: 'button', onclick: () => confirm(false) }, 'Отмена');
+      actions.append(btnOk, btnNo);
     } else {
       status.textContent = r.screen === 'unknown' ? 'Это не похоже на экран со сном, шагами или весом.' : 'Данные не применены.';
     }

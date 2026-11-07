@@ -6,8 +6,10 @@
 """
 from __future__ import annotations
 
+import functools
 import io
 import sqlite3
+import threading
 from functools import lru_cache
 from pathlib import Path
 from datetime import date, timedelta
@@ -33,6 +35,19 @@ plt.rcParams.update({"font.family": "DejaVu Sans", "axes.edgecolor": GRID, "text
 
 
 ASSETS = Path(__file__).resolve().parents[2] / "assets"
+
+
+# pyplot хранит глобальное состояние фигур и не потокобезопасен, а рисуем мы из asyncio.to_thread:
+# одновременно строится только один график.
+_PLOT_LOCK = threading.RLock()
+
+
+def _plot_locked(fn):
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        with _PLOT_LOCK:
+            return fn(*args, **kwargs)
+    return wrapper
 
 
 @lru_cache(maxsize=8)
@@ -124,6 +139,7 @@ def _pill(ax, x, y, w, h, color, z=2) -> None:
 
 # ------------------------------------------------------------------------ день
 
+@_plot_locked
 def day_chart(f: dict) -> bytes:
     """Карточка дня на фоне иллюстрации: крупная цифра калорий и полоски прогресса."""
     rows = [("Белок", f["protein"], f["protein_target"], "г", None),
@@ -169,6 +185,7 @@ def day_chart(f: dict) -> bytes:
 
 # ---------------------------------------------------------------------- неделя
 
+@_plot_locked
 def week_chart(days: list[dict], care: bool) -> bytes:
     """Панели по дням на плашках поверх иллюстрации: калории (с коридором цели), вода, шаги."""
     labels = [WEEKDAYS[date.fromisoformat(d["date"]).weekday()] for d in days]
@@ -251,6 +268,7 @@ def _framed(art: str, title: str, sub: str, width: float = 7.4, height: float = 
     return fig, ax
 
 
+@_plot_locked
 def weight_chart(data: dict) -> bytes:
     rows = data["rows"]
     pts = [(date.fromisoformat(d), w) for d, w in rows]
@@ -294,6 +312,7 @@ def body_data(db: sqlite3.Connection, user, today: date, days: int = 120) -> lis
     return [(r["local_date"], r["body_fat_pct"], r["muscle_mass_pct"]) for r in rows]
 
 
+@_plot_locked
 def body_chart(rows: list) -> bytes | None:
     fig, ax = _framed("body.jpg", "Состав тела", "жир и мышцы, % от массы")
     drawn = 0

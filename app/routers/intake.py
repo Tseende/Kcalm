@@ -466,6 +466,9 @@ async def _download_image(msg: Message, db: sqlite3.Connection, uid: int, file_i
     if len(data) > cfg.max_media_bytes:
         await msg.answer("Фото слишком большое. Лимит — 10 МБ.")
         return None
+    if foodsvc.image_too_large(data):
+        await msg.answer(foodsvc.IMAGE_TOO_LARGE_TEXT)
+        return None
     file_hash = hashlib.sha256(data).hexdigest()
     if repo.file_seen(db, uid, file_hash, window_min=10):
         if album is not None:

@@ -24,6 +24,14 @@ services:
         sync: false
       - key: ALLOWED_TG_IDS
         sync: false
+      - key: ALLOW_PUBLIC_BOT     # true только для осознанного публичного теста; иначе пускаем лишь ALLOWED_TG_IDS
+        sync: false
+      - key: PICOOC_OWNER_TG_ID   # чей Picooc; пусто = единственный из ALLOWED_TG_IDS
+        sync: false
+      - key: WEBHOOK_SECRET       # секрет webhook Telegram; пусто = производный от токена бота
+        sync: false
+      - key: DAILY_LLM_LIMIT      # обращений к модели на человека в сутки (по умолчанию 200, 0 = без лимита)
+        sync: false
       - key: WEBHOOK_BASE_URL     # https://<имя-сервиса>.onrender.com, заполнить после первого деплоя
         sync: false
       - key: WEBAPP_URL           # https://<имя-сервиса>.onrender.com/app/

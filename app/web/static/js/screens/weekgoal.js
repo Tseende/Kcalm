@@ -16,6 +16,11 @@ function celebrateOnce(g, weekStart, el) {
   toast(`Цель недели выполнена: ${g.title.toLowerCase()} ${g.done} из ${g.target}`, 'ok');
 }
 
+// Была ли цель при прошлом показе: решает, рисовать ли заглушку на «Сегодня» (без цели блока нет, и заглушка «прыгала» бы).
+const HAD_KEY = 'wg_had_goal';
+const hadGoal = () => { try { return localStorage.getItem(HAD_KEY) === '1'; } catch (e) { return false; } };
+const rememberGoal = (has) => { try { localStorage.setItem(HAD_KEY, has ? '1' : '0'); } catch (e) { /* без хранилища */ } };
+
 // Returns a container that fills itself. `withRecap` adds last week's summary (Analysis screen);
 // `compact` is a one-line strip for «Сегодня» that opens the full card on «Анализ».
 export function weekGoalBlock(ctx, { withRecap = false, compact = false } = {}) {
@@ -27,6 +32,7 @@ export function weekGoalBlock(ctx, { withRecap = false, compact = false } = {}) 
     busy = true;
     try {
       const d = await fn();
+      rememberGoal(!!d.goal);
       lastData = { ...d, recap };                     // PUT/DELETE answers carry no recap
       draw(d, true);
       haptic('light');
@@ -106,20 +112,24 @@ export function weekGoalBlock(ctx, { withRecap = false, compact = false } = {}) 
     if (fresh && data.goal && data.goal.achieved && kids[0]) celebrateOnce(data.goal, data.week_start, kids[0]);
     if (withRecap && recap) kids.push(...recapCard(recap));
     box.replaceChildren(...kids);
+    if (compact) box.hidden = !data.goal;             // нет цели: блока нет совсем (и пустого места в стопке тоже)
   }
 
   if (lastData) {                                     // last known state first: no jump on reload
     recap = lastData.recap;
     draw(lastData);
-  } else {                                            // первый заход: заглушка вместо пустоты
+  } else if (!compact || hadGoal()) {                 // первый заход: заглушка вместо пустоты (на «Сегодня» только если цель была)
     box.append(h('div', { class: 'skel wg-ph' + (compact ? ' compact' : ''), 'aria-hidden': 'true' }));
+  } else {
+    box.hidden = true;
   }
   api.get('/week-goal').then((d) => {
     lastData = d;
+    rememberGoal(!!d.goal);
     if (!ctx.alive() || !box.isConnected) return;
     recap = d.recap;
     draw(d, true);
-  }).catch(() => { if (!lastData) box.replaceChildren(); }); // optional card: drop the placeholder
+  }).catch(() => { if (!lastData) { box.replaceChildren(); if (compact) box.hidden = true; } }); // optional card: drop the placeholder
   return box;
 }
 

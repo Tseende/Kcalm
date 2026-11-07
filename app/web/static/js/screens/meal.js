@@ -3,7 +3,7 @@ import { api } from '../api.js';
 import { mealIcon, mealPic } from '../pics.js';
 import { scanBarcode, decodeFile, validBarcode } from '../scanner.js';
 import {
-  h, icon, toast, haptic, nav, sheet, confirmDialog, pageHead, sectionTitle, skeletonCards, errorState, photoImg,
+  h, icon, toast, haptic, nav, sheet, confirmDialog, pageHead, sectionTitle, skeletonBlocks, errorState, photoImg,
   fmtN, fmtKcal, longDate, mealType, MEAL_TYPES, dishKind, numInput, numVal, numSet, codeInput, busyOverlay, macroChips, reloadRoute,
 } from '../ui.js';
 
@@ -15,7 +15,9 @@ export default async function render(root, ctx) {
   const id = ctx.params.id;
   const view = h('div', { class: 'screen' });
   root.append(view);
-  view.append(pageHead('Приём пищи', { parent: '/today' }), skeletonCards(3, 120));
+  // скелетон повторяет раскладку: фото 4:3, итоги, список позиций
+  view.append(pageHead('Приём пищи', { parent: '/today' }),
+    skeletonBlocks([h('div', { class: 'skel skel-card skel-photo' }), 120, 150]));
   let meal;
   let dishNames = {};
 
@@ -323,12 +325,16 @@ export default async function render(root, ctx) {
       h('div', { class: 'meal-actions' },
         h('button', { class: 'act' + (meal.favorite_id ? ' star-on' : ''), type: 'button',
           'aria-pressed': String(!!meal.favorite_id), 'aria-label': meal.favorite_id ? 'Убрать из избранного' : 'В избранное',
-          title: meal.favorite_id ? 'В избранном' : 'В избранное', onclick: toggleFavorite }, icon('star', 24)),
+          title: meal.favorite_id ? 'В избранном' : 'В избранное', onclick: (ev) => toggleFavorite(ev.currentTarget) }, icon('star', 24)),
         h('button', { class: 'act', type: 'button', 'aria-label': 'Уточнить', title: 'Уточнить', onclick: refine }, icon('pencil', 24)),
         h('button', { class: 'act danger', type: 'button', 'aria-label': 'Удалить приём', title: 'Удалить приём', onclick: removeMeal }, icon('trash', 24)))].filter(Boolean));
   }
 
-  async function toggleFavorite() {
+  let favBusy = false;
+  async function toggleFavorite(btn) {
+    if (favBusy) return;                              // двойной тап не должен создать два избранных
+    favBusy = true;
+    btn.disabled = true;
     try {
       if (meal.favorite_id) {
         await api.del('/favorites/' + meal.favorite_id);
@@ -339,8 +345,13 @@ export default async function render(root, ctx) {
         toast('Добавлено в избранное. Теперь оно под рукой при добавлении приёма', 'ok');
       }
       haptic('light');
-      draw();
-    } catch (e) { toast(e.message, 'error'); }
+      // без полной перерисовки: карусель не мигает и не возвращается на первый слайд
+      const on = !!meal.favorite_id;
+      btn.classList.toggle('star-on', on);
+      btn.setAttribute('aria-pressed', String(on));
+      btn.setAttribute('aria-label', on ? 'Убрать из избранного' : 'В избранное');
+      btn.title = on ? 'В избранном' : 'В избранное';
+    } catch (e) { toast(e.message, 'error'); } finally { favBusy = false; btn.disabled = false; }
   }
 
   draw();

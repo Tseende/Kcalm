@@ -24,12 +24,14 @@ export function productForm(p = {}) {
       h('span', { class: 'icon-prev-lbl' }, 'Изменить иконку'));
   }
   // Выбор иконки открывается отдельной страницей поверх формы: введённые поля не теряются.
+  let closeIconPage = null;
   function openIconPage() {
     let openGroup = null;
     const g0 = foodGroupOf(name.value, iconVal);
     if (g0 !== 'Другое') openGroup = g0;
     const body = h('div', { class: 'screen icon-page-body', role: 'radiogroup', 'aria-label': 'Иконка' });
-    const close = () => { page.remove(); document.removeEventListener('keydown', onKey); };
+    const close = () => { page.remove(); document.removeEventListener('keydown', onKey); closeIconPage = null; };
+    closeIconPage = close;
     const onKey = (e) => { if (e.key === 'Escape') close(); };
     const pick = (k) => { iconVal = k; haptic('light'); paintIcon(); close(); };
     const opt = (k) => h('button', { type: 'button', class: 'icon-opt' + (iconVal === k ? ' on' : ''), role: 'radio', 'aria-checked': String(iconVal === k),
@@ -85,7 +87,8 @@ export function productForm(p = {}) {
       default_grams: grams(dg), unit_name: un.value.trim() || null, unit_grams: grams(ug), icon: iconVal,
     };
   }
-  return { el, collect };
+  // страница выбора иконки живёт в <body>: при уходе с экрана её нужно закрыть, иначе она останется поверх и слушатель Esc тоже
+  return { el, collect, destroy: () => { if (closeIconPage) closeIconPage(); } };
 }
 
 export default async function render(root, ctx) {
@@ -124,4 +127,5 @@ export default async function render(root, ctx) {
     isNew ? null : h('button', { class: 'btn btn-danger-ghost btn-block', type: 'button', onclick: remove }, 'Удалить продукт'),
     !isNew && product.times_used ? h('div', { class: 'muted small center' }, `Использован в приёмах: ${product.times_used}`) : null].filter(Boolean));
   mainButton.show('Сохранить', save);
+  return () => form.destroy();
 }

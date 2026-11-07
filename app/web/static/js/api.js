@@ -24,6 +24,7 @@ export class ApiError extends Error {
     super(message);
     this.status = status;
     this.code = code;
+    this.expired = false; // 401 внутри Telegram: initData устарел (живёт сутки), нужно открыть приложение заново
   }
 }
 
@@ -41,7 +42,12 @@ function errorFrom(status, data) {
     else if (status >= 500) msg = 'Ошибка на сервере. Попробуйте ещё раз чуть позже.';
     else msg = 'Не получилось выполнить запрос.';
   }
-  return new ApiError(status, code, msg);
+  const err = new ApiError(status, code, msg);
+  if (status === 401 && inTelegram && code !== 'not_allowed') {   // not_allowed: человека нет в списке теста, это не устаревшая сессия
+    err.expired = true;
+    err.message = 'Сессия устарела. Закройте и снова откройте приложение из чата.';
+  }
+  return err;
 }
 
 function qs(query) {
@@ -70,35 +76,44 @@ async function request(method, path, { query, body, timeout = 30000 } = {}) {
   const ctrl = new AbortController();
   init.signal = ctrl.signal;
   const timer = setTimeout(() => ctrl.abort(), timeout);
-  let res;
+  const timedOut = () => new ApiError(0, 'timeout', 'Сервер слишком долго отвечает. Попробуйте ещё раз.');
+  // Таймер снимается только после чтения тела: завис ответ посреди передачи — запрос всё равно оборвётся по таймауту.
   try {
-    res = await fetch(BASE + path + qs(query), init);
-  } catch (e) {
-    clearTimeout(timer);
-    if (!realOk && isLocalHost) {
-      enableMock();
-      return mockRequest(method, path, query || {}, body);
+    let res;
+    try {
+      res = await fetch(BASE + path + qs(query), init);
+    } catch (e) {
+      if (!realOk && isLocalHost) {
+        enableMock();
+        return mockRequest(method, path, query || {}, body);
+      }
+      if (e && e.name === 'AbortError') throw timedOut();
+      throw new ApiError(0, 'network', 'Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.');
     }
-    if (e && e.name === 'AbortError') throw new ApiError(0, 'timeout', 'Сервер слишком долго отвечает. Попробуйте ещё раз.');
-    throw new ApiError(0, 'network', 'Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.');
-  }
-  clearTimeout(timer);
-  if (res.status === 204) {
+    if (res.status === 204) {
+      realOk = true;
+      return null;
+    }
+    const ct = res.headers.get('content-type') || '';
+    let data = null;
+    if (ct.includes('json')) {
+      try { data = await res.json(); } catch (e) {
+        if (ctrl.signal.aborted) throw timedOut();
+        data = null;
+      }
+    }
+    if (!res.ok) {
+      if (!realOk && isLocalHost && !ct.includes('json') && [404, 405, 501].includes(res.status)) {
+        enableMock();
+        return mockRequest(method, path, query || {}, body);
+      }
+      throw errorFrom(res.status, data);
+    }
     realOk = true;
-    return null;
+    return data;
+  } finally {
+    clearTimeout(timer);
   }
-  const ct = res.headers.get('content-type') || '';
-  let data = null;
-  if (ct.includes('json')) data = await res.json().catch(() => null);
-  if (!res.ok) {
-    if (!realOk && isLocalHost && !ct.includes('json') && [404, 405, 501].includes(res.status)) {
-      enableMock();
-      return mockRequest(method, path, query || {}, body);
-    }
-    throw errorFrom(res.status, data);
-  }
-  realOk = true;
-  return data;
 }
 
 export const api = {

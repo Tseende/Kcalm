@@ -175,7 +175,7 @@ input::placeholder, textarea::placeholder { color: var(--c-hint); opacity: .8; }
 
 /* ---------- overlays ---------- */
 .sheet-wrap { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0); display: flex; align-items: flex-end; justify-content: center; transition: background .2s; }
-.sheet { width: 100%; max-width: 560px; max-height: 92vh; overflow-y: auto; overscroll-behavior: contain; outline: none; touch-action: pan-y; background: var(--c-bg); border-radius: 20px 20px 0 0; padding: 8px 16px calc(16px + var(--safe-b)); transform: translateY(100%); transition: transform .22s ease-out; }
+.sheet { width: 100%; max-width: 560px; max-height: 92vh; max-height: min(92vh, calc(var(--tg-viewport-stable-height, 100vh) * .92)); overflow-y: auto; overscroll-behavior: contain; outline: none; touch-action: pan-y; background: var(--c-bg); border-radius: 20px 20px 0 0; padding: 8px 16px calc(16px + var(--safe-b)); transform: translateY(100%); transition: transform .22s ease-out; }
 .sheet-wrap.open .sheet { transform: none; }
 .grabber { width: 36px; height: 4px; border-radius: 2px; background: var(--c-sep); margin: 0 auto 10px; }
 .sheet-title { font-size: 17px; font-weight: 600; text-align: center; margin-bottom: 12px; }
@@ -294,7 +294,7 @@ html.scheme-dark .toast.ok { background: color-mix(in srgb, var(--c-green) 60%, 
 .photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .remove { position: absolute; top: 3px; right: 3px; width: 26px; height: 26px; border-radius: 50%; border: 0; background: rgba(0, 0, 0, .65); color: #fff; display: grid; place-items: center; padding: 0; }
 .remove::after { content: ""; position: absolute; inset: -9px; }
-.preview { width: 100%; max-height: 260px; object-fit: contain; border-radius: var(--radius); background: var(--c-card); }
+.preview { width: 100%; aspect-ratio: 4 / 3; max-height: 260px; object-fit: contain; border-radius: var(--radius); background: var(--c-card); }
 .notes { margin: 0; padding-left: 20px; color: var(--c-hint); font-size: 13px; }
 .photo-pick { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .photo-pick img, .photo-pick .ph-big { width: 120px; height: 120px; border-radius: 16px; object-fit: cover; }
@@ -421,7 +421,7 @@ body.kb-open.has-tabbar, body.kb-open.has-main { padding-bottom: calc(var(--kb-h
 .kbbar[hidden] { display: none; }
 body.kb-open.has-main, body.kb-open.has-main.has-tabbar { padding-bottom: calc(var(--kb-h) + 92px); }
 body.kb-open .sheet-wrap { padding-bottom: var(--kb-h); }
-body.kb-open .sheet { max-height: calc(92vh - var(--kb-h)); }
+body.kb-open .sheet { max-height: calc(92vh - var(--kb-h)); max-height: calc(min(92vh, var(--tg-viewport-stable-height, 100vh) * .92) - var(--kb-h)); }
 body.sheet-open { overflow: hidden; }
 /* поля не должны уезжать под липкую шапку и нижние панели при прокрутке к ним */
 input, textarea, select { scroll-margin-top: calc(var(--safe-t) + 70px); scroll-margin-bottom: 90px; }
@@ -721,7 +721,7 @@ html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
 .barcode-row input { flex: 1; min-width: 0; }
 .quick-list .row { align-items: center; padding-block: 4px; }
 .quick-list .row-btn { appearance: none; background: none; border: 0; padding: 6px 0; margin: 0; font: inherit; color: inherit; text-align: left; display: flex; flex-direction: column; min-width: 0; cursor: pointer; }
-.quick-list .row.busy { opacity: .5; pointer-events: none; }
+.quick-list .row.is-pending { opacity: .5; pointer-events: none; }
 .quick-star { appearance: none; background: none; border: 0; padding: 0; cursor: pointer; }
 
 /* позиции: компактный степпер и «г» рядом с числом */
@@ -1383,3 +1383,7 @@ img.broken { display: none; }
 .wform-row .bigfield .bigfield-input { width: 4.6ch; flex: none; }
 .chip .pic { background: transparent; box-shadow: none; }
 @media (max-width: 340px) { .mini-sub { font-size: 11px; letter-spacing: -.01em; } }
+
+/* повторная загрузка экрана: старое содержимое остаётся (высота не схлопывается), пока едет новое */
+.is-loading { opacity: .5; pointer-events: none; transition: opacity .15s; }
+.skel-photo { aspect-ratio: 4 / 3; max-height: 340px; height: auto; }

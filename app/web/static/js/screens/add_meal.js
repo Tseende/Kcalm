@@ -22,10 +22,7 @@ export default async function render(root, ctx) {
   let target = groups[0];
   let busy = false;
 
-  try { dishes = (await api.get('/dishes')).dishes || []; } catch (e) { /* dishes are optional */ }
-  if (!ctx.alive()) return;
-  const defaultDish = dishes.find((d) => d.is_default);
-  groups[0].dishId = defaultDish ? defaultDish.id : null;
+  // Форма рисуется сразу; список посуды подтягивается следом (loadDishes).
 
   const camera = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, onchange: () => addFiles(camera) });
   const gallery = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, onchange: () => addFiles(gallery) });
@@ -41,6 +38,7 @@ export default async function render(root, ctx) {
     let items = [];
     try { items = (await api.get('/frequent', { limit: 20 })).items || []; } catch (e) { return; }
     if (!ctx.alive()) return;
+    let starBusy = false;
     quickVisibility = () => { quick.hidden = !items.length || allPhotos().length > 0 || !!textTa.value.trim(); };
     const paintQuick = () => {
       quickVisibility();
@@ -50,26 +48,31 @@ export default async function render(root, ctx) {
           'aria-label': f.favorite_id ? 'Убрать из избранного' : 'В избранное', 'aria-pressed': String(!!f.favorite_id),
           onclick: async (ev) => {
             ev.stopPropagation();
+            if (starBusy) return;                     // двойной тап не должен создать два избранных
+            starBusy = true;
+            star.disabled = true;
             try {
               if (f.favorite_id) { await api.del('/favorites/' + f.favorite_id); f.favorite_id = null; }
               else f.favorite_id = (await api.post('/favorites', { meal_id: f.meal_id })).id;
               haptic('light');
-              items.sort((a, b) => (b.favorite_id ? 1 : 0) - (a.favorite_id ? 1 : 0));
-              paintQuick();
-            } catch (e) { toast(e.message, 'error'); }
+              // список не пересортировываем: строка не должна уехать из-под пальца
+              star.classList.toggle('on', !!f.favorite_id);
+              star.setAttribute('aria-pressed', String(!!f.favorite_id));
+              star.setAttribute('aria-label', f.favorite_id ? 'Убрать из избранного' : 'В избранное');
+            } catch (e) { toast(e.message, 'error'); } finally { starBusy = false; star.disabled = false; }
           },
         }, icon('star', 20));
         const row = h('div', { class: 'row' },
           h('button', {
             class: 'row-btn grow', type: 'button', title: f.names.join(', '),
             onclick: async () => {
-              row.classList.add('busy');
+              row.classList.add('is-pending');
               try {
                 const r = await api.post(f.favorite_id ? `/favorites/${f.favorite_id}/repeat` : `/meals/${f.meal_id}/repeat`);
                 haptic('success');
                 mainButton.hide();
                 nav.replace('/meal/' + r.id);
-              } catch (e) { row.classList.remove('busy'); toast(e.message, 'error'); }
+              } catch (e) { row.classList.remove('is-pending'); toast(e.message, 'error'); }
             },
           }, h('span', { class: 'grow' }, h('span', { class: 'row-title' }, f.title), h('span', { class: 'row-sub' }, `${f.kcal} ккал`))),
           star);
@@ -83,17 +86,26 @@ export default async function render(root, ctx) {
   let quickPaint = null;
   let quickVisibility = () => {};
 
+  let compressing = false;
   async function addFiles(input) {
     const files = [...input.files];
     const g = target;
     input.value = '';
-    for (const f of files) {
-      if (allPhotos().length >= MAX) { toast(`Не больше ${MAX} фото`); break; }
-      let file;
-      try { file = await compressImage(f); } catch (e) { toast(e.message, 'error'); continue; }
-      g.photos.push({ file, url: URL.createObjectURL(file) });
+    if (compressing || !files.length) return;         // повторный выбор, пока сжимается предыдущий, не дублирует фото
+    compressing = true;
+    const stop = busyOverlay('Обрабатываю фото…');
+    try {
+      for (const f of files) {
+        if (allPhotos().length >= MAX) { toast(`Не больше ${MAX} фото`); break; }
+        let file;
+        try { file = await compressImage(f); } catch (e) { toast(e.message, 'error'); continue; }
+        g.photos.push({ file, url: URL.createObjectURL(file) });
+      }
+    } finally {
+      stop();
+      compressing = false;
     }
-    if (!groups.includes(g)) return;
+    if (!ctx.alive() || !groups.includes(g)) return;
     // Новое блюдо без фото (отменили съёмку) не оставляем.
     if (!g.photos.length && groups.length > 1) groups.splice(groups.indexOf(g), 1);
     paint();
@@ -235,8 +247,10 @@ export default async function render(root, ctx) {
     const sh = sheet({ title: 'Мои продукты', content: h('div', { class: 'stack' }, q, list) });
     let timer = null;
     async function load() {
+      const query = q.value.trim();
       let products = [];
-      try { products = (await api.get('/products', { q: q.value.trim() })).products || []; } catch (e) { list.replaceChildren(h('div', { class: 'hint small' }, e.message)); return; }
+      try { products = (await api.get('/products', { q: query })).products || []; } catch (e) { if (query === q.value.trim()) list.replaceChildren(h('div', { class: 'hint small' }, e.message)); return; }
+      if (query !== q.value.trim()) return;           // ответ на устаревший запрос
       if (!products.length) { list.replaceChildren(h('div', { class: 'hint small' }, 'Ничего не нашлось. Свои продукты сохраняются из приёма или с этикетки.')); return; }
       list.replaceChildren(...products.slice(0, 30).map((p) => h('button', {
         type: 'button', class: 'row row-btn', onclick: () => { sh.close(); if (groups.includes(g)) addIng(g, p); },
@@ -408,14 +422,23 @@ export default async function render(root, ctx) {
     }
   }
 
-  const noDishHint = dishes.length ? null : h('div', { class: 'hint-card small' },
+  const noDishHint = h('div', { class: 'hint-card small', hidden: true },
     'Размер посуды помогает точнее оценить порцию. ',
     h('a', { href: '#/menu/dish/new' }, 'Добавить посуду'));
+
+  async function loadDishes() {
+    try { dishes = (await api.get('/dishes')).dishes || []; } catch (e) { /* dishes are optional */ }
+    if (!ctx.alive()) return;
+    const defaultDish = dishes.find((d) => d.is_default);
+    if (defaultDish && groups[0].dishId == null) groups[0].dishId = defaultDish.id;
+    noDishHint.hidden = dishes.length > 0;
+    paint();
+  }
 
   view.append(
     pageHead('Приём пищи', { parent: '/today' }),
     h('div', { class: 'stack' },
-      capture, dishList, noDishHint || document.createDocumentFragment(),
+      capture, dishList, noDishHint,
       h('label', { class: 'field compose-keep' }, textLabel, textTa),
       quick,
       camera, gallery, codeShot));
@@ -423,6 +446,7 @@ export default async function render(root, ctx) {
   mainButton.show('Сохранить приём', submit, { disabled: true });
   lastDisabled = true;
   paint();
+  loadDishes();
   loadQuick();
   return () => allPhotos().forEach((p) => URL.revokeObjectURL(p.url));
 }

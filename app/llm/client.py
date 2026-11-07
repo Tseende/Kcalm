@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import logging
 import re
 import time
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, Callable
 
 import httpx
 
@@ -19,9 +21,64 @@ class LLMError(Exception):
     pass
 
 
+class LLMLimitError(LLMError):
+    """Дневной лимит обращений к модели у этого человека исчерпан (подкласс LLMError: места,
+    где умеют жить без модели, по-прежнему уходят на запасной путь)."""
+
+
+LIMIT_TEXT = ("На сегодня лимит распознаваний исчерпан, завтра всё снова заработает. "
+              "Записать можно вручную в приложении.")
+# Разговор о тяге — поддержка, а не «распознавание»: его лимит не режет (он и так ограничен rate-limit).
+LIMIT_EXEMPT_PURPOSES = frozenset({"craving_dialog"})
+# Бот выставляет сюда функцию «сообщить человеку про лимит»: llm-слой сам в Telegram не пишет.
+limit_hook: contextvars.ContextVar[Callable[[], None] | None] = contextvars.ContextVar(
+    "llm_limit_hook", default=None)
+
+MAX_CONCURRENT_REQUESTS = 6   # одновременных исходящих запросов к модели на процесс (память и сеть)
 RETRY_PAUSE_S = 0.7           # пауза перед повтором
 _client: httpx.AsyncClient | None = None
 _client_loop: asyncio.AbstractEventLoop | None = None
+_sem: asyncio.Semaphore | None = None
+_sem_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _get_sem() -> asyncio.Semaphore:
+    """Семафор привязан к текущему loop (в тестах loop меняется)."""
+    global _sem, _sem_loop
+    loop = asyncio.get_running_loop()
+    if _sem is None or _sem_loop is not loop:
+        _sem, _sem_loop = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS), loop
+    return _sem
+
+
+def used_today(db: Any, user_id: int) -> int:
+    """Сколько удачных обращений к модели записано у человека за сегодня (UTC-сутки, как в логе)."""
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    row = db.execute("SELECT COALESCE(SUM(requests), 0) FROM model_usage_daily "
+                     "WHERE day=? AND user_id=?", (day, user_id)).fetchone()
+    return int(row[0] or 0)
+
+
+def check_limit(db: Any, user_id: int | None, purpose: str = "") -> None:
+    """Бросает LLMLimitError, если DAILY_LLM_LIMIT на сегодня выбран. 0 = лимит выключен.
+    Без user_id или БД (системные вызовы) не проверяет."""
+    limit = get_config().daily_llm_limit
+    if limit <= 0 or user_id is None or db is None or purpose in LIMIT_EXEMPT_PURPOSES:
+        return
+    try:
+        used = used_today(db, user_id)
+    except Exception:  # noqa: BLE001 — сбой счётчика не должен класть распознавание
+        log.warning("не удалось прочитать дневной счётчик LLM", exc_info=True)
+        return
+    if used >= limit:
+        log.info("LLM: user_id=%s выбрал дневной лимит %s", user_id, limit)
+        hook = limit_hook.get()
+        if hook is not None:
+            try:
+                hook()
+            except Exception:  # noqa: BLE001
+                log.debug("limit_hook упал", exc_info=True)
+        raise LLMLimitError("дневной лимит обращений к модели исчерпан")
 
 
 def _get_client() -> httpx.AsyncClient:
@@ -136,6 +193,7 @@ async def chat_json(purpose: str, messages: list[dict], model: str | None = None
     и сводится в model_usage_daily.
     """
     cfg = get_config()
+    check_limit(db, user_id, purpose)
     model = model or cfg.model_text
     body: dict[str, Any] = {
         "model": model,
@@ -164,8 +222,9 @@ async def chat_json(purpose: str, messages: list[dict], model: str | None = None
     client = _get_client()
     for attempt in (1, 2):                          # 1 retry
         try:
-            resp = await client.post(f"{cfg.openrouter_base_url}/chat/completions",
-                                     headers=headers, json=body, timeout=_timeout(cfg))
+            async with _get_sem():
+                resp = await client.post(f"{cfg.openrouter_base_url}/chat/completions",
+                                         headers=headers, json=body, timeout=_timeout(cfg))
             resp.raise_for_status()
             data = resp.json()
             usage = data.get("usage", {})
@@ -201,6 +260,7 @@ async def transcribe_ogg(ogg_bytes: bytes, filename: str = "voice.ogg",
                          db: Any = None) -> str:
     """ASR голосовых: OGG/Opus напрямую, без ffmpeg."""
     cfg = get_config()
+    check_limit(db, user_id, "asr")
     headers = {"Authorization": f"Bearer {cfg.openrouter_api_key}"}
     start = time.monotonic()
     client = _get_client()
@@ -208,9 +268,10 @@ async def transcribe_ogg(ogg_bytes: bytes, filename: str = "voice.ogg",
         try:
             files = {"file": (filename, ogg_bytes, "audio/ogg")}
             data = {"model": model, "language": language_hint}
-            resp = await client.post(f"{cfg.openrouter_base_url}/audio/transcriptions",
-                                     headers=headers, files=files, data=data,
-                                     timeout=_timeout(cfg))
+            async with _get_sem():
+                resp = await client.post(f"{cfg.openrouter_base_url}/audio/transcriptions",
+                                         headers=headers, files=files, data=data,
+                                         timeout=_timeout(cfg))
             resp.raise_for_status()
             await _log_call(cfg, user_id, "asr", model, {}, start, True, None, db)
             return resp.json().get("text", "").strip()

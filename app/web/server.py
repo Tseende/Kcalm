@@ -101,11 +101,21 @@ async def activity_middleware(request: web.Request, handler):
     return await handler(request)
 
 
+def _rollback(request: web.Request) -> None:
+    """Недописанная транзакция не должна доехать до чужого commit() на общем соединении."""
+    try:
+        db = request.app[DB]
+        db.rollback()
+    except Exception:                                        # noqa: BLE001
+        log.debug("web: rollback не удался", exc_info=True)
+
+
 @web.middleware
 async def error_middleware(request: web.Request, handler):
     try:
         return await handler(request)
     except ApiError as e:
+        _rollback(request)
         return _error_response(e.status, e.code, e.message)
     except web.HTTPException as e:
         if not request.path.startswith("/api/") or e.status < 400:
@@ -113,8 +123,10 @@ async def error_middleware(request: web.Request, handler):
         code, message = _HTTP_MESSAGES.get(e.status, ("http_error", "Ошибка запроса."))
         return _error_response(e.status, code, message)
     except asyncio.CancelledError:
+        _rollback(request)
         raise
     except Exception:                                        # noqa: BLE001
+        _rollback(request)
         log.exception("web: необработанная ошибка в %s %s", request.method, request.path)
         if not request.path.startswith("/api/"):
             raise
@@ -132,7 +144,7 @@ def dev_allowed(remote: str | None, headers, config: Config) -> bool:
 
 
 def whitelisted(config: Config, tg_id: int) -> bool:
-    return config.allow_public_bot or tg_id in config.allowed_ids
+    return config.is_allowed(tg_id)
 
 
 def _unauthorized() -> ApiError:
@@ -163,7 +175,8 @@ async def auth_middleware(request: web.Request, handler):
         first_name = str(data["user"].get("first_name") or "")
         if not whitelisted(config, tg_id):
             log.info("web: whitelist: %s отклонён", tg_id)
-            raise _unauthorized()
+            # 401, а не 403: экран блокировки в приложении привязан к 401, а текст берётся из ответа
+            raise ApiError(401, "not_allowed", "Доступ к тесту пока закрыт.")
     elif dev_allowed(request.remote, request.headers, config):
         tg_id, first_name = config.web_dev_tg_id, "Dev"
     else:
@@ -178,6 +191,21 @@ async def auth_middleware(request: web.Request, handler):
 
 
 # ------------------------------------------------------------------ разбор запроса
+
+def llm_gate(db, user) -> None:
+    """До дорогой работы: дневной лимит обращений к модели выбран → 429 llm_limit."""
+    try:
+        llm.check_limit(db, user["id"])
+    except llm.LLMLimitError:
+        raise ApiError(429, "llm_limit", llm.LIMIT_TEXT) from None
+
+
+def llm_failure(exc: Exception, message: str) -> ApiError:
+    """Сбой модели в ответ API: лимит остаётся лимитом (429), остальное 502."""
+    if isinstance(exc, llm.LLMLimitError):
+        return ApiError(429, "llm_limit", llm.LIMIT_TEXT)
+    return ApiError(502, "llm_unavailable", message)
+
 
 def ctx(request: web.Request):
     return request.app[DB], request["user"], request.app[CONFIG]
@@ -205,9 +233,24 @@ def now_local(user) -> datetime:
     return foodsvc.local_now(user["tz"])
 
 
+def bounded_int(value, name: str, low: int = 1, high: int = 10**12) -> int:
+    """Целое из JSON или формы в границах: мусор, bool, дробные и гигантские числа дают 400 bad_field."""
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        raise bad(f"Поле {name} должно быть целым числом.", "bad_field")
+    text = str(value).strip()
+    if not re.fullmatch(r"[0-9]{1,15}", text) or not low <= int(text) <= high:
+        raise bad(f"Поле {name} должно быть целым числом.", "bad_field")
+    return int(text)
+
+
 async def read_json(request: web.Request) -> dict:
+    if request.content_length and request.content_length > MAX_FIELD_BYTES:
+        raise ApiError(413, "too_large", "Слишком большой запрос.")
     try:
-        data = await request.json()
+        raw = await request.read()
+        if len(raw) > MAX_FIELD_BYTES:                       # тело без Content-Length (chunked)
+            raise ApiError(413, "too_large", "Слишком большой запрос.")
+        data = json.loads(raw.decode("utf-8"))
     except (ValueError, UnicodeDecodeError):
         raise bad("Ожидался JSON.", "bad_json") from None
     if not isinstance(data, dict):
@@ -275,6 +318,8 @@ def require_images(files: list[bytes]) -> None:
         if image_kind(data) is None:
             raise ApiError(415, "unsupported_media",
                            "Нужно фото в формате JPEG, PNG или WebP.")
+        if foodsvc.image_too_large(data):
+            raise bad(foodsvc.IMAGE_TOO_LARGE_TEXT, "image_too_large")
 
 
 def save_upload(config: Config, data: bytes) -> str:
@@ -627,8 +672,11 @@ async def api_meal_create(request: web.Request) -> web.Response:
         raise bad("Нужно фото или текстовое описание.", "empty_meal")
     if text and len(text) > MAX_TEXT:
         raise bad("Слишком длинное описание.", "text_too_long")
+    if comment and len(comment) > MAX_TEXT:
+        raise bad("Слишком длинный комментарий.", "text_too_long")
     require_images(photos)
     local_dt = parse_when(user, form.value("date"), form.value("time"))
+    llm_gate(db, user)
     try:
         if photos:
             dish_ids = None
@@ -636,9 +684,10 @@ async def api_meal_create(request: web.Request) -> web.Response:
                 dish_ids = []
                 for raw in form.fields["dish_id"]:
                     raw = raw.strip()
-                    if raw and not raw.isdigit():
-                        raise bad("dish_id должен быть числом или пустым.", "bad_field")
-                    dish_ids.append(int(raw) if raw else None)
+                    try:
+                        dish_ids.append(bounded_int(raw, "dish_id") if raw else None)
+                    except ApiError:
+                        raise bad("dish_id должен быть числом или пустым.", "bad_field") from None
             groups = None
             raw_groups = form.value("groups")
             if raw_groups:
@@ -661,10 +710,9 @@ async def api_meal_create(request: web.Request) -> web.Response:
         raise ApiError(422, "no_food", "Не увидел еды. Опишите приём словами или пришлите другое фото.") from None
     except meals_svc.NoPhotos:
         raise ApiError(422, "no_photos", "Фото не прочитались. Попробуйте ещё раз.") from None
-    except llm.LLMError:
+    except llm.LLMError as e:
         log.warning("web: распознавание не удалось", exc_info=True)
-        raise ApiError(502, "llm_unavailable",
-                       "Нет связи с моделью. Попробуйте ещё раз чуть позже.") from None
+        raise llm_failure(e, "Нет связи с моделью. Попробуйте ещё раз чуть позже.") from None
     return _meal_response(db, user, meal_id, 201)
 
 
@@ -824,8 +872,8 @@ async def api_favorite_add(request: web.Request) -> web.Response:
     db, user, _ = ctx(request)
     data = await read_json(request)
     try:
-        meal_id = int(data.get("meal_id"))
-    except (TypeError, ValueError):
+        meal_id = bounded_int(data.get("meal_id"), "meal_id")
+    except ApiError:
         raise bad("Не указан приём пищи.", "bad_field") from None
     fav_id = repo.add_favorite(db, user["id"], meal_id)
     if fav_id is None:
@@ -871,12 +919,12 @@ async def api_meal_refine(request: web.Request) -> web.Response:
     if len(comment) > MAX_TEXT:
         raise bad("Слишком длинное уточнение.", "text_too_long")
     old = [dict(r) for r in repo.get_meal_items(db, meal["id"])]
+    llm_gate(db, user)
     try:
         u, _changes = await foodsvc.refine_meal(old, comment, user["id"], db)
-    except llm.LLMError:
+    except llm.LLMError as e:
         log.warning("web: refine не удался", exc_info=True)
-        raise ApiError(502, "llm_unavailable",
-                       "Нет связи с моделью: запись осталась как была.") from None
+        raise llm_failure(e, "Нет связи с моделью: запись осталась как была.") from None
     if not u.items:
         raise ApiError(422, "unclear", "Не понял, что поменять. Расскажите подробнее.")
     calc = await foodsvc.build_calc(u, db, user["id"])
@@ -960,6 +1008,8 @@ def clean_product(data: dict, *, partial: bool) -> dict:
     for key, (low, high) in _PRODUCT_NUMBERS.items():
         required = not partial and key in ("kcal", "protein", "fat", "carbs")
         value = number(data, key, low, high, required=required)
+        if partial and value is None and key in ("kcal", "protein", "fat", "carbs") and key in data:
+            raise bad(f"Поле {key} нельзя очистить.", "bad_field")     # null в PATCH ломал проверку значений
         if key in data and (value is not None or partial):
             out[key] = value
     for key, limit in _PRODUCT_TEXTS.items():
@@ -1032,11 +1082,11 @@ async def api_product_label(request: web.Request) -> web.Response:
     if not 1 <= len(photos) <= MAX_LABEL_PHOTOS:
         raise bad(f"Нужно от 1 до {MAX_LABEL_PHOTOS} фото одного товара.", "bad_photo")
     require_images(photos)
+    llm_gate(db, user)
     try:
         draft, confidence, notes = await call(fn, db, user, [base64.b64encode(p).decode() for p in photos])
-    except llm.LLMError:
-        raise ApiError(502, "llm_unavailable",
-                       "Нет связи с моделью. Попробуйте ещё раз чуть позже.") from None
+    except llm.LLMError as e:
+        raise llm_failure(e, "Нет связи с моделью. Попробуйте ещё раз чуть позже.") from None
     draft, notes = await call(service("products", "enrich_with_off"), draft, notes)
     return ok({"draft": {**product_json(draft), "id": None}, "confidence": confidence,
                "notes": notes})
@@ -1115,8 +1165,9 @@ async def api_dish_create(request: web.Request) -> web.Response:
         fields["photo_path"] = dishsvc.save_dish_photo(photo)
     try:
         dish_id = repo.create_dish(db, user["id"], **fields)
-    except ValueError as e:
-        raise bad(str(e), "bad_field") from None
+    except (ValueError, sqlite3.IntegrityError) as e:        # IntegrityError: CHECK/NOT NULL базы
+        raise bad(str(e) if isinstance(e, ValueError) else "Не удалось сохранить посуду.",
+                  "bad_field") from None
     return ok(dish_json(repo.get_dish(db, user["id"], dish_id)), 201)
 
 
@@ -1129,8 +1180,9 @@ async def api_dish_patch(request: web.Request) -> web.Response:
         fields["photo_path"] = dishsvc.save_dish_photo(photo)
     try:
         repo.update_dish(db, user["id"], dish["id"], **fields)
-    except ValueError as e:
-        raise bad(str(e), "bad_field") from None
+    except (ValueError, sqlite3.IntegrityError) as e:
+        raise bad(str(e) if isinstance(e, ValueError) else "Не удалось сохранить посуду.",
+                  "bad_field") from None
     return ok(dish_json(repo.get_dish(db, user["id"], dish["id"])))
 
 
@@ -1233,11 +1285,11 @@ async def api_screen_upload(request: web.Request) -> web.Response:
     if len(photos) != 1:
         raise bad("Нужен один скриншот.", "bad_photo")
     require_images(photos)
+    llm_gate(db, user)
     try:
         result = await call(fn, db, user, save_upload(config, photos[0]))
-    except llm.LLMError:
-        raise ApiError(502, "llm_unavailable",
-                       "Нет связи с моделью. Попробуйте ещё раз чуть позже.") from None
+    except llm.LLMError as e:
+        raise llm_failure(e, "Нет связи с моделью. Попробуйте ещё раз чуть позже.") from None
     result = {**result, "applied": bool(result.get("applied"))}
     return ok(result, 201)
 

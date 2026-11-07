@@ -1,7 +1,7 @@
 // Router + tab bar + Telegram bootstrap.
 import { api, isMock, onMockEnabled, tg, inTelegram } from './api.js';
 import { initKeyboard } from './keyboard.js';
-import { h, $, icon, tile, sheet, nav, mainButton, backButton, emptyState, errorState, haptic, closeAllSheets, getThemePref, staggerIn } from './ui.js';
+import { h, $, icon, tile, sheet, nav, mainButton, backButton, emptyState, errorState, sessionExpiredButton, haptic, closeAllSheets, getThemePref, staggerIn } from './ui.js';
 import { mealPic } from './pics.js';
 
 const R = (re, load, opts = {}) => ({ re: new RegExp('^' + re + '$'), load, ...opts });
@@ -39,6 +39,10 @@ const view = $('#view');
 const tabbar = $('#tabbar');
 let rid = 0;
 let cleanup = null;
+// Прокрутка по маршрутам: при возврате «назад» восстанавливаем место, при переходе вперёд открываем с начала.
+const scrollMap = new Map();
+let curRaw = null;      // маршрут, который сейчас на экране (с query)
+let curPath = null;     // он же без query: ctx.prev для следующего экрана
 
 function buildTabbar() {
   tabbar.replaceChildren(...TABS.map(([id, label, ic, path]) => {
@@ -105,6 +109,12 @@ async function render() {
   const [path, qstr] = raw.split('?');
   const query = Object.fromEntries(new URLSearchParams(qstr || ''));
   const my = ++rid;
+  if (curRaw !== null) scrollMap.set(curRaw, window.scrollY);   // до очистки экрана и закрытия шторок
+  const prev = curPath;
+  const restoreY = nav.dir === 'back' && curRaw !== raw ? scrollMap.get(raw) : undefined;
+  nav.dir = 'fwd';
+  curRaw = raw;
+  curPath = path;
   if (cleanup) { try { cleanup(); } catch (e) { console.error(e); } cleanup = null; }
   mainButton.hide();
   closeAllSheets();
@@ -118,13 +128,22 @@ async function render() {
   view.replaceChildren();
   window.scrollTo(0, 0);
   document.body.classList.remove('scrolled');
-  const ctx = { params, query, alive: () => my === rid, parent: r.parent };
+  const ctx = { params, query, alive: () => my === rid, parent: r.parent, prev };
   try {
     const mod = await r.load();
     if (my !== rid) return;
     const res = await mod.default(view, ctx);
     if (my !== rid) { if (typeof res === 'function') res(); return; }
     if (typeof res === 'function') cleanup = res;
+    if (restoreY > 0) {                             // экран уже нарисован; если ещё докручивается высота, пробуем ещё несколько раз
+      let tries = 0;
+      const step = () => {
+        if (my !== rid) return;
+        window.scrollTo(0, restoreY);
+        if (Math.abs(window.scrollY - restoreY) > 2 && tries++ < 20) setTimeout(step, 30);
+      };
+      setTimeout(step, 0);
+    }
     // одноразовые подсказки по экрану (js/coach.js); сбой подсказок не должен ломать экран
     import('./coach.js').then((m) => { if (my === rid) m.maybeShow({ path, tab: r.tab, params }); }).catch(() => {});
   } catch (e) {
@@ -137,8 +156,8 @@ function showBlocking(err) {
   $('#boot')?.remove();
   tabbar.hidden = true;
   view.replaceChildren(h('div', { class: 'screen' }, emptyState(err.status === 409 ? 'mood-smile' : 'lock',
-    err.status === 409 ? 'Нужна настройка' : err.status === 401 ? 'Нет доступа' : 'Нет связи',
-    err.message, h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => location.reload() }, 'Обновить'))));
+    err.status === 409 ? 'Нужна настройка' : err.expired ? 'Сессия устарела' : err.status === 401 ? 'Нет доступа' : 'Нет связи',
+    err.message, err.expired ? sessionExpiredButton() : h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => location.reload() }, 'Обновить'))));
 }
 
 function mockBadge() {
@@ -146,14 +165,27 @@ function mockBadge() {
   document.body.append(h('div', { id: 'mock-badge', class: 'mock-badge', title: 'Данные не настоящие' }, 'Демо-данные'));
 }
 
+let fsWait = Promise.resolve();
 async function boot() {
+  try { history.scrollRestoration = 'manual'; } catch (e) { /* старый браузер */ }   // прокруткой при «Назад» управляем сами (scrollMap)
   try {
     if (tg) {
       tg.ready();
       tg.expand();
       const v = (x) => tg.isVersionAtLeast && tg.isVersionAtLeast(x);
       try { if (v('7.7')) tg.disableVerticalSwipes(); } catch (e) { /* old client */ }
-      try { if (v('8.0') && !tg.isFullscreen) tg.requestFullscreen(); } catch (e) { /* старый клиент или десктоп */ }
+      try {
+        if (v('8.0') && !tg.isFullscreen) {
+          tg.requestFullscreen();
+          // Класс html.fs меняет раскладку шапки (~44 px): ждём ответа клиента до первой отрисовки, но не дольше 0,8 с.
+          fsWait = new Promise((resolve) => {
+            const done = () => { clearTimeout(t); try { tg.offEvent('fullscreenChanged', done); tg.offEvent('fullscreenFailed', done); } catch (e) { /* ignore */ } resolve(); };
+            const t = setTimeout(done, 800);
+            tg.onEvent('fullscreenChanged', done);
+            tg.onEvent('fullscreenFailed', done);
+          });
+        }
+      } catch (e) { /* старый клиент или десктоп */ }
     }
   } catch (e) { console.warn(e); }
   document.documentElement.classList.toggle('in-tg', inTelegram);
@@ -191,6 +223,7 @@ async function boot() {
     console.error(e);
   }
   if (isMock()) mockBadge();
+  await fsWait;                                     // полноэкранный режим уже применён: первая отрисовка без сдвига шапки
   $('#boot')?.remove();
   if (me && me.onboarded === false) return startOnboarding(me);
   startApp();

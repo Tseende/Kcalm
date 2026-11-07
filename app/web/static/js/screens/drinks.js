@@ -1,7 +1,7 @@
 // Drinks: water plus a catalog with calories. Water goes to /water, everything else to /drinks (saved as a meal).
 import { api } from '../api.js';
 import {
-  h, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, numSet, fmtN, TILE, errorState, skeletonCards, icon, reloadRoute,
+  h, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, numSet, fmtN, TILE, errorState, skeletonBlocks, icon, reloadRoute,
 } from '../ui.js';
 import { drinkPic } from '../pics.js';
 
@@ -13,7 +13,7 @@ const SUGAR_KCAL = 20; // one teaspoon, about 5 g
 
 export default async function render(root, ctx) {
   const view = h('div', { class: 'screen' });
-  const body = h('div', { class: 'stack' }, skeletonCards(2, 90));
+  const body = h('div', { class: 'stack' }, skeletonBlocks([64, 180, 120]));
   view.append(pageHead('Напитки', { parent: '/today' }), body);
   root.append(view);
 

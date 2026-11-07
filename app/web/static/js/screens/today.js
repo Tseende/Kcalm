@@ -4,7 +4,7 @@ import { kcalRing } from '../charts.js';
 import { weekGoalBlock } from './weekgoal.js';
 import { mealIcon, mealPic } from '../pics.js';
 import {
-  h, icon, tile, toast, haptic, nav, skeletonCards, emptyState, errorState, sectionTitle,
+  h, icon, tile, toast, haptic, nav, skeletonCards, holdHeight, emptyState, errorState, sectionTitle,
   todayISO, fmtN, fmtKcal, fmtDur, mealType, macroLine, countUp, staggerIn, dateSwitch, reducedMotion, plural,
 } from '../ui.js';
 
@@ -14,6 +14,9 @@ let firstPaint = true; // animate the ring once per visit (and on day switch), n
 let oftenCache = null; // last /frequent answer, painted instantly on re-render
 
 export default async function render(root, ctx) {
+  // Пришли на вкладку «Сегодня» с другой вкладки: показываем сегодня, а не день, на котором остановились (иначе «+» пишет в сегодня, а на экране вчера).
+  // Возврат с экрана приёма сохраняет выбранный день.
+  if (!/^\/meal\//.test(ctx.prev || '')) curDate = todayISO();
   const view = h('div', { class: 'screen today' });
   const body = h('div', { class: 'stack' });
   root.append(view);
@@ -22,15 +25,20 @@ export default async function render(root, ctx) {
   view.append(sw.el, body);
 
   async function load({ quiet = false, dir = 0 } = {}) {
-    if (!quiet) body.replaceChildren(skeletonCards(3, 120));
+    // скелетон только на первом показе; при смене дня старое содержимое остаётся (страница не схлопывается)
+    let release = null;
+    if (!quiet) { if (body.hasChildNodes()) release = holdHeight(body); else body.replaceChildren(skeletonCards(3, 120)); }
     const date = curDate;
     sw.set(date);
     try {
       const day = await api.get('/day', { date });
       if (!ctx.alive() || date !== curDate) return;
       draw(day, { dir, fresh: !quiet });
+      if (release) release();
     } catch (e) {
-      if (ctx.alive()) errorState(body, e, load);
+      if (!ctx.alive() || date !== curDate) return;
+      errorState(body, e, load);
+      if (release) release();
     }
   }
 
@@ -253,4 +261,5 @@ export default async function render(root, ctx) {
   }
 
   await load();
+  return () => window.removeEventListener('app:data', onData);
 }

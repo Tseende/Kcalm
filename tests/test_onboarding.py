@@ -165,7 +165,7 @@ async def test_chat_onboarding_still_works(smoke_db):
 
 async def test_start_with_webapp_url_offers_app_and_chat_button(smoke_db, monkeypatch):
     monkeypatch.setattr(config_mod, "_config", config_mod.Config(
-        _env_file=None, webapp_url="https://example.com/app/"))
+        _env_file=None, allow_public_bot=True, webapp_url="https://example.com/app/"))
     bot, dp, session = build(smoke_db)
     seen = []
     orig = session.make_request

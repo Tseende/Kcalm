@@ -14,7 +14,8 @@ def _isolated_config(monkeypatch):
     """Тесты не должны читать боевой .env (токены, whitelist, модель провайдера)."""
     # Старые тесты проверяют конвейер записи еды из чата: он включается chat_logs_food. Режим
     # «чат только для разговора» (значение по умолчанию) покрыт в tests/test_chat_discussion.py.
-    monkeypatch.setattr(config, "_config", config.Config(_env_file=None, chat_logs_food=True))
+    monkeypatch.setattr(config, "_config", config.Config(_env_file=None, chat_logs_food=True,
+                                                       allow_public_bot=True))
 
 
 @pytest.fixture(autouse=True)

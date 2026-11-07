@@ -57,6 +57,7 @@ class Config(BaseSettings):
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     llm_timeout_s: float = 60.0
     max_media_bytes: int = 10 * 1024 * 1024
+    daily_llm_limit: int = 200        # обращений к модели на человека в сутки (UTC); 0 = без лимита
 
     # веб-сервер Mini App (рядом с polling в том же процессе)
     web_enabled: bool = False
@@ -96,6 +97,10 @@ class Config(BaseSettings):
             if part.isdigit():
                 out.add(int(part))
         return out
+
+    def is_allowed(self, tg_id: int) -> bool:
+        """Единое правило доступа для бота и Mini App: публичный бот пускает всех, иначе только whitelist."""
+        return self.allow_public_bot or tg_id in self.allowed_ids
 
     @property
     def picooc_owner_id(self) -> int | None:

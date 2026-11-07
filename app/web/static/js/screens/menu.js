@@ -1,6 +1,6 @@
 // Screen 5: Menu
 import { api, tg } from '../api.js';
-import { h, icon, tile, nav, pageHead, fmtN, skeletonCards, sheet, haptic, errorState, staggerIn, getThemePref, setThemePref } from '../ui.js';
+import { h, icon, tile, nav, pageHead, fmtN, skeletonBlocks, sheet, haptic, errorState, staggerIn, getThemePref, setThemePref } from '../ui.js';
 
 // Фото из Telegram (если пользователь его разрешил), иначе первая буква имени
 function avatarEl(name) {
@@ -68,7 +68,7 @@ export default async function render(root, ctx) {
   root.append(view);
 
   async function load() {
-    body.replaceChildren(skeletonCards(3, 80));
+    body.replaceChildren(skeletonBlocks([88, 132, 192, 192]));
     let me = null;
     try { me = await api.me(); } catch (e) {
       if (ctx.alive()) errorState(body, e, load);

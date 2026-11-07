@@ -25,7 +25,7 @@ TODAY = screens.local_date_of("Europe/Minsk")      # как у парсера с
 @pytest.fixture(autouse=True)
 def _discussion_mode(monkeypatch):
     """Боевое значение по умолчанию: в conftest для старых тестов включён режим записи."""
-    monkeypatch.setattr(config, "_config", config.Config(_env_file=None))
+    monkeypatch.setattr(config, "_config", config.Config(_env_file=None, allow_public_bot=True))
     assert config.get_config().chat_logs_food is False
 
 

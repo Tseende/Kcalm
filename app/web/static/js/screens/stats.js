@@ -1,7 +1,7 @@
 // Screen 2: "Статистика" — «как я иду»: герой «Вес», календарь дней в норме, показатели, динамика, ссылка на разбор
 import { api } from '../api.js';
 import { lineChart, barChart, stackedBars, makeTip } from '../charts.js';
-import { h, icon, tile, nav, pageHead, segmented, skeletonCards, errorState, emptyState, heroCard, progressBar, statTile, countUp, fmtN, fmtKcal, fmtDur, shortDate, longDate, parseISO, addDays, todayISO, reducedMotion, staggerIn, haptic, plural } from '../ui.js';
+import { h, icon, tile, nav, pageHead, segmented, skeletonCards, holdHeight, errorState, emptyState, heroCard, progressBar, statTile, countUp, fmtN, fmtKcal, fmtDur, shortDate, longDate, parseISO, addDays, todayISO, reducedMotion, staggerIn, haptic, plural } from '../ui.js';
 
 const RANGES = [['week', 'Неделя'], ['month', 'Месяц'], ['90d', '90 дней']];
 const METRICS = [['kcal', 'Калории'], ['macro', 'БЖУ'], ['water', 'Вода'], ['sleep', 'Сон'], ['steps', 'Шаги']];
@@ -74,14 +74,22 @@ export default async function render(root, ctx) {
   root.append(view);
 
   async function load() {
-    body.replaceChildren(skeletonCards(3, 110));
+    const req = range;
+    // скелетон только при первом показе; при смене периода старые графики остаются, пока едут новые
+    let release = null;
+    if (body.hasChildNodes()) release = holdHeight(body); else body.replaceChildren(skeletonCards(3, 110));
     try {
-      const [data, me] = await Promise.all([api.get('/stats', { range }), api.me().catch(() => null)]);
-      if (!ctx.alive()) return;
+      const [data, me] = await Promise.all([api.get('/stats', { range: req }), api.me().catch(() => null)]);
+      if (!ctx.alive() || req !== range) return;      // ответ на уже сменённый период
       const animate = !seenRanges.has(range) && !reducedMotion();
       seenRanges.add(range);
       draw(data, me, animate);
-    } catch (e) { if (ctx.alive()) errorState(body, e, load); }
+      if (release) release();
+    } catch (e) {
+      if (!ctx.alive() || req !== range) return;
+      errorState(body, e, load);
+      if (release) release();
+    }
   }
 
   function draw({ days, summary: s, prev_summary: ps, goals }, me, animate) {

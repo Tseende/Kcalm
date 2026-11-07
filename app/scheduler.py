@@ -126,8 +126,16 @@ async def dispatch_due_reminders(db: sqlite3.Connection, bot,
             log.warning("предпроверка напоминаний не удалась", exc_info=True)
 
     users = db.execute("SELECT * FROM users WHERE onboarded=1").fetchall()
-    await asyncio.gather(*(_dispatch_user(db, bot, user, now_utc) for user in users))
-    await dispatch_craving_followups(db, bot)
+    # Сбой у одного человека не должен останавливать остальных и продолжения эпизодов.
+    results = await asyncio.gather(*(_dispatch_user_safe(db, bot, user, now_utc) for user in users),
+                                   return_exceptions=True)
+    for user, res in zip(users, results):
+        if isinstance(res, BaseException):
+            log.error("напоминания: сбой у user=%s", user["id"], exc_info=res)
+    try:
+        await dispatch_craving_followups(db, bot)
+    except Exception:  # noqa: BLE001
+        log.exception("продолжения эпизодов тяги не обработаны")
 
 
 def _has_due_work(db, now_utc: datetime) -> bool:
@@ -158,6 +166,17 @@ def _has_due_work(db, now_utc: datetime) -> bool:
                 conn.close()
             except Exception:  # noqa: BLE001
                 log.debug("close spawn", exc_info=True)
+
+
+async def _dispatch_user_safe(db: sqlite3.Connection, bot, user, now_utc: datetime) -> None:
+    try:
+        await _dispatch_user(db, bot, user, now_utc)
+    except Exception:  # noqa: BLE001
+        log.exception("напоминания: ошибка у user=%s", user["id"])
+        try:
+            db.rollback()
+        except Exception:  # noqa: BLE001
+            log.debug("rollback после сбоя пользователя не удался", exc_info=True)
 
 
 async def _dispatch_user(db: sqlite3.Connection, bot, user, now_utc: datetime) -> None:
