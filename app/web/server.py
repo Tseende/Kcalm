@@ -33,6 +33,7 @@ from app.services import food as foodsvc
 from app.services import meals as meals_svc
 from app.services import onboarding as onboardingsvc
 from app.services import profile as profilesvc
+from app.services import reminders as remsvc
 from app.services import screens as screens_svc
 from app.services import water as watersvc
 from app.services import weekgoal as weekgoalsvc
@@ -496,7 +497,12 @@ async def api_targets_put(request: web.Request) -> web.Response:
 @routes.get("/api/reminders")
 async def api_reminders_get(request: web.Request) -> web.Response:
     db, user, _ = ctx(request)
-    return ok({"reminders": profilesvc.reminders_json(db, user)})
+    return ok(_reminders_payload(db, user))
+
+
+def _reminders_payload(db, user) -> dict:
+    return {"reminders": profilesvc.reminders_json(db, user), "custom": remsvc.list_json(db, user),
+            "templates": remsvc.templates_json(user)}
 
 
 @routes.put("/api/reminders/{kind}")
@@ -516,7 +522,46 @@ async def api_reminder_put(request: web.Request) -> web.Response:
         profilesvc.set_reminder(db, user, request.match_info["kind"], time, enabled)
     except profilesvc.ProfileError as exc:
         raise ApiError(404, "not_found", str(exc)) from None
-    return ok({"reminders": profilesvc.reminders_json(db, user)})
+    return ok(_reminders_payload(db, user))
+
+
+def _reminder_error(exc: remsvc.ReminderError) -> ApiError:
+    if isinstance(exc, remsvc.ReminderLimit):
+        return ApiError(409, "limit", str(exc))
+    return bad(str(exc), "bad_field")
+
+
+@routes.post("/api/user-reminders")
+async def api_user_reminder_create(request: web.Request) -> web.Response:
+    db, user, _ = ctx(request)
+    data = await read_json(request)
+    try:
+        item = remsvc.create(db, user, data)
+    except remsvc.ReminderError as exc:
+        raise _reminder_error(exc) from None
+    return ok({"reminder": item, **_reminders_payload(db, user)}, 201)
+
+
+@routes.patch("/api/user-reminders/{id}")
+async def api_user_reminder_patch(request: web.Request) -> web.Response:
+    db, user, _ = ctx(request)
+    rid = path_id(request)
+    data = await read_json(request)
+    try:
+        item = remsvc.update(db, user, rid, data)
+    except remsvc.ReminderError as exc:
+        raise _reminder_error(exc) from None
+    if item is None:
+        raise ApiError(404, "not_found", "Напоминание не найдено.")
+    return ok({"reminder": item, **_reminders_payload(db, user)})
+
+
+@routes.delete("/api/user-reminders/{id}")
+async def api_user_reminder_delete(request: web.Request) -> web.Response:
+    db, user, _ = ctx(request)
+    if not remsvc.delete(db, user, path_id(request)):
+        raise ApiError(404, "not_found", "Напоминание не найдено.")
+    return ok(_reminders_payload(db, user))
 
 
 ONBOARDING_REMINDERS = ("morning", "midday", "evening", "weekly", "water", "weigh")

@@ -486,7 +486,7 @@ def test_migration_026_keeps_dishes_and_allows_new_kinds(tmp_path):
         conn.execute("INSERT INTO dishes (user_id, name, kind) VALUES (?, 'Х', 'salad_bowl')", (uid,))
     conn.rollback()
 
-    assert migrate(conn) == 26
+    assert migrate(conn) >= 26
     assert [tuple(r) for r in conn.execute("SELECT * FROM dishes ORDER BY id")] == before
     assert conn.execute("SELECT dish_id FROM meal_photos").fetchone()[0] == 7
     assert not conn.execute("PRAGMA foreign_key_check").fetchall()
@@ -496,7 +496,7 @@ def test_migration_026_keeps_dishes_and_allows_new_kinds(tmp_path):
     for kind in ("salad_bowl", "pot", "jar", "thermos", "plate", "other"):
         repo.create_dish(conn, uid, f"посуда {kind}", kind)
     assert repo.get_dish(conn, uid, 7)["name"] == "Тарелка"
-    assert migrate(conn) == 26                                 # повтор безвреден
+    assert migrate(conn) >= 26                                 # повтор безвреден
     conn.close()
 
 
@@ -504,7 +504,7 @@ def test_migration_026_survives_leftover_dishes_new(tmp_path):
     conn = _db_at(tmp_path / "v25b.db", 25)
     conn.execute("CREATE TABLE dishes_new (junk INTEGER)")     # хвост от оборванной попытки
     conn.commit()
-    assert migrate(conn) == 26
+    assert migrate(conn) >= 26
     conn.close()
 
 

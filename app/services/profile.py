@@ -132,6 +132,9 @@ def set_manual_target(db: sqlite3.Connection, user, today: date, kcal: int,
     return {"kcal": int(final), "raised": bool(raised)}
 
 
+KITCHEN = ("Кухня закрывается", "За 15 минут до «Не есть после»")
+
+
 def reminders_json(db: sqlite3.Connection, user) -> list[dict]:
     rows = {r["kind"]: r for r in db.execute("SELECT * FROM reminders WHERE user_id=?", (user["id"],))}
     out = []
@@ -139,10 +142,22 @@ def reminders_json(db: sqlite3.Connection, user) -> list[dict]:
         r = rows.get(kind)
         out.append({"kind": kind, "title": title, "sub": sub,
                     "time": r["local_time"] if r else default, "enabled": bool(r["enabled"]) if r else False})
+    # время кухни считается от «Не есть после», поэтому у строки нет своего времени
+    from app.timeutils import minutes_before
+    r = rows.get("kitchen_close")
+    out.append({"kind": "kitchen_close", "title": KITCHEN[0], "sub": KITCHEN[1], "fixed_time": True,
+                "time": minutes_before(user["eating_cutoff"] or "21:00", 15),
+                "enabled": bool(r["enabled"]) if r else False})
     return out
 
 
 def set_reminder(db: sqlite3.Connection, user, kind: str, time: str | None, enabled: bool | None) -> None:
+    if kind == "kitchen_close":
+        from app.timeutils import minutes_before
+        cur = repo.due_reminders(db, user["id"], kind)
+        on = bool(cur["enabled"]) if cur and enabled is None else (True if enabled is None else enabled)
+        repo.set_reminder(db, user["id"], kind, minutes_before(user["eating_cutoff"] or "21:00", 15), on)
+        return
     if kind not in REMINDERS:
         raise ProfileError("Неизвестное напоминание.")
     cur = repo.due_reminders(db, user["id"], kind)

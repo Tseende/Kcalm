@@ -95,7 +95,41 @@ const rems = [
   { kind: 'weekly', title: 'Итоги недели', sub: 'По воскресеньям', time: '19:00', enabled: true },
   { kind: 'water', title: 'Вода', sub: 'Напомнить выпить воды', time: '16:00', enabled: false },
   { kind: 'weigh', title: 'Взвешивание', sub: 'Записать вес', time: '07:30', enabled: true },
+  { kind: 'kitchen_close', title: 'Кухня закрывается', sub: 'За 15 минут до «Не есть после»', time: '20:45', enabled: true, fixed_time: true },
 ];
+const REM_TEMPLATES = [
+  { key: 'breakfast', title: 'Завтрак', time: '08:30', text: 'Время завтрака. Запиши, что на тарелке: хватит пары слов или фото.' },
+  { key: 'lunch', title: 'Обед', time: '13:00', text: 'Пора пообедать. Запиши обед: хватит пары слов или фото.' },
+  { key: 'dinner', title: 'Ужин', time: '19:00', text: 'Время ужина. Запиши, что на тарелке: пары слов хватит.' },
+  { key: 'snack', title: 'Перекус', time: '16:30', text: 'Время перекуса. Если что-то перекушено, запиши: хватит пары слов.' },
+  { key: 'water', title: 'Вода', time: '10:00', every_min: 120, until_time: '20:00', text: 'Глоток воды сейчас не помешает. Выпей стакан и отметь в приложении.' },
+  { key: 'steps', title: 'Внести шаги', time: '21:30', text: 'Загляни в счётчик шагов и внеси итог за день.' },
+  { key: 'sleep', title: 'Записать сон', time: '09:00', text: 'Запиши сон за ночь: так видно, как идёт восстановление.' },
+  { key: 'weigh', title: 'Взвеситься', time: '07:30', text: 'Утреннее взвешивание: после туалета, до еды и воды. Одна цифра ничего не значит, смотрим на тренд.' },
+  { key: 'walk', title: 'Прогулка', time: '18:00', text: 'Время прогулки. Даже 15 минут на свежем воздухе помогают.' },
+  { key: 'vitamins', title: 'Витамины / таблетки', time: '09:00', text: 'Время витаминов и таблеток.' },
+  { key: 'bedtime', title: 'Пора готовиться ко сну', time: '22:30', text: 'Пора готовиться ко сну: приглуши свет и отложи дела на завтра.' },
+  { key: 'screen_off', title: 'Отложить телефон', time: '23:00', text: 'Пора отложить телефон: так проще уснуть.' },
+].map((t) => ({ every_min: null, until_time: null, available: true, ...t }));
+let customRems = [{ id: 1, template: 'water', title: 'Вода', text: 'Глоток воды сейчас не помешает.', time: '10:00', days: '', every_min: 120, until_time: '20:00', enabled: true }];
+let remSeq = 2;
+const remsPayload = () => ({ reminders: rems, custom: [...customRems].sort((a, b) => a.time.localeCompare(b.time) || a.id - b.id), templates: REM_TEMPLATES });
+const badField = (msg) => Object.assign(new Error(msg), { status: 400 });
+function cleanRem(cur, b) {
+  const o = { ...cur };
+  if ('title' in b) { o.title = String(b.title || '').trim(); if (!o.title) throw badField('Напишите название напоминания.'); }
+  if ('text' in b) { o.text = String(b.text || '').trim(); }
+  if ('time' in b) { if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(b.time || '')) throw badField('Время: нужно в формате ЧЧ:ММ.'); o.time = b.time; }
+  if ('days' in b) { const d = [...new Set(String(b.days || '').split(''))].sort().join(''); o.days = d === '0123456' ? '' : d; }
+  if ('every_min' in b) o.every_min = b.every_min || null;
+  if ('until_time' in b) o.until_time = b.until_time || null;
+  if ('enabled' in b) o.enabled = !!b.enabled;
+  if (!o.every_min) { o.every_min = null; o.until_time = null; }
+  else if (!o.until_time) throw badField('Укажите, до какого времени повторять.');
+  else if (o.until_time <= o.time) throw badField('Повтор «до» должен быть позже времени начала.');
+  if (!o.text) throw badField('Напишите текст сообщения.');
+  return o;
+}
 const meals = new Map();
 const water = new Map(); // date -> [{id, ml}]
 const body = new Map(); // date -> {weight, sleep_min, score, steps, active_kcal}
@@ -348,8 +382,18 @@ const routes = [
     Object.assign(TARGETS, { kcal: b.kcal, protein: b.protein, fat: b.fat, carbs: b.carbs });
     return { profile: mockProfile(), targets: TARGETS, result: { kcal: b.kcal, raised: false } };
   }],
-  ['GET', /^\/reminders$/, () => ({ reminders: rems })],
-  ['PUT', /^\/reminders\/(\w+)$/, (m, q, b) => { Object.assign(rems.find((r) => r.kind === m[1]), b); return { reminders: rems }; }],
+  ['GET', /^\/reminders$/, () => remsPayload()],
+  ['PUT', /^\/reminders\/(\w+)$/, (m, q, b) => { const r = rems.find((x) => x.kind === m[1]); if (!r) throw notFound(); if ('enabled' in b) r.enabled = !!b.enabled; if (b.time && !r.fixed_time) r.time = b.time; return remsPayload(); }],
+  ['POST', /^\/user-reminders$/, (m, q, b) => {
+    if (customRems.length >= 20) throw Object.assign(new Error('Можно создать не больше 20 напоминаний.'), { status: 409 });
+    const t = REM_TEMPLATES.find((x) => x.key === b.template);
+    const base = t ? { template: t.key, title: t.title, text: t.text, time: t.time, days: '', every_min: t.every_min, until_time: t.until_time, enabled: true } : { template: 'custom', days: '', every_min: null, until_time: null, enabled: true };
+    const item = { id: remSeq++, ...cleanRem(base, b) };
+    customRems.push(item);
+    return { reminder: item, ...remsPayload() };
+  }],
+  ['PATCH', /^\/user-reminders\/(\d+)$/, (m, q, b) => { const i = customRems.findIndex((x) => x.id === +m[1]); if (i < 0) throw notFound(); customRems[i] = cleanRem(customRems[i], b); return { reminder: customRems[i], ...remsPayload() }; }],
+  ['DELETE', /^\/user-reminders\/(\d+)$/, (m) => { const n = customRems.length; customRems = customRems.filter((x) => x.id !== +m[1]); if (customRems.length === n) throw notFound(); return remsPayload(); }],
   ['DELETE', /^\/me$/, (m, q, b) => { if (!b || b.confirm !== 'УДАЛИТЬ') throw Object.assign(new Error('Для удаления нужно подтверждение.'), { status: 400 }); return { deleted: true }; }],
   ['GET', /^\/day$/, (m, q) => getDay(q.date || todayISO())],
   ['GET', /^\/stats$/, (m, q) => getStats(q.range || 'week')],

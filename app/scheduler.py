@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
 import os
 import sqlite3
@@ -17,6 +18,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from app.config import get_config
+from app.services import reminders as remsvc
 from app.storage import repo
 from app.timeutils import minutes_before
 
@@ -145,12 +147,17 @@ def _has_due_work(db, now_utc: datetime) -> bool:
         repo.dismiss_stale_cravings(conn)
         if repo.due_craving_followups(conn):
             return True
+        custom: dict[int, list] = {}
+        for r in conn.execute("SELECT * FROM user_reminders WHERE enabled=1").fetchall():
+            custom.setdefault(r["user_id"], []).append(r)
         for user in conn.execute("SELECT * FROM users WHERE onboarded=1").fetchall():
             try:
                 now = now_utc.astimezone(ZoneInfo(user["tz"] or "Europe/Minsk"))
             except Exception:  # noqa: BLE001 — как и в _dispatch_user: плохой tz пропускаем
                 continue
             marker = now.strftime("%Y-%m-%d %H:%M")
+            if any(remsvc.row_is_due(r, now) for r in custom.get(user["id"], ())):
+                return True
             for r in conn.execute("SELECT * FROM reminders WHERE user_id=? AND enabled=1",
                                   (user["id"],)).fetchall():
                 time_ = (minutes_before(user["eating_cutoff"], 15)
@@ -204,7 +211,44 @@ async def _dispatch_user(db: sqlite3.Connection, bot, user, now_utc: datetime) -
             continue
         db.execute("UPDATE reminders SET last_sent_at=? WHERE id=?", (marker, reminder["id"]))
         db.commit()
+    await _dispatch_custom(db, bot, user, now)
     await _dispatch_rules(db, bot, user, now)
+
+
+async def _dispatch_custom(db: sqlite3.Connection, bot, user, now: datetime) -> None:
+    """Свои напоминания человека: сбой одного не мешает остальным."""
+    marker = now.strftime("%Y-%m-%d %H:%M")
+    rows = db.execute("SELECT * FROM user_reminders WHERE user_id=? AND enabled=1", (user["id"],)).fetchall()
+    for r in rows:
+        if not remsvc.row_is_due(r, now):
+            continue
+        try:
+            await _send_custom(db, bot, user, r, now)
+        except Exception:  # noqa: BLE001
+            log.exception("не отправлено своё напоминание user=%s id=%s", user["id"], r["id"])
+            continue
+        # метка и при пропуске: в эту же минуту второй раз не пробуем
+        db.execute("UPDATE user_reminders SET last_sent_at=? WHERE id=?", (marker, r["id"]))
+        db.commit()
+
+
+async def _send_custom(db: sqlite3.Connection, bot, user, r, now: datetime) -> None:
+    tpl = remsvc.TEMPLATES.get(r["template"])
+    if tpl is not None:
+        if user["care_mode"] and tpl.get("care_hidden"):
+            return                                    # осторожный режим: без напоминаний о весе
+        if remsvc.should_skip(db, user, tpl.get("skip"), now):
+            return                                    # уже сделано сегодня
+    text = html.escape((r["text"] or (tpl["text"] if tpl else "") or r["title"]).strip(), quote=False)
+    if tpl is not None and tpl.get("skip") == "water":
+        from app.services import water as watersvc
+        total, goal = repo.day_water_ml(db, user["id"], now.strftime("%Y-%m-%d")), watersvc.goal_for(db, user)
+        text += f"\n\nСегодня выпито {total} из {goal} мл."
+    screen = tpl.get("screen") if tpl else None
+    if screen:
+        await _app_pointer(bot, user["tg_id"], text, screen, "📱 " + tpl.get("button", remsvc.DEFAULT_BUTTON))
+    else:
+        await bot.send_message(user["tg_id"], text)
 
 
 async def _dispatch_rules(db: sqlite3.Connection, bot, user, now: datetime) -> None:
@@ -265,7 +309,9 @@ async def _send_reminder(db: sqlite3.Connection, bot, user, kind: str,
                 await scale.sync_picooc(db, user, days=3)
             except Exception:  # noqa: BLE001
                 log.warning("утренний синк Picooc не удался", exc_info=True)
-        # сводка утра переехала в приложение («Анализ»); в чат пишем только то, что требует ответа
+        # сводка утра в приложении («Анализ»); в чат — короткое приглашение, без цифр и калорий
+        await _app_pointer(bot, tg_id, "☀️ Доброе утро! План на день уже ждёт в приложении.",
+                           "analysis", "☀️ Открыть план дня")
     elif kind == "midday":
         from app.storage import repo
         day = repo.day_totals(db, uid, local_day.isoformat())

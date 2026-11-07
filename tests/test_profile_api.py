@@ -57,7 +57,7 @@ async def test_manual_target(client, db, user_id):
 
 async def test_reminders_list_and_update(client, db, user_id):
     items = (await (await client.get("/api/reminders", headers=H)).json())["reminders"]
-    assert {i["kind"] for i in items} == {"morning", "midday", "evening", "weekly", "water", "weigh"}
+    assert {i["kind"] for i in items} == {"morning", "midday", "evening", "weekly", "water", "weigh", "kitchen_close"}
     r = await client.put("/api/reminders/water", json={"time": "17:15", "enabled": True}, headers=H)
     assert r.status == 200
     water = next(i for i in (await r.json())["reminders"] if i["kind"] == "water")

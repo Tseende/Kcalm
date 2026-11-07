@@ -261,7 +261,9 @@ function startApp() {
     const rest = new URLSearchParams(location.search);
     rest.delete('screen');                            // one-shot: a later reload keeps the user's tab
     const q = rest.toString();
-    const hash = ['analysis', 'stats', 'today'].includes(screen) ? '#/' + screen : location.hash;
+    const DEEP = { analysis: '#/analysis', stats: '#/stats', today: '#/today', add_meal: '#/add/meal', add_activity: '#/add/activity',
+      add_sleep: '#/add/sleep', add_weight: '#/add/weight', drinks: '#/add/drink' };
+    const hash = DEEP[screen] || location.hash;
     history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + hash);
   }
   window.addEventListener('hashchange', () => { nav._track(); render(); });
