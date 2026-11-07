@@ -1226,3 +1226,31 @@ async def test_stats_has_previous_period_and_goals(client, db, user_id):
     s = await (await client.get("/api/stats?range=week", headers=H)).json()
     assert s["prev_summary"]["days_logged"] == 7
     assert s["goals"]["steps"] == 8000 and s["goals"]["water_ml"] >= 1500
+
+
+async def test_favorite_repeat_params_factor_type_date(client, db):
+    fav_id = (await (await client.post("/api/favorites/custom", headers=H, json={
+        "title": "Омлет", "kcal": 300, "protein": 20, "fat": 24, "carbs": 4})).json())["id"]
+    rep = await client.post(f"/api/favorites/{fav_id}/repeat", headers=H,
+                            json={"factor": 1.5, "meal_type": "dinner", "date": "2026-05-19"})
+    assert rep.status == 201 and (await rep.json())["kcal"] == 450
+    day = await (await client.get("/api/day?date=2026-05-19", headers=H)).json()
+    assert [(m["type"], m["kcal"]) for m in day["meals"]] == [("dinner", 450)]
+    meal = await (await client.get(f"/api/meals/{day['meals'][0]['id']}", headers=H)).json()
+    assert meal["items"][0]["kcal"] == 450 and meal["items"][0]["protein"] == 30.0
+    # без тела: как раньше, один раз на сегодня; счётчик использований растёт
+    assert (await client.post(f"/api/favorites/{fav_id}/repeat", headers=H)).status == 201
+    listed = (await (await client.get("/api/favorites", headers=H)).json())["items"]
+    assert listed[0]["use_count"] == 2
+
+
+async def test_favorite_repeat_rejects_bad_params(client, db):
+    fav_id = (await (await client.post("/api/favorites/custom", headers=H, json={"title": "Омлет", "kcal": 300})).json())["id"]
+    url = f"/api/favorites/{fav_id}/repeat"
+    for body in ({"factor": 0.1}, {"factor": 5}, {"factor": "много"}, {"factor": True}, {"meal_type": "supper"},
+                 {"date": "2026-05-21"}, {"date": "2026-04-01"}, {"date": "вчера"}):
+        assert (await client.post(url, headers=H, json=body)).status == 400, body
+    add_user(db, 1002)
+    assert (await client.post(url, headers=auth(1002), json={"factor": 1})).status == 404
+    assert (await client.get("/api/day?date=2026-05-20", headers=H)).status == 200
+    assert (await (await client.get("/api/day?date=2026-05-20", headers=H)).json())["meals"] == []   # ничего не записалось

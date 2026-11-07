@@ -747,9 +747,15 @@ export function numCheck(input, label) {
 
 // <img> that supports Authorization-protected photo URLs
 // Пока фото грузится, у <img> фон-заглушка (.img-wait); если не загрузилось, на его месте плитка с иконкой.
-export function photoImg(url, cls = '', alt = '') {
+// fallback: () => Node|null — что показать вместо фото, если файла нет (диск на хостинге временный) или оно не загрузилось.
+export function photoImg(url, cls = '', alt = '', fallback = null) {
   const img = h('img', { class: (cls ? cls + ' ' : '') + 'img-wait', alt, loading: 'lazy', decoding: 'async' });
   const fail = () => {
+    if (fallback && img.parentNode) {
+      let node = null;
+      try { node = fallback(); } catch (e) { /* без запасной картинки */ }
+      if (node) { img.replaceWith(node); return; }
+    }
     img.classList.add('broken');
     if (img.nextElementSibling && img.nextElementSibling.classList.contains('img-ph')) return;
     img.after(h('span', { class: 'img-ph', role: 'img', 'aria-label': alt ? alt + ': не загрузилось' : 'Фото не загрузилось' }, icon('photo', 28)));

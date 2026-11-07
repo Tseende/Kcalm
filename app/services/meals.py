@@ -173,14 +173,17 @@ async def save_understanding(db: sqlite3.Connection, user, u, *, text: str | Non
     return SavedMeal(meal_id, calc, local_date, local_time, meal_type)
 
 
-def repeat_meal(db: sqlite3.Connection, user, meal_id: int,
-                allow_deleted: bool = False) -> int | None:
-    """«Как обычно»: повторить частое блюдо на текущее время. None — образца нет."""
+def repeat_meal(db: sqlite3.Connection, user, meal_id: int, allow_deleted: bool = False, *,
+                factor: float = 1.0, meal_type: str | None = None, day: str | None = None) -> int | None:
+    """«Как обычно»: повторить частое блюдо (по умолчанию на текущее время). None — образца нет.
+
+    factor — порция, meal_type — тип приёма, day — местная дата (ГГГГ-ММ-ДД, проверена снаружи)."""
     now_local = foodsvc.local_now(user["tz"])
-    local_date, local_time = now_local.strftime("%Y-%m-%d"), now_local.strftime("%H:%M")
+    local_date, local_time = day or now_local.strftime("%Y-%m-%d"), now_local.strftime("%H:%M")
     return repo.repeat_meal(
         db, user["id"], meal_id, utc_of(user["tz"], local_date, local_time), local_date,
-        local_time, foodsvc.guess_meal_type(None, local_time, None), allow_deleted=allow_deleted)
+        local_time, meal_type or foodsvc.guess_meal_type(None, local_time, None),
+        allow_deleted=allow_deleted, factor=factor)
 
 
 def touch_foods(db: sqlite3.Connection, uid: int, u, calc) -> None:

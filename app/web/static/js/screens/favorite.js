@@ -26,8 +26,9 @@ export default async function render(root, ctx) {
   const note = h('textarea', { rows: 3, maxLength: 500, placeholder: 'Из чего состоит, как готовите: пригодится, когда нужно вспомнить или уточнить блюдо', 'aria-label': 'Комментарий' });
   note.value = fav.note || '';
 
-  const pic = fav.photo_url ? h('div', { class: 'fav-photo' }, photoImg(fav.photo_url, '', fav.title))
-    : h('div', { class: 'fav-photo ph' }, foodPic(fav.title, 72) || mealPic('snack', 72));
+  const stub = () => foodPic(fav.title, 72) || foodPic((fav.names || [])[0] || '', 72) || mealPic('snack', 72);
+  const pic = fav.photo_url ? h('div', { class: 'fav-photo' }, photoImg(fav.photo_url, '', fav.title, stub))
+    : h('div', { class: 'fav-photo ph' }, stub());
 
   let busy = false;
   async function save() {

@@ -190,9 +190,23 @@ async function boot() {
   } catch (e) { console.warn(e); }
   document.documentElement.classList.toggle('in-tg', inTelegram);
   // Полноэкранный режим: заголовок экрана переезжает в полосу системных кнопок Telegram.
-  const syncFs = () => document.documentElement.classList.toggle('fs', !!(tg && tg.isFullscreen));
-  syncFs();
-  try { if (tg && tg.onEvent) tg.onEvent('fullscreenChanged', syncFs); } catch (e) { /* старый клиент */ }
+  // Отступы считаем сами из tg.safeAreaInset / contentSafeAreaInset (CSS-переменные Telegram приходят поздно или нулевыми).
+  // Гарантия: в полноэкранном режиме под системной шапкой всегда резервируется ≥ 44 px, и шапка экрана (fixed) не налезает на контент.
+  const syncSafe = () => {
+    const root = document.documentElement, fs = !!(tg && tg.isFullscreen);
+    root.classList.toggle('fs', fs);
+    const px = (o) => { const n = Number(o && o.top); return Number.isFinite(n) && n > 0 ? n : 0; };
+    let st = 0, ch = 0;
+    try { st = px(tg && tg.safeAreaInset); ch = px(tg && tg.contentSafeAreaInset); } catch (e) { /* старый клиент */ }
+    root.style.setProperty('--sa-t', `max(env(safe-area-inset-top, 0px), var(--tg-safe-area-inset-top, 0px), ${st}px)`);
+    if (fs) {
+      const cssTop = parseFloat(getComputedStyle(root).getPropertyValue('--tg-content-safe-area-inset-top')) || 0;
+      root.style.setProperty('--sa-h', `${Math.max(44, ch, cssTop)}px`);
+    } else root.style.removeProperty('--sa-h');
+  };
+  syncSafe();
+  try { if (tg && tg.onEvent) ['fullscreenChanged', 'safeAreaChanged', 'contentSafeAreaChanged', 'viewportChanged'].forEach((ev) => tg.onEvent(ev, syncSafe)); } catch (e) { /* старый клиент */ }
+  window.addEventListener('resize', syncSafe);
   // Единственная палитра тёмной темы — html.scheme-dark. Класс ставит и inline-скрипт в <head> (до первой отрисовки).
   const applyScheme = () => {
     const pref = getThemePref();                      // null = «Авто»: ключ снят, работает тема Telegram/системы

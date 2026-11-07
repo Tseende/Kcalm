@@ -333,10 +333,11 @@ def frequent_meals(conn: sqlite3.Connection, user_id: int, limit: int = 6,
 
 def repeat_meal(conn: sqlite3.Connection, user_id: int, meal_id: int, eaten_utc: str,
                 local_date: str, local_time: str, meal_type: str,
-                allow_deleted: bool = False) -> int | None:
+                allow_deleted: bool = False, factor: float = 1.0) -> int | None:
     """Записать ещё раз такой же приём пищи (состав и граммы как в образце) на новое время.
 
-    allow_deleted: образец избранного живёт, даже если исходную запись убрали из дневника."""
+    allow_deleted: образец избранного живёт, даже если исходную запись убрали из дневника.
+    factor: порция (×0,5, ×2…): граммы, ккал и БЖУ позиций умножаются, итог пересчитывается с нуля."""
     src = get_meal(conn, user_id, meal_id)
     if not src or (src["deleted_at"] and not allow_deleted):
         return None
@@ -354,6 +355,16 @@ def repeat_meal(conn: sqlite3.Connection, user_id: int, meal_id: int, eaten_utc:
     names = ", ".join(cols)
     conn.execute(f"INSERT INTO meal_items (meal_id, {names}) SELECT ?, {names} "
                  "FROM meal_items WHERE meal_id=?", (new_id, meal_id))
+    if abs(factor - 1.0) > 1e-9:
+        conn.execute(
+            """UPDATE meal_items SET grams = ROUND(grams * ?, 1), kcal = MAX(0, CAST(ROUND(kcal * ?) AS INTEGER)),
+               protein_g = ROUND(protein_g * ?, 1), fat_g = ROUND(fat_g * ?, 1),
+               carbs_g = ROUND(carbs_g * ?, 1) WHERE meal_id = ?""",
+            (factor, factor, factor, factor, factor, new_id))
+        _resum_meal(conn, new_id)
+        conn.execute("UPDATE meals SET kcal_low = CAST(ROUND(kcal_low * ?) AS INTEGER), "
+                     "kcal_high = CAST(ROUND(kcal_high * ?) AS INTEGER) WHERE id = ?",
+                     (factor, factor, new_id))
     sync_meal_water(conn, new_id)
     conn.commit()
     return new_id
@@ -402,9 +413,10 @@ def list_favorites(conn: sqlite3.Connection, user_id: int, limit: int = 30) -> l
     """Избранное, новое сверху: {id, meal_id, kcal, protein, fat, carbs, names, title, note}."""
     rows = conn.execute(
         """SELECT f.id, f.meal_id, f.title, f.note, m.kcal_total, m.protein_g, m.fat_g, m.carbs_g,
+                  m.meal_type, f.use_count, f.last_used_at,
                   EXISTS(SELECT 1 FROM meal_photos p WHERE p.meal_id = f.meal_id) AS has_photo
            FROM favorite_meals f JOIN meals m ON m.id = f.meal_id
-           WHERE f.user_id=? ORDER BY f.id DESC LIMIT ?""",
+           WHERE f.user_id=? ORDER BY f.use_count DESC, f.last_used_at DESC, f.id DESC LIMIT ?""",
         (user_id, limit)).fetchall()
     out = []
     for r in rows:
@@ -413,7 +425,8 @@ def list_favorites(conn: sqlite3.Connection, user_id: int, limit: int = 30) -> l
             out.append({"id": r["id"], "meal_id": r["meal_id"], "kcal": r["kcal_total"],
                         "protein": r["protein_g"], "fat": r["fat_g"], "carbs": r["carbs_g"],
                         "title": r["title"], "note": r["note"], "names": names,
-                        "has_photo": bool(r["has_photo"])})
+                        "has_photo": bool(r["has_photo"]), "meal_type": r["meal_type"],
+                        "use_count": r["use_count"] or 0})
     return out
 
 
@@ -474,6 +487,13 @@ def update_favorite(conn: sqlite3.Connection, user_id: int, favorite_id: int, *,
                  (meal_id, title or None, note or None, favorite_id))
     conn.commit()
     return True
+
+
+def touch_favorite(conn: sqlite3.Connection, user_id: int, favorite_id: int) -> None:
+    """Избранное записали в дневник: счётчик и время последнего использования."""
+    conn.execute("UPDATE favorite_meals SET use_count = use_count + 1, last_used_at = datetime('now') "
+                 "WHERE id=? AND user_id=?", (favorite_id, user_id))
+    conn.commit()
 
 
 def favorite_meal_id(conn: sqlite3.Connection, user_id: int, favorite_id: int) -> int | None:

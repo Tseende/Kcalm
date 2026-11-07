@@ -841,6 +841,7 @@ def _favorite_json(f: dict) -> dict:
     return {"id": f["id"], "title": f["title"] or _short_title(f["names"]), "note": f["note"],
             "names": f["names"], "kcal": int(f["kcal"]), "protein": round(float(f["protein"] or 0), 1),
             "fat": round(float(f["fat"] or 0), 1), "carbs": round(float(f["carbs"] or 0), 1),
+            "meal_type": f.get("meal_type"), "use_count": f.get("use_count", 0),
             "photo_url": f"/api/favorites/{f['id']}/photo" if f.get("has_photo") else None}
 
 
@@ -949,11 +950,21 @@ async def api_favorite_delete(request: web.Request) -> web.Response:
 
 @routes.post("/api/favorites/{id}/repeat")
 async def api_favorite_repeat(request: web.Request) -> web.Response:
+    """Записать избранное в дневник. Тело необязательно: factor (0,25–4), meal_type, date (последние 30 дней)."""
     db, user, _ = ctx(request)
-    meal_id = repo.favorite_meal_id(db, user["id"], path_id(request))
-    new_id = meals_svc.repeat_meal(db, user, meal_id, allow_deleted=True) if meal_id else None
+    fav_id = path_id(request)
+    data = await read_json(request) if request.can_read_body else {}
+    factor = number(data, "factor", 0.25, 4)
+    meal_type = data.get("meal_type")
+    if meal_type is not None and meal_type not in MEAL_TYPES:
+        raise bad("Неизвестный тип приёма пищи.", "bad_field")
+    day = checked_date(user, data.get("date"))
+    meal_id = repo.favorite_meal_id(db, user["id"], fav_id)
+    new_id = meals_svc.repeat_meal(db, user, meal_id, allow_deleted=True, factor=factor or 1.0,
+                                   meal_type=meal_type, day=day) if meal_id else None
     if new_id is None:
         raise ApiError(404, "not_found", "Избранное не найдено.")
+    repo.touch_favorite(db, user["id"], fav_id)
     return ok({"id": new_id, "kcal": int(repo.get_meal(db, user["id"], new_id)["kcal_total"])}, 201)
 
 

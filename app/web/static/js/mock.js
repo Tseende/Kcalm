@@ -308,8 +308,12 @@ const WG_KINDS = {
   water: { icon: '💧', title: 'Вода в норме', hint: 'Стакан после пробуждения, перед едой и в 16:00. Чай и кофе тоже считаются.' },
   late: { icon: '🌙', title: 'Без поздней еды', hint: 'Ужин на час раньше и с белком, так вечером меньше тянет.' },
 };
-const mockFavs = {}; // meal_id -> favorite_id
-const customFavs = [];   // избранное, созданное с нуля
+const mockFavs = { 1: 101, 2: 102, 3: 103, 4: 104 }; // meal_id -> favorite_id (в демо избранное уже есть)
+const favUse = {};       // favorite_id -> сколько раз записали (порядок в списке)
+const customFavs = [     // избранное, созданное с нуля
+  { id: 502, meal_id: 502, title: 'Тостовый хлеб +3', note: null, kcal: 380, protein: 24, fat: 16, carbs: 34, names: ['Тостовый хлеб', 'Сыр', 'Ветчина', 'Огурец'], photo_url: '/api/favorites/502/photo' },   // фото нет: проверка запасной картинки
+  { id: 501, meal_id: 501, title: 'Мой омлет', note: 'на сливочном масле', kcal: 320, protein: 20, fat: 24, carbs: 3, names: ['Омлет'], photo_url: null },
+];
 const favEdits = {};     // правки полей избранного по id
 const FREQ = [
   { meal_id: 1, title: 'Овсянка с бананом +1', names: ['Овсянка с бананом', 'Кофе с молоком'], kcal: 410, protein: 16, fat: 11, carbs: 62, count: 9 },
@@ -319,7 +323,8 @@ const FREQ = [
 ];
 function favList() {
   const starred = FREQ.filter((f) => mockFavs[f.meal_id]).map((f) => ({ ...f, id: mockFavs[f.meal_id], note: null, photo_url: null }));
-  return [...customFavs, ...starred].map((f) => ({ ...f, ...(favEdits[f.id] || {}) }));
+  return [...customFavs, ...starred].map((f) => ({ ...f, meal_type: f.meal_type || 'breakfast', use_count: favUse[f.id] || 0, ...(favEdits[f.id] || {}) }))
+    .sort((a, b) => b.use_count - a.use_count);
 }
 let weekGoal = null;
 function weekGoalMock() {
@@ -530,7 +535,7 @@ const routes = [
   ['GET', /^\/favorites$/, () => ({ items: favList() })],
   ['GET', /^\/favorites\/(\d+)$/, (m) => { const f = favList().find((x) => x.id === +m[1]); if (!f) throw notFound(); return f; }],
   ['POST', /^\/favorites\/custom$/, (m, q, b) => {
-    const id = 500 + customFavs.length + 1;
+    const id = Math.max(500, ...customFavs.map((x) => x.id)) + 1;
     customFavs.unshift({ id, meal_id: id, title: b.title, note: b.note || null, kcal: Math.round(b.kcal), protein: +b.protein || 0, fat: +b.fat || 0, carbs: +b.carbs || 0, names: [b.title], photo_url: null });
     return { id };
   }, 201],
@@ -547,7 +552,14 @@ const routes = [
     return null;
   }],
   ['POST', /^\/meals\/product$/, (m, q, b) => ({ id: 9002, kcal: Math.round(b.kcal * b.grams / 100) }), 201],
-  ['POST', /^\/favorites\/(\d+)\/repeat$/, () => ({ id: 9001, kcal: 410 })],
+  ['POST', /^\/favorites\/(\d+)\/repeat$/, (m, q, b) => {
+    const f = favList().find((x) => x.id === +m[1]);
+    if (!f) throw notFound();
+    const k = b && b.factor !== undefined ? Number(b.factor) : 1;
+    if (!(k >= 0.25 && k <= 4)) throw err(400, 'bad_field', 'Поле factor: допустимо от 0,25 до 4.');
+    favUse[f.id] = (favUse[f.id] || 0) + 1;
+    return { id: 9001, kcal: Math.round(f.kcal * k) };
+  }, 201],
   ['POST', /^\/meals\/(\d+)\/repeat$/, () => ({ id: 9001, kcal: 410 })],
   ['GET', /^\/week-goal$/, () => weekGoalMock()],
   ['PUT', /^\/week-goal$/, (m, q, b) => { weekGoal = { kind: b.kind, target: b.target }; return weekGoalMock(); }],
