@@ -1,15 +1,26 @@
 // Simple add forms: weight, sleep, activity (вода и напитки живут в drinks.js)
 import { api } from '../api.js';
 import {
-  h, icon, tile, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, numSet, numCheck, segmented, fmtN, todayISO,
+  h, icon, tile, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, numSet, numCheck, segmented, fmtN, todayISO, addDays, longDate,
 } from '../ui.js';
+
+// ?date=ГГГГ-ММ-ДД: день, за который пишем (не в будущем, не старше 30 дней), иначе сегодня.
+function pickDate(q) {
+  const today = todayISO();
+  return /^\d{4}-\d{2}-\d{2}$/.test(q || '') && q <= today && q >= addDays(today, -30) ? q : today;
+}
 
 export default async function render(root, ctx) {
   const kind = ctx.params.kind;
   const builders = { weight, sleep, activity };
+  const date = pickDate(ctx.query && ctx.query.date);
+  const isToday = date === todayISO();
+  const when = isToday ? '' : date === addDays(todayISO(), -1) ? 'вчера' : longDate(date);
   const view = h('div', { class: 'screen' });
   root.append(view);
-  const { title, body, submit } = builders[kind]();
+  const { title: baseTitle, body, submit, fill } = builders[kind](date, when);
+  const title = when ? `${baseTitle} · ${when}` : baseTitle;
+  if (fill && !isToday) api.get('/day', { date }).then((day) => { if (ctx.alive()) fill(day); }).catch(() => {});
   let busy = false;
   view.append(pageHead(title, { parent: '/today' }), h('form', { class: 'stack', novalidate: true, onsubmit: (e) => { e.preventDefault(); go(); } }, body, h('button', { type: 'submit', hidden: true })));
 
@@ -23,7 +34,7 @@ export default async function render(root, ctx) {
       haptic('success');
       toast(msg || 'Сохранено', 'ok');
       mainButton.hide();
-      nav.replace('/today');
+      nav.replace('/today?date=' + date);
     } catch (e) {
       busy = false;
       mainButton.setLoading(false);
@@ -40,7 +51,7 @@ function bigField(input, unit) {
   return h('label', { class: 'bigfield' }, input, h('span', { class: 'bigfield-unit' }, unit));
 }
 
-function weight() {
+function weight(date, when) {
   const w = numInput({ min: 25, max: 400, step: 0.1, placeholder: '82,4', 'aria-label': 'Вес в килограммах', class: 'bigfield-input' });
   let latest = null;
   const sub = h('div', { class: 'wform-sub', 'aria-live': 'polite' });
@@ -66,9 +77,10 @@ function weight() {
   }).catch(() => {});
   return {
     title: 'Вес',
+    fill(day) { if (day.weight != null && !w.value) numSet(w, day.weight); },
     body: [
       h('section', { class: 'card wform' },
-        h('div', { class: 'wform-cap' }, 'Вес сегодня'),
+        h('div', { class: 'wform-cap' }, when ? `Вес · ${when}` : 'Вес сегодня'),
         h('div', { class: 'wform-row' }, step(-0.1, 'Минус 100 граммов', 'minus'), bigField(w, 'кг'), step(0.1, 'Плюс 100 граммов', 'plus')),
         sub, last),
       h('div', { class: 'footnote wform-note' }, 'Лучше взвешиваться утром, натощак: так цифры сравнимы день ко дню.'),
@@ -76,14 +88,14 @@ function weight() {
     async submit() {
       const v = numVal(w);
       if (!v || v < 25 || v > 400) return invalid('Введите вес от 25 до 400 кг');
-      const r = await api.post('/weight', { weight_kg: Math.round(v * 10) / 10 });
+      const r = await api.post('/weight', { weight_kg: Math.round(v * 10) / 10, ...(when ? { date } : {}) });
       api._me = null;                                   // меню показывает вес из /me: сбрасываем кеш
       return `Вес записан. Тренд: ${fmtN(r.trend)} кг`;
     },
   };
 }
 
-function sleep() {
+function sleep(date) {
   let mode = 'dur';
   const hh = numInput({ min: 0, max: 24, step: 1, placeholder: '7', inputmode: 'numeric', 'aria-label': 'Часы', class: 'bigfield-input' });
   const mm = numInput({ min: 0, max: 59, step: 5, placeholder: '30', inputmode: 'numeric', 'aria-label': 'Минуты', class: 'bigfield-input' });
@@ -116,13 +128,18 @@ function sleep() {
   rangeBox.hidden = true;
   return {
     title: 'Сон',
+    fill(day) {
+      const m = day.sleep && day.sleep.duration_min;
+      if (m && !hh.value && !mm.value) { numSet(hh, Math.floor(m / 60)); numSet(mm, m % 60); }
+      if (day.sleep && day.sleep.score != null && !score.value) numSet(score, day.sleep.score);
+    },
     body: [
       segmented([['dur', 'Длительность'], ['range', 'Лёг и встал']], mode, (v) => { mode = v; durBox.hidden = v !== 'dur'; rangeBox.hidden = v !== 'range'; }, 'Способ ввода'),
       durBox, rangeBox,
       group([h('label', { class: 'frow' }, tile('moon', 'indigo', 30), h('span', { class: 'frow-label' }, 'Оценка, 0–100'), score)], 'Из часов или приложения, если есть.'),
     ],
     async submit() {
-      const payload = { date: todayISO() };
+      const payload = { date };
       if (mode === 'dur') {
         const e = numCheck(hh, 'Часы') || numCheck(mm, 'Минуты');
         if (e) return invalid(e);
@@ -142,13 +159,19 @@ function sleep() {
   };
 }
 
-function activity() {
+function activity(date) {
   const steps = numInput({ min: 0, max: 100000, step: 100, inputmode: 'numeric', placeholder: '8000', 'aria-label': 'Шаги' });
   const kcal = numInput({ min: 0, max: 5000, step: 10, inputmode: 'numeric', placeholder: '350', 'aria-label': 'Активные ккал' });
   const mins = numInput({ min: 0, max: 1440, step: 5, inputmode: 'numeric', placeholder: '45', 'aria-label': 'Минуты активности' });
   const workout = h('input', { type: 'text', placeholder: 'Бег, силовая…', maxLength: 200, 'aria-label': 'Тренировка' });
   return {
     title: 'Активность',
+    fill(day) {
+      const a = day.activity;
+      if (!a) return;
+      if (a.steps != null && !steps.value) numSet(steps, a.steps);
+      if (a.active_kcal != null && !kcal.value) numSet(kcal, a.active_kcal);
+    },
     body: [
       group([
         h('label', { class: 'frow' }, tile('walk', 'green', 30), h('span', { class: 'frow-label' }, 'Шаги'), steps),
@@ -159,7 +182,7 @@ function activity() {
     async submit() {
       const bad = numCheck(steps, 'Шаги') || numCheck(kcal, 'Активные ккал') || numCheck(mins, 'Активные минуты');
       if (bad) return invalid(bad);
-      const payload = { date: todayISO() };
+      const payload = { date };
       const s = numVal(steps), k = numVal(kcal), m = numVal(mins);
       if (s !== null) payload.steps = Math.round(s);
       if (k !== null) payload.active_kcal = Math.round(k);

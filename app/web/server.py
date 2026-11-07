@@ -233,6 +233,19 @@ def now_local(user) -> datetime:
     return foodsvc.local_now(user["tz"])
 
 
+def checked_date(user, raw) -> str | None:
+    """Дата записи из тела запроса: не в будущем и не старше 30 дней (по местной дате пользователя).
+
+    Пусто -> None (сервис возьмёт сегодня). Иначе 400 bad_date."""
+    if not raw:
+        return None
+    day = parse_date(str(raw))
+    today = now_local(user).date()
+    if day > today or (today - day).days > 30:
+        raise bad("Дату можно выбрать за последние 30 дней, не в будущем.", "bad_date")
+    return day.isoformat()
+
+
 def bounded_int(value, name: str, low: int = 1, high: int = 10**12) -> int:
     """Целое из JSON или формы в границах: мусор, bool, дробные и гигантские числа дают 400 bad_field."""
     if isinstance(value, bool) or not isinstance(value, (int, str)):
@@ -1263,11 +1276,15 @@ async def api_drink_add(request: web.Request) -> web.Response:
 async def api_weight(request: web.Request) -> web.Response:
     db, user, _ = ctx(request)
     low, high = screens_svc.METRIC_RANGES["weight_kg"]
-    weight = round(number(await read_json(request), "weight_kg", low, high, required=True), 1)
+    data = await read_json(request)
+    weight = round(number(data, "weight_kg", low, high, required=True), 1)
     now = now_local(user)
-    local_date = now.strftime("%Y-%m-%d")
-    fasting = weighin.classify_fasting(now.strftime("%H:%M"),
-                                       repo.first_meal_time(db, user["id"], local_date))
+    today = now.strftime("%Y-%m-%d")
+    local_date = checked_date(user, data.get("date")) or today
+    # За прошлый день время взвешивания неизвестно: «натощак» не определяем.
+    fasting = (weighin.classify_fasting(now.strftime("%H:%M"),
+                                        repo.first_meal_time(db, user["id"], local_date))
+               if local_date == today else None)
     repo.save_body_measurement(db, user["id"], local_date,
                                {"weight_kg": weight, "fasting": fasting}, "manual", 1.0)
     return ok({"weight": q.day_weight(db, user["id"], local_date),
@@ -1313,8 +1330,7 @@ async def api_sleep(request: web.Request) -> web.Response:
     data = await read_json(request)
     duration = number(data, "duration_min", 0, 1440)
     score = number(data, "score", 0, 100)
-    if data.get("date"):
-        parse_date(str(data["date"]))
+    date_s = checked_date(user, data.get("date"))
     for key in ("start", "end"):
         if data.get(key):
             try:
@@ -1322,7 +1338,7 @@ async def api_sleep(request: web.Request) -> web.Response:
             except ValueError:
                 raise bad("Время нужно в формате ЧЧ:ММ.", "bad_time") from None
     try:
-        await call(fn, db, user, data.get("date") or None, duration,
+        await call(fn, db, user, date_s, duration,
                    data.get("start") or None, data.get("end") or None, score)
     except ValueError as e:
         raise bad(str(e), "bad_field") from None
@@ -1337,12 +1353,11 @@ async def api_activity(request: web.Request) -> web.Response:
     steps = number(data, "steps", 0, 200000)
     active_kcal = number(data, "active_kcal", 0, 10000)
     active_minutes = number(data, "active_minutes", 0, 1440)
-    if data.get("date"):
-        parse_date(str(data["date"]))
+    date_s = checked_date(user, data.get("date"))
     if data.get("workout") is not None and len(str(data["workout"])) > 200:
         raise bad("Слишком длинное описание тренировки.", "bad_field")
     try:
-        await call(fn, db, user, data.get("date") or None, steps, active_kcal, active_minutes,
+        await call(fn, db, user, date_s, steps, active_kcal, active_minutes,
                    data.get("workout") or None)
     except ValueError as e:
         raise bad(str(e), "bad_field") from None

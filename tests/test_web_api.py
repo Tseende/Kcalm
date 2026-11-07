@@ -663,6 +663,34 @@ async def test_weight_post(client):
         assert (await client.post("/api/weight", json=payload, headers=H)).status == 400
 
 
+async def test_weight_sleep_activity_past_date(client):
+    yday, old, far, future = "2026-05-19", "2026-04-20", "2026-04-19", "2026-05-21"
+    r = await client.post("/api/weight", json={"weight_kg": 83.0, "date": yday}, headers=H)
+    assert r.status == 200 and (await r.json())["weight"] == 83.0
+    day = await (await client.get(f"/api/day?date={yday}", headers=H)).json()
+    assert day["weight"] == 83.0
+    assert (await (await client.get("/api/day", headers=H)).json())["weight"] is None
+    assert (await client.post("/api/weight", json={"weight_kg": 82.0, "date": old}, headers=H)).status == 200
+
+    r = await client.post("/api/sleep", json={"date": yday, "duration_min": 430}, headers=H)
+    assert r.status == 200
+    day = await (await client.get(f"/api/day?date={yday}", headers=H)).json()
+    assert day["sleep"]["duration_min"] == 430
+    r = await client.post("/api/activity", json={"date": yday, "steps": 5000}, headers=H)
+    assert r.status == 200
+    day = await (await client.get(f"/api/day?date={yday}", headers=H)).json()
+    assert day["activity"]["steps"] == 5000
+    today = await (await client.get("/api/day", headers=H)).json()
+    assert today["sleep"] is None and today["activity"] is None
+
+    for path, payload in (("/api/weight", {"weight_kg": 82.0}), ("/api/sleep", {"duration_min": 400}),
+                          ("/api/activity", {"steps": 100})):
+        for bad_date in (future, far, "вчера", "2026-13-40"):
+            resp = await client.post(path, json={**payload, "date": bad_date}, headers=H)
+            assert resp.status == 400, (path, bad_date)
+            assert (await resp.json())["error"] == "bad_date"
+
+
 # ------------------------------------------------------------------ статистика
 
 async def test_stats_shape_and_values(client, db, user_id, fake_food):

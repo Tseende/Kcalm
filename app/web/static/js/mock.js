@@ -461,7 +461,7 @@ const routes = [
     return { water_ml: waterOf(todayISO()), goal_ml: TARGETS.water_ml };
   }],
   ['POST', /^\/weight$/, (m, q, b) => {
-    const bd = body.get(todayISO()); bd.weight = b.weight_kg; bd.trend = r1((bd.trend || b.weight_kg) * 0.8 + b.weight_kg * 0.2);
+    const bd = body.get(b.date || todayISO()); if (!bd) return { weight: b.weight_kg, trend: b.weight_kg }; bd.weight = b.weight_kg; bd.trend = r1((bd.trend || b.weight_kg) * 0.8 + b.weight_kg * 0.2);
     return { weight: b.weight_kg, trend: bd.trend };
   }],
   ['POST', /^\/screens$/, async () => {

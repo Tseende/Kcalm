@@ -16,7 +16,12 @@ let oftenCache = null; // last /frequent answer, painted instantly on re-render
 export default async function render(root, ctx) {
   // Пришли на вкладку «Сегодня» с другой вкладки: показываем сегодня, а не день, на котором остановились (иначе «+» пишет в сегодня, а на экране вчера).
   // Возврат с экрана приёма сохраняет выбранный день.
-  if (!/^\/meal\//.test(ctx.prev || '')) curDate = todayISO();
+  // Возврат с форм сна/шагов/веса тоже сохраняет день; после сохранения форма сама передаёт ?date=.
+  const qd = ctx.query && ctx.query.date;
+  if (qd && /^\d{4}-\d{2}-\d{2}$/.test(qd) && qd <= todayISO()) {
+    curDate = qd;
+    try { history.replaceState(history.state, '', '#/today'); } catch { /* ignore */ }
+  } else if (!/^\/(meal\/|add\/(sleep|activity|weight)$)/.test(ctx.prev || '')) curDate = todayISO();
   const view = h('div', { class: 'screen today' });
   const body = h('div', { class: 'stack' });
   root.append(view);
@@ -151,7 +156,8 @@ export default async function render(root, ctx) {
     paintWater();
 
     // health strip: one grouped card, line icons, empty states are actions
-    const mini = (ic, title, value, sub, path) => {
+    const mini = (ic, title, value, sub, p) => {
+      const path = curDate === todayISO() ? p : `${p}?date=${curDate}`;
       const empty = value === null;
       return h('button', { class: 'mini', type: 'button', onclick: () => nav.go(path), 'aria-label': `${title}: ${empty ? 'нет данных, добавить' : value}` },
         h('span', { class: 'mini-ico', 'aria-hidden': 'true' }, icon(ic, 22)),
