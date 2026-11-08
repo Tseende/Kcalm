@@ -71,14 +71,23 @@ const focusCard = (kicker, t) => h('div', { class: 'an-focus' },
   h('div', { class: 'an-focus-k' }, kicker),
   h('div', { class: 'an-focus-row' },
     h('span', { class: 'an-focus-ico' }, glyph(t.icon, 44)),
-    h('div', { class: 'an-focus-body' }, h('div', { class: 'an-focus-t' }, t.title), h('div', { class: 'an-focus-x' }, t.text))));
+    h('div', { class: 'an-focus-body' }, h('div', { class: 'an-focus-t' }, t.title), h('div', { class: 'an-focus-x' }, t.text),
+      t.action ? h('div', { class: 'an-focus-act' }, t.action) : null)));
 const tipCard = (t) => h('div', { class: 'card an-tip' }, glyph(t.icon, 36), h('div', { class: 'an-tip-body' }, h('div', { class: 'an-tip-title' }, t.title), h('div', null, t.text)));
+// Не больше трёх советов сразу: остальные за кнопкой, чтобы «Главное» не тонуло в списке
+function moreTips(list, shown = 3) {
+  const box = h('div', { class: 'stack-sm' }, list.slice(0, shown).map(tipCard));
+  if (list.length <= shown) return box;
+  const btn = h('button', { class: 'an-more', type: 'button', onclick: () => { box.append(...list.slice(shown).map(tipCard)); btn.remove(); } }, `Показать ещё ${list.length - shown}`);
+  box.append(btn);
+  return box;
+}
 const pills = (good) => h('div', { class: 'pills' }, good.map((g) => h('span', { class: 'pill-good' }, h('span', { class: 'pill-ck' }, icon('check', 13)), g)));
 const signed = (v, d = 1) => (v > 0 ? '+' : v < 0 ? '−' : '') + fmtN(Math.abs(v), d) + ' кг';
 
 const TILE_ICON = {
   kcal: ['tools-kitchen', 'orange'], protein: ['egg-fried', 'blue'], water: ['droplet', 'teal'],
-  steps: ['walk', 'green'], sleep: ['bed', 'indigo'], logged: ['calendar', 'purple'],
+  steps: ['walk', 'green'], sleep: ['bed', 'indigo'], logged: ['calendar', 'purple'], rhythm: ['clock', 'orange'],
 };
 
 export default async function render(root, ctx) {
@@ -153,7 +162,7 @@ export default async function render(root, ctx) {
           const cap = [goalTxt, m.note && m.note.replace(/^(цель достигнута|в норме)\s+/, '')].filter(Boolean).join(' · ') || null;
           const t = statTile({ icon: ic, color: col, title: m.label, value: m.value, status: BAR_STATUS[st] || 'none',
             delta: m.delta ? h('span', { class: 'chip-delta ' + m.delta.dir }, m.delta.text.replace(' к прошлому', '')) : null, caption: cap });
-          if (m.key === 'logged') { const mm = String(m.value).match(/(\d+)\D+(\d+)/); if (mm) bar = progressBar(+mm[1], +mm[2], { status: BAR_STATUS[st] || 'good' }); } else bar = metricBar(m.value, m.goal, st, i);
+          if (m.key === 'logged') { const mm = String(m.value).match(/(\d+)\D+(\d+)/); if (mm) bar = progressBar(+mm[1], +mm[2], { status: BAR_STATUS[st] || 'good' }); } else if (m.key !== 'rhythm') bar = metricBar(m.value, m.goal, st, i);
           if (bar) t.insertBefore(bar, t.querySelector('.stat-tile-foot'));
           return t;
         })));
@@ -184,7 +193,7 @@ export default async function render(root, ctx) {
         h('div', { class: 'stack-sm' }, a.patterns.map((t) => h('div', { class: 'card an-tip an-pattern' }, glyph(t.icon, 36),
           h('div', { class: 'an-tip-body' }, h('div', { class: 'an-tip-title' }, t.title), h('div', null, t.text))))));
     }
-    if (a.tips.length) kids.push(sectionTitle('Что поправить'), h('div', { class: 'stack-sm' }, a.tips.map(tipCard)));
+    if (a.tips.length) kids.push(sectionTitle('Что поправить'), moreTips(a.tips));
     if (a.logged_days < Math.ceil(a.days / 2)) {
       kids.push(h('div', { class: 'muted small an-foot' }, 'Записей немного, поэтому выводы приблизительные.'));
     }
@@ -206,7 +215,7 @@ export default async function render(root, ctx) {
     if (a.good.length) kids.push(sectionTitle('Что получилось'), pills(a.good));
     if (a.tips.length) {
       kids.push(focusCard('Главное на завтра', a.tips[0]));
-      if (a.tips.length > 1) kids.push(sectionTitle('Ещё поправить'), h('div', { class: 'stack-sm' }, a.tips.slice(1).map(tipCard)));
+      if (a.tips.length > 1) kids.push(sectionTitle('Ещё поправить'), moreTips(a.tips.slice(1)));
     }
     if (!a.good.length && !a.tips.length) {
       kids.push(emptyState('sparkles', 'Пока нечего анализировать', 'Запишите еду, воду и сон, и здесь появится разбор дня.',

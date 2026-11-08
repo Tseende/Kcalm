@@ -11,7 +11,9 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from app.domain import analytics
+from app.services import rhythm
 from app.services import water as watersvc
+from app.services.rhythm import days_word  # noqa: F401  (используется и снаружи)
 from app.storage import repo
 
 STEPS_GOAL = 8000
@@ -28,7 +30,7 @@ PROTEIN_IDEAS = (
 
 TIP_TITLES = {"🥩": "Белок", "💧": "Вода", "🚶": "Движение", "😴": "Сон", "🍽": "Калории",
               "🌙": "Поздняя еда", "📆": "Выходные", "📝": "Дневник", "🍚": "Энергия", "🧭": "Тяга", "🧮": "Расход",
-              "⏱": "Паузы"}
+              "⏱": "Паузы", "🕐": "Режим"}
 
 
 @dataclass
@@ -36,6 +38,7 @@ class Tip:
     icon: str
     text: str
     prio: int = 5             # меньше — важнее
+    action: str = ""          # конкретный шаг «Завтра: …» для карточки «Главное»
 
     @property
     def title(self) -> str:
@@ -46,15 +49,6 @@ class Tip:
         """Пункт списка: жирный заголовок и текст рядом."""
         from app.textutil import esc
         return f"<b>{self.icon} {self.title}.</b> {esc(self.text)}"
-
-
-def days_word(n: int) -> str:
-    """1 день, 2 дня, 5 дней."""
-    if n % 10 == 1 and n % 100 != 11:
-        return "день"
-    if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
-        return "дня"
-    return "дней"
 
 
 def _num(value) -> str:
@@ -78,17 +72,6 @@ def _cravings_of_day(db: sqlite3.Connection, uid: int, day: str) -> list[dict]:
              "kcal_so_far": r["kcal_so_far"], "kcal_target": r["kcal_target"]} for r in rows]
 
 
-def _meal_gap(meals) -> tuple[float, str, str] | None:
-    """Самая длинная пауза между приёмами пищи (не меньше 50 ккал) в окне 07:00–22:00."""
-    times = sorted(m["local_time"] for m in meals if m["kcal_total"] >= 50
-                   and "07:00" <= m["local_time"] <= "22:00")
-    if len(times) < 2:
-        return None
-    best = max(zip(times, times[1:]), key=lambda ab: _minutes(ab[1]) - _minutes(ab[0]))
-    hours = (_minutes(best[1]) - _minutes(best[0])) / 60
-    return round(hours, 1), best[0], best[1]
-
-
 def day_facts(db: sqlite3.Connection, user, day: str) -> dict:
     uid = user["id"]
     totals = repo.day_totals(db, uid, day)
@@ -100,9 +83,9 @@ def day_facts(db: sqlite3.Connection, user, day: str) -> dict:
                        (uid, day)).fetchone()
     late = sum(m["kcal_total"] for m in meals
                if analytics.is_late(m["local_time"], user["eating_cutoff"]))
-    gap = _meal_gap(meals)
+    gap = rhythm.meal_gap(meals)
     # чай, американо и кола без сахара записаны приёмом (source=manual), но едой не считаются
-    eaten = [m for m in meals if m["source"] != "manual" or m["kcal_total"] >= 50]
+    eaten = rhythm.eaten(meals)
 
     def col(row, name):
         return row[name] if row and row[name] is not None else None
@@ -125,6 +108,7 @@ def day_facts(db: sqlite3.Connection, user, day: str) -> dict:
         "sleep_score": col(sleep, "score"), "sleep_awake_min": col(sleep, "awake_min"),
         "sleep_deep_min": col(sleep, "deep_min"),
         "late_kcal": int(late), "cutoff": user["eating_cutoff"],
+        "evening_kcal": rhythm.evening_kcal(meals),
         "first_meal": eaten[0]["local_time"] if eaten else None,
         "last_meal": eaten[-1]["local_time"] if eaten else None,
         "longest_gap_h": gap[0] if gap else None,
@@ -266,7 +250,8 @@ def day_tips(f: dict, closed: bool = True) -> tuple[list[str], list[Tip]]:
         why = ("Много движения: мышцам нужен белок, чтобы восстановиться. "
                if active else "Белок держит сытость и бережёт мышцы. ")
         tips.append(Tip("🥩", f"{why}Сегодня {protein} из {ptarget} г: добавь ещё около {need} г, "
-                              f"например {_protein_idea(need)}.", 1 if active else 2))
+                              f"например {_protein_idea(need)}.", 1 if active else 2,
+                        action=f"Завтра: белок в каждый приём пищи, цель {ptarget} г"))
     elif meals >= 2 and protein >= 0.9 * ptarget:
         good.append(f"белок в норме ({protein} г)")
 
@@ -277,19 +262,30 @@ def day_tips(f: dict, closed: bool = True) -> tuple[list[str], list[Tip]]:
         elif water < 0.5 * goal:
             tips.append(Tip("💧", f"Воды мало: {_num(water)} из {_num(goal)} мл. Поставь стакан на "
                                   "виду и пей по паре глотков каждый час. Часто «голод» вечером "
-                                  "оказывается жаждой и усталостью.", 3))
+                                  "оказывается жаждой и усталостью.", 3,
+                            action="Завтра: стакан воды после пробуждения и по стакану перед едой"))
         elif water < 0.9 * goal:
             tips.append(Tip("💧", f"Воды {_num(water)} из {_num(goal)} мл: до цели ещё "
-                                  f"{_num(goal - water)} мл, один-два стакана.", 6))
+                                  f"{_num(goal - water)} мл, один-два стакана.", 6,
+                            action="Сегодня: один-два стакана воды до сна"))
 
     if steps is not None:
         if steps >= 10000:
             good.append(f"много движения ({_num(steps)} шагов)")
         elif steps >= STEPS_GOAL:
             good.append(f"шаги в плане ({_num(steps)})")
-        elif steps < 5000 and closed:
-            tips.append(Tip("🚶", f"Шагов {_num(steps)}: 10–15 минут неспешной прогулки после еды "
-                                  "улучшают самочувствие и аппетит. Это проще, чем кажется.", 5))
+        elif closed:
+            left = rhythm.STEPS_GOAL - steps
+            mins = rhythm.walk_minutes(left)
+            if steps < 5000:
+                tips.append(Tip("🚶", f"Шагов {_num(steps)}: до цели {_num(left)}, это около {mins} минут "
+                                      "ходьбы. Для начала хватит 10–15 минут неспешной прогулки после "
+                                      "еды: она улучшает самочувствие и аппетит.", 5,
+                                action="Завтра: 15 минут прогулки после ужина"))
+            else:
+                tips.append(Tip("🚶", f"Шагов {_num(steps)}, до цели {_num(left)}: это около {mins} минут "
+                                      "неспешной ходьбы. Одна прогулка после ужина закроет разрыв.", 6,
+                                action=f"Завтра: {mins} минут ходьбы после ужина"))
     if active and closed and not f["care"] and meals >= 2 and kcal < 0.85 * target \
             and not incomplete:
         load = (f"По данным браслета активных ккал {_num(active_kcal)}"
@@ -297,7 +293,7 @@ def day_tips(f: dict, closed: bool = True) -> tuple[list[str], list[Tip]]:
                 else f"{_num(steps)} шагов")
         tips.append(Tip("🍚", f"{load}: расход выше обычного. Не урезай ужин, добавь сложных "
                               "углеводов (крупа, картофель, хлеб из цельного зерна), иначе завтра "
-                              "потянет на сладкое.", 2))
+                              "потянет на сладкое.", 2, action="Завтра: полноценный ужин с гарниром"))
 
     if sleep:
         score, awake = f.get("sleep_score"), f.get("sleep_awake_min")
@@ -305,13 +301,14 @@ def day_tips(f: dict, closed: bool = True) -> tuple[list[str], list[Tip]]:
         if sleep < SLEEP_LOW_MIN:
             tips.append(Tip("😴", f"Сон {analytics.format_minutes(sleep)}: после недосыпа сильнее "
                                   "тянет на сладкое. Завтра начни с белкового завтрака и ляг на "
-                                  "30–40 минут раньше.", 2))
+                                  "30–40 минут раньше.", 2, action="Завтра: отбой на 30–40 минут раньше"))
         elif low_quality:
             detail = (f"оценка {score} из 100" if score is not None and score < 70
                       else f"пробуждения {awake} мин")
             tips.append(Tip("😴", f"Сон {analytics.format_minutes(sleep)}, но качество невысокое "
                                   f"({detail}). Последний кофе до 15:00 и ужин за 2–3 часа до сна "
-                                  "самые простые рычаги.", 3))
+                                  "самые простые рычаги.", 3,
+                            action="Завтра: последний кофе до 15:00"))
         elif sleep >= SLEEP_GOAL_MIN:
             good.append("сон в норме" if score is None or score < 80
                         else f"сон хороший (оценка {score})")
@@ -320,28 +317,41 @@ def day_tips(f: dict, closed: bool = True) -> tuple[list[str], list[Tip]]:
     if crave:
         tips.append(crave)
 
+    if closed and not incomplete and 1 <= meals <= 2:
+        tips.append(Tip("🕐", f"Сегодня {meals} {'приём' if meals == 1 else 'приёма'} пищи: порции "
+                              "получаются крупными, а паузы длинными. Обычно проще и сытнее 3–4 приёма "
+                              "поменьше.", 5, action="Завтра: три приёма пищи, в каждом белок"))
+    evening = f.get("evening_kcal")
+    if closed and not incomplete and not f["care"] and evening and kcal >= 1200 \
+            and evening / kcal >= 0.55:
+        tips.append(Tip("🕐", f"После {rhythm.EVENING_FROM} съедено {round(evening / kcal * 100)}% "
+                              "дня: к вечеру голод копится. Добавь белок в обед и в полдник, и вечером "
+                              "будет спокойнее.", 4, action="Завтра: белок в обед и перекус в полдник"))
+
     gap = f.get("longest_gap_h")
     if closed and not incomplete and gap is not None and gap >= 5.5:
         tips.append(Tip("⏱", f"Между приёмами в {f['gap_from']} и {f['gap_to']} прошло около "
                              f"{gap:g} ч. Длинные паузы часто оборачиваются вечерней тягой: "
-                             "поставь напоминание на перекус с белком посередине.", 4))
+                             "поставь напоминание на перекус с белком посередине.", 4,
+                        action="Завтра: перекус с белком в середине паузы"))
 
     if not f["care"] and meals and closed:
         ratio = kcal / target
         if ratio > 1.1:
             tips.append(Tip("🍽", f"Съедено на {kcal - target} ккал больше цели: это нормально, "
                                   "один день не решает ничего. Завтра обычный режим, без голодовки "
-                                  "и «отработки».", 4))
+                                  "и «отработки».", 4, action="Завтра: обычный режим без голодовки"))
         elif ratio < 0.7 and not incomplete:
             tips.append(Tip("🍽", f"Съедено {_num(kcal)} из {_num(target)} ккал: слишком мало. "
                                   "Недоедание днём часто заканчивается вечерним срывом, поэтому "
-                                  "завтра добавь нормальный приём пищи с белком.", 1))
+                                  "завтра добавь нормальный приём пищи с белком.", 1,
+                            action="Завтра: нормальный приём пищи с белком"))
         elif 0.85 <= ratio <= 1.1:
             good.append("калории в цели")
         if f["late_kcal"]:
             tips.append(Tip("🌙", f"После {f['cutoff']} съедено {f['late_kcal']} ккал. Если "
                                   "потянет поздно, план Б: кефир, творог или овощи на 150–200 ккал.",
-                            5))
+                            5, action=f"Завтра: ужин до {f['cutoff']}"))
     return good, sorted(tips, key=lambda t: t.prio)
 
 
@@ -461,14 +471,16 @@ def week_tips(wf: dict) -> tuple[list[str], list[Tip]]:
             tips.append(Tip("🥩", f"Белка в среднем {_num(s['protein'])} из {s['protein_target']} г: "
                                   f"не хватает около {gap} г в день. Самый простой способ: белок в "
                                   "каждый приём пищи (яйца или творог утром, курица/рыба в обед, "
-                                  "кефир или йогурт вечером).", 1))
+                                  "кефир или йогурт вечером).", 1,
+                            action="Завтра: белок в каждый приём пищи"))
         elif s["protein"] >= 0.9 * s["protein_target"]:
             good.append("белок держится у цели")
 
     if s["water"] is not None and s["water"] < 0.6 * s["water_goal"]:
         tips.append(Tip("💧", f"Вода в среднем {_num(s['water'])} мл при ориентире "
                               f"{_num(s['water_goal'])}. Привяжи стакан к привычкам: после "
-                              "пробуждения, перед каждой едой и в 16:00.", 2))
+                              "пробуждения, перед каждой едой и в 16:00.", 2,
+                        action="Завтра: стакан воды после пробуждения"))
     elif s["water"] is not None and s["water"] >= s["water_goal"]:
         good.append("воды хватает")
 
@@ -478,9 +490,11 @@ def week_tips(wf: dict) -> tuple[list[str], list[Tip]]:
         elif s["steps"] < 5000:
             tips.append(Tip("🚶", f"Шагов в среднем {_num(s['steps'])}. Прибавка по 1000 шагов в "
                                   "неделю (одна короткая прогулка) даёт больше, чем разовый "
-                                  "рывок.", 3))
+                                  "рывок.", 3, action="Завтра: 15 минут ходьбы после еды"))
         if p["steps"] is not None and s["steps"] - p["steps"] >= 1500:
             good.append(f"шагов стало больше на {_num(s['steps'] - p['steps'])} в день")
+        _, step_tips = rhythm.steps_tips(s["steps"], p["steps"])
+        tips.extend(Tip(t["icon"], t["text"], t["prio"], action=t.get("action", "")) for t in step_tips)
 
     tip = _energy_check(wf)
     if tip:
@@ -489,7 +503,8 @@ def week_tips(wf: dict) -> tuple[list[str], list[Tip]]:
     if s["sleep"] is not None and s["sleep"] < SLEEP_LOW_MIN + 30:
         tips.append(Tip("😴", f"Сон в среднем {analytics.format_minutes(int(s['sleep']))}. Недосып "
                               "повышает аппетит и тягу к сладкому, и сон — самый дешёвый рычаг: "
-                              "сдвинь отбой на 30 минут раньше.", 2))
+                              "сдвинь отбой на 30 минут раньше.", 2,
+                        action="Завтра: отбой на 30 минут раньше"))
 
     if not care and s["kcal"] is not None and s["logged"] >= 4:
         ratio = s["kcal"] / s["kcal_target"]
@@ -506,7 +521,7 @@ def week_tips(wf: dict) -> tuple[list[str], list[Tip]]:
         if late >= 3:
             tips.append(Tip("🌙", f"Поздняя еда была {late} {days_word(late)} из 7. Попробуй сдвинуть ужин "
                                   "на час раньше и добавить в него белок: так вечером меньше "
-                                  "тянет.", 3))
+                                  "тянет.", 3, action="Завтра: ужин на час раньше, с белком"))
         # рабочие дни против выходных
         work = [d["kcal"] for d in days if d["meals"] and date.fromisoformat(d["date"]).weekday() < 5]
         free = [d["kcal"] for d in days if d["meals"] and date.fromisoformat(d["date"]).weekday() >= 5]
@@ -516,6 +531,10 @@ def week_tips(wf: dict) -> tuple[list[str], list[Tip]]:
                 tips.append(Tip("📆", f"В выходные ешь примерно на {diff} ккал больше, чем в будни. "
                                       "Заранее решай, что будет на завтрак и ужин в субботу: план "
                                       "спасает лучше силы воли.", 4))
+
+    r_good, r_tips = rhythm.meal_tips(days, care)
+    good.extend(r_good)
+    tips.extend(Tip(t["icon"], t["text"], t["prio"], action=t.get("action", "")) for t in r_tips)
 
     logged = [d for d in days if d["meals"]]
     if logged and not care and s["logged"] >= 4:

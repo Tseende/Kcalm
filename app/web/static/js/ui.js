@@ -60,7 +60,7 @@ const GLYPH = {
   '🥩': ['egg-fried', 'red'], '💧': ['droplet', 'teal'], '🚶': ['walk', 'green'], '😴': ['bed', 'indigo'],
   '🍽': ['tools-kitchen', 'orange'], '🌙': ['moon', 'indigo'], '📆': ['calendar', 'blue'], '📝': ['pencil', 'blue'],
   '🍚': ['bowl', 'orange'], '🧭': ['target', 'purple'], '🧮': ['chart-bar', 'blue'], '⏱': ['clock', 'blue'],
-  '⚖️': ['scale', 'purple'], '⚖': ['scale', 'purple'], '📈': ['chart-bar', 'orange'], '✅': ['check', 'green'],
+  '🕐': ['clock', 'orange'], '⚖️': ['scale', 'purple'], '⚖': ['scale', 'purple'], '📈': ['chart-bar', 'orange'], '✅': ['check', 'green'],
 };
 const LABEL_GLYPH = { 'Калории': '🍽', 'Белок': '🥩', 'Вода': '💧', 'Шаги': '🚶', 'Сон': '😴', 'Дней с едой': '📆' };
 /** Мягкая плитка с иконкой вместо эмодзи. key: эмодзи или название показателя; color перекрывает цвет по умолчанию. */

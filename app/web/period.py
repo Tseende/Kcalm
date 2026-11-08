@@ -8,6 +8,7 @@ import sqlite3
 from datetime import date, timedelta
 
 from app.domain import analytics
+from app.services import rhythm
 from app.services.insights import SLEEP_GOAL_MIN, STEPS_GOAL, days_word
 from app.storage import repo
 from app.web import queries as q
@@ -148,14 +149,26 @@ def build(db: sqlite3.Connection, user, today: date, period: str) -> dict:
     metrics.append({"key": "logged", "label": "Дней с едой", "value": f"{len(logged)} из {n}", "goal": "",
                     "status": _status(len(logged) / n, 0.85, 0.55), "note": "", "delta": None})
 
+    rdays = rhythm.days_from_db(db, user, start, n)
+    rsum = rhythm.meal_summary(rdays)
+    if rsum is not None:
+        spread_h = rsum["spread"] / 60
+        metrics.insert(-1, {"key": "rhythm", "label": "Режим", "value": f"{rhythm._comma(rsum['avg_meals'])} в день",
+                            "goal": "цель 3+ приёма", "status": rhythm.meal_status(rsum),
+                            "note": (f"первый приём ±{spread_h:.0f} ч" if spread_h >= 1 else "время стабильное"),
+                            "delta": None})
+
     weight, wtips = _weight_block(days, user, n, care, tdee, kcal, len(logged))
 
     good: list[str] = []
     tips: list[dict] = list(wtips)
     patterns: list[dict] = []
 
-    def tip(prio, icon, title, text):
-        tips.append({"icon": icon, "prio": prio, "title": title, "text": text})
+    def tip(prio, icon, title, text, action=""):
+        item = {"icon": icon, "prio": prio, "title": title, "text": text}
+        if action:
+            item["action"] = action
+        tips.append(item)
 
     if len(logged) < max(3, n // 2):
         tip(1, "📝", "Мало записей", f"Еда записана за {len(logged)} {days_word(len(logged))} из {n}, поэтому выводы приблизительные. "
@@ -163,37 +176,51 @@ def build(db: sqlite3.Connection, user, today: date, period: str) -> dict:
     if protein is not None and len(logged) >= 3:
         if protein < 0.75 * prot_t:
             tip(1, "🥩", "Белок", f"В среднем {_n(protein)} из {prot_t} г, не хватает около {int(prot_t - protein)} г в день. "
-                                 "Добавь белок в каждый приём: яйца или творог утром, курица/рыба в обед, кефир или йогурт вечером.")
+                                 "Добавь белок в каждый приём: яйца или творог утром, курица/рыба в обед, кефир или йогурт вечером.",
+                "Завтра: белок в каждый приём пищи")
         elif protein >= 0.9 * prot_t:
             good.append("белок держится у цели")
     if water is not None:
         if water < 0.6 * water_t:
-            tip(2, "💧", "Вода", f"В среднем {_n(water)} мл при цели {_n(water_t)}. Стакан после пробуждения, перед каждой едой и в 16:00 закроют разрыв.")
+            tip(2, "💧", "Вода", f"В среднем {_n(water)} мл при цели {_n(water_t)}. Стакан после пробуждения, перед каждой едой и в 16:00 закроют разрыв.",
+                "Завтра: стакан воды после пробуждения")
         elif water >= water_t * 0.95:
             good.append("воды хватает")
     if steps is not None:
         if steps >= 10000:
             good.append(f"активный период ({_n(steps)} шагов в среднем)")
         elif steps < 5000:
-            tip(3, "🚶", "Движение", f"Шагов в среднем {_n(steps)}. Прибавляй по 1000 шагов в неделю (одна короткая прогулка): это надёжнее разового рывка.")
+            tip(3, "🚶", "Движение", f"Шагов в среднем {_n(steps)}. Прибавляй по 1000 шагов в неделю (одна короткая прогулка): это надёжнее разового рывка.",
+                "Завтра: 15 минут ходьбы после еды")
         if psteps and steps - psteps >= 1500:
             good.append(f"шагов стало больше на {_n(steps - psteps)} в день")
+        for t in rhythm.steps_tips(steps, psteps)[1]:
+            tip(t["prio"], t["icon"], "Движение", t["text"], t.get("action", ""))
     if sleep is not None and sleep < SLEEP_GOAL_MIN - 30:
-        tip(2, "😴", "Сон", f"Сон в среднем {analytics.format_minutes(int(sleep))}. Недосып повышает аппетит и тягу к сладкому: сдвинь отбой на 30 минут раньше.")
+        tip(2, "😴", "Сон", f"Сон в среднем {analytics.format_minutes(int(sleep))}. Недосып повышает аппетит и тягу к сладкому: сдвинь отбой на 30 минут раньше.",
+            "Завтра: отбой на 30 минут раньше")
     elif sleep is not None and sleep >= SLEEP_GOAL_MIN:
         good.append("сон в норме")
+
+    r_good, r_tips = rhythm.meal_tips(rdays, care)
+    good.extend(r_good)
+    for t in r_tips:
+        tip(t["prio"], t["icon"], "Паузы между приёмами" if t["icon"] == "⏱" else "Режим питания",
+            t["text"], t.get("action", ""))
 
     if not care and kcal is not None and len(logged) >= 3:
         ratio = kcal / kcal_t
         if ratio > 1.1:
             tip(2, "🍽", "Калории", f"В среднем на {int(kcal - kcal_t)} ккал выше нормы. Посмотри, на каком приёме набегает больше всего: чаще это перекусы и вечер.")
         elif ratio < 0.7:
-            tip(1, "🍽", "Калории", "Еды заметно меньше нормы: жёсткий недобор часто ведёт к срывам и потере мышц. Подними приёмы пищи ближе к норме.")
+            tip(1, "🍽", "Калории", "Еды заметно меньше нормы: жёсткий недобор часто ведёт к срывам и потере мышц. Подними приёмы пищи ближе к норме.",
+                "Завтра: нормальный приём пищи с белком")
         elif 0.85 <= ratio <= 1.1:
             good.append("калории в целевом коридоре")
         late_days = sum(1 for d in logged if d["late_kcal"])
         if late_days >= max(3, n // 4):
-            tip(3, "🌙", "Поздняя еда", f"Поздняя еда была {late_days} {days_word(late_days)} из {len(logged)}. Сдвинь ужин на час раньше и добавь в него белок: вечером меньше тянет.")
+            tip(3, "🌙", "Поздняя еда", f"Поздняя еда была {late_days} {days_word(late_days)} из {len(logged)}. Сдвинь ужин на час раньше и добавь в него белок: вечером меньше тянет.",
+                "Завтра: ужин на час раньше, с белком")
         best = min(logged, key=lambda d: abs(d["kcal"] - kcal_t))
         good.append(f"ближе всего к норме был день {best['date'][8:]}.{best['date'][5:7]} ({_n(best['kcal'])} ккал): повтори его меню")
 
@@ -225,6 +252,7 @@ def build(db: sqlite3.Connection, user, today: date, period: str) -> dict:
         if weight and weight.get("per_week") is not None and steps is not None and psteps and steps - psteps >= 1500 and weight["per_week"] < 0:
             patterns.append({"icon": "🚶", "title": "Шаги работают",
                              "text": f"Шагов стало больше на {_n(steps - psteps)} в день, и тренд веса идёт вниз ({weight['change']:+.1f} кг). Продолжай в том же духе."})
+    patterns.extend(rhythm.patterns(rdays, days, care))
     if weight and weight.get("change") is not None and not care:
         goalw = user["goal_weight_kg"]
         if goalw and weight["per_week"] < -0.05 and weight["change"] <= -0.3:
@@ -239,7 +267,8 @@ def build(db: sqlite3.Connection, user, today: date, period: str) -> dict:
     else:
         urgent = [t for t in tips if t["prio"] <= 2]
         headline = ("Есть что поправить" if urgent else "Хороший период" if len(good) >= 4 else "В целом неплохо")
-        focus = ({"title": tips[0]["title"], "text": tips[0]["text"], "icon": tips[0]["icon"]} if tips
+        focus = ({"title": tips[0]["title"], "text": tips[0]["text"], "icon": tips[0]["icon"],
+                  **({"action": tips[0]["action"]} if tips[0].get("action") else {})} if tips
                  else {"title": "Держи темп", "text": "Критичных проблем не видно. Следи, чтобы белок и сон не просели.", "icon": "✅"})
     for t in tips:
         t.pop("prio", None)

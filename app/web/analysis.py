@@ -39,5 +39,6 @@ def build(db: sqlite3.Connection, user, day: date, now: datetime) -> dict:
         "rows": [{"label": r[0], "value": r[1], "goal": r[2], "status": STATUS.get(r[3], "none")}
                  for r in insights.scorecard_rows(facts)],
         "good": [g[:1].upper() + g[1:] for g in good],
-        "tips": [{"icon": t.icon, "title": t.title, "text": t.text} for t in tips],
+        "tips": [{"icon": t.icon, "title": t.title, "text": t.text,
+                  **({"action": t.action} if t.action else {})} for t in tips],
     }
