@@ -539,6 +539,9 @@ html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
 .frow { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 16px; position: relative; font-size: 17px; }
 .frow + .frow::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; height: .5px; background: var(--c-sep); }
 .frow-label { flex: none; max-width: 52%; }
+button.frow { width: 100%; border: 0; background: transparent; text-align: left; font: inherit; color: inherit; transition: background .12s; }
+button.frow:active { background: color-mix(in srgb, var(--c-hint) 22%, transparent); }
+button.frow > .ico:last-child { flex: none; color: color-mix(in srgb, var(--c-hint) 70%, transparent); }
 .frow input, .frow select { flex: 1; width: auto; min-height: 46px; padding: 0; background: none; border-radius: 0; box-shadow: none; text-align: right; color: var(--c-text); }
 .frow select { text-align-last: right; background-image: none; padding-right: 0; }
 .frow input:focus, .frow select:focus { outline: 0; box-shadow: none; }
@@ -1217,7 +1220,8 @@ button.row:active, a.row:active, .often-chip:active, .wg-strip:active, .wg-opt:a
 .today .macro .bar { align-self: stretch; width: 100%; }
 
 .row-value { color: var(--c-hint); font-size: 17px; white-space: nowrap; }
-.row-check { color: var(--c-btn); display: inline-flex; }
+.row-check { color: var(--c-btn); display: inline-flex; flex: none; }
+.row[aria-checked="false"] > .row-check { visibility: hidden; }
 
 
 /* ---------- Статистика и Анализ: герои, плитки, календарь, графики с тултипом ---------- */

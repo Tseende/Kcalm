@@ -1,17 +1,23 @@
 // Профиль и цели: данные, из которых бот считает норму, и сама норма (расчётная или ручная).
 import { api } from '../api.js';
 import {
-  h, icon, toast, haptic, mainButton, pageHead, frow, group, numInput, numVal, numCheck, segmented, sheet,
+  h, icon, toast, haptic, mainButton, pageHead, frow, group, numInput, numVal, numCheck, checkList, sheet,
   fmtN, fmtKcal, errorState, skeletonBlocks, dataChanged, plural, macroChips,
 } from '../ui.js';
 
+// [значение, название, пояснение, короткая подпись для строки (по умолчанию название)]
 const ACTIVITY = [
   [1, 'Сидячая', 'Офис, мало движения'],
   [2, 'Лёгкая', 'Прогулки, 1–3 тренировки в неделю'],
   [3, 'Средняя', '3–5 тренировок или активная работа'],
   [4, 'Высокая', 'Ежедневные тренировки, физический труд'],
 ];
-const RATES = [[0, 'Держать'], [0.25, '0,25'], [0.5, '0,5'], [0.7, '0,7']];
+const RATES = [
+  [0, 'Держать вес', 'Без дефицита калорий', 'Держать'],
+  [0.25, '0,25 кг в неделю', 'Спокойно', '0,25 кг/нед.'],
+  [0.5, '0,5 кг в неделю', 'Оптимально', '0,5 кг/нед.'],
+  [0.7, '0,7 кг в неделю', 'Быстрее', '0,7 кг/нед.'],
+];
 
 export default async function render(root, ctx) {
   const view = h('div', { class: 'screen' });
@@ -94,18 +100,26 @@ export default async function render(root, ctx) {
   const cutoff = h('input', { type: 'time', value: cur.eating_cutoff || '21:00', 'aria-label': 'Не есть после', oninput: () => { cur.eating_cutoff = cutoff.value; changed(); } });
   const tz = h('input', { type: 'text', value: cur.tz || '', placeholder: 'Europe/Moscow', autocomplete: 'off', autocapitalize: 'off', 'aria-label': 'Часовой пояс', oninput: () => { cur.tz = tz.value.trim(); changed(); } });
   const ageHint = h('div', { class: 'footnote' });
-  const actHint = h('div', { class: 'footnote' });
-  const act = segmented(ACTIVITY.map(([v, t]) => [v, t]), cur.activity, (v) => { cur.activity = Number(v); actNote(); changed(); }, 'Активность');
-  const rate = segmented(RATES, cur.rate_kg_week, (v) => { cur.rate_kg_week = Number(v); rateNote(); changed(); }, 'Темп');
+  // Строка со значением справа; по нажатию снизу выезжает шторка со списком вариантов (как «Оформление» в меню).
+  function pickRow(label, options, get, set, title) {
+    const text = () => { const o = options.find((x) => x[0] === get()); return o ? (o[3] || o[1]) : '—'; };
+    const val = h('span', { class: 'frow-val' }, text());
+    const open = () => {
+      const s = sheet({ title, content: checkList(options, get(), (v) => { set(Number(v)); val.textContent = text(); s.close(); }, title) });
+    };
+    return h('button', { class: 'frow', type: 'button', 'aria-haspopup': 'dialog', onclick: open },
+      h('span', { class: 'frow-label' }, label), val, icon('next', 18));
+  }
+  const act = pickRow('Активность', ACTIVITY, () => cur.activity, (v) => { cur.activity = v; changed(); }, 'Активность');
+  const rate = pickRow('Темп снижения', RATES, () => cur.rate_kg_week, (v) => { cur.rate_kg_week = v; rateNote(); changed(); }, 'Темп снижения, кг в неделю');
   const rateHint = h('div', { class: 'footnote' });
   function ageNote() {
     const y = cur.birth_year;
     const age = y ? new Date().getFullYear() - y : null;
     ageHint.textContent = age ? `Возраст: ${plural(age, 'год', 'года', 'лет')}. Нужен, чтобы точнее посчитать обмен веществ и норму калорий.` : 'Год рождения не указан: норма считается как для 35 лет. Укажите его для точности.';
   }
-  function actNote() { actHint.textContent = (ACTIVITY.find((a) => a[0] === cur.activity) || ACTIVITY[1])[2]; }
   function rateNote() { rateHint.textContent = cur.rate_kg_week ? `Снижение до ${fmtN(cur.rate_kg_week)} кг в неделю. Быстрее 0,7 кг не предлагаем.` : 'Вес удерживается: дефицита калорий нет.'; }
-  ageNote(); actNote(); rateNote();
+  ageNote(); rateNote();
 
   const KEYS = ['sex', 'birth_year', 'height_cm', 'goal_weight_kg', 'activity', 'rate_kg_week', 'eating_cutoff', 'tz'];
   const diff = () => KEYS.filter((k) => cur[k] !== init[k] && !(cur[k] == null && init[k] == null) && !(typeof cur[k] === 'number' && Number.isNaN(cur[k])));
@@ -147,8 +161,8 @@ export default async function render(root, ctx) {
     h('div', { class: 'section-label' }, 'О вас'),
     group([h('div', { class: 'frow static' }, h('span', { class: 'frow-label' }, 'Пол'), h('span', { class: 'frow-val' }, cur.sex === 'female' ? 'Женский' : 'Мужской')), frow('Год рождения', year), frow('Рост, см', height), h('div', { class: 'frow static' }, h('span', { class: 'frow-label' }, 'Вес сейчас'), h('span', { class: 'frow-val' }, cur.weight_kg ? `${fmtN(cur.weight_kg)} кг` : '—')), frow('Цель, кг', goal)]),
     ageHint,
-    h('div', { class: 'section-label' }, 'Активность'), act, actHint,
-    h('div', { class: 'section-label' }, 'Темп снижения, кг в неделю'), rate, rateHint,
+    h('div', { class: 'section-label' }, 'Активность и темп'),
+    group([act, rate]), rateHint,
     h('div', { class: 'section-label' }, 'Режим'),
     group([frow('Не есть после', cutoff), frow('Часовой пояс', tz)], 'Вес записывайте на экране «Вес»: норма пересчитывается по последнему значению.'));
   paintTargets();

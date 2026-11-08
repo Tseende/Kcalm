@@ -619,6 +619,19 @@ export function segmented(options, value, onChange, label) {
   return el;
 }
 
+// Выбор одного из нескольких как в настройках Telegram: строки в одном блоке, у выбранной галочка справа.
+// options: [[значение, название, пояснение?]]. Высота строк не меняется при выборе: галочка лишь скрывается.
+export function checkList(options, value, onChange, label) {
+  const el = h('div', { class: 'list', role: 'radiogroup', 'aria-label': label || null });
+  const rows = options.map(([val, title, sub]) => h('button', { class: 'row', type: 'button', role: 'radio', 'aria-checked': String(val === value), onclick: () => {
+    rows.forEach((r, i) => r.setAttribute('aria-checked', String(options[i][0] === val)));
+    haptic('selection');
+    onChange(val);
+  } }, h('span', { class: 'grow' }, h('span', { class: 'row-title' }, title), sub ? h('span', { class: 'row-sub' }, sub) : null), h('span', { class: 'row-check' }, icon('check', 20))));
+  el.append(...rows);
+  return el;
+}
+
 export function toggle(checked, onChange, label) {
   const input = h('input', { type: 'checkbox', checked: !!checked, 'aria-label': label || null, onchange: () => onChange(input.checked) });
   return h('label', { class: 'switch' }, input, h('span', { class: 'slider' }));
