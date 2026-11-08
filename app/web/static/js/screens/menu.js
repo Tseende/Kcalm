@@ -1,6 +1,6 @@
 // Screen 5: Menu
 import { api, tg } from '../api.js';
-import { h, icon, tile, nav, pageHead, fmtN, skeletonBlocks, sheet, haptic, errorState, staggerIn, getThemePref, setThemePref } from '../ui.js';
+import { h, icon, tile, nav, fmtN, skeletonBlocks, sheet, haptic, errorState, staggerIn, getThemePref, setThemePref } from '../ui.js';
 
 // Фото из Telegram (если пользователь его разрешил), иначе первая буква имени
 function avatarEl(name) {
@@ -64,7 +64,7 @@ function profileCard(me, name) {
 export default async function render(root, ctx) {
   const view = h('div', { class: 'screen' });
   const body = h('div', { class: 'stack' });
-  view.append(pageHead('Меню', { back: false }), body);
+  view.append(body);
   root.append(view);
 
   async function load() {

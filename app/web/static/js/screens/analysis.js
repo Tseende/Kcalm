@@ -3,7 +3,7 @@ import { api } from '../api.js';
 import { weekGoalBlock } from './weekgoal.js';
 import { ring, sparkline } from '../charts.js';
 import { onbImg } from '../onb/controls.js';
-import { h, icon, tile, glyph, nav, pageHead, segmented, shortDate, fmtN, skeletonCards, holdHeight, emptyState, errorState, sectionTitle, todayISO, dateSwitch, countUp, staggerIn, reducedMotion, heroCard, progressBar, statTile } from '../ui.js';
+import { h, icon, tile, glyph, nav, segmented, shortDate, fmtN, skeletonCards, holdHeight, emptyState, errorState, sectionTitle, todayISO, dateSwitch, countUp, staggerIn, reducedMotion, heroCard, progressBar, statTile } from '../ui.js';
 
 let curDate = todayISO();
 const PERIODS = [['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц']];
@@ -90,7 +90,7 @@ export default async function render(root, ctx) {
   const sw = dateSwitch(curDate, (d) => { curDate = d; load(); });
   const dateRow = sw.el;
   const seg = segmented(PERIODS, period, (v) => { period = v; savePeriod(v); sync(); load(); }, 'Период анализа');
-  view.append(pageHead('Анализ', { back: false }), seg, dateRow, body);
+  view.append(seg, dateRow, body);
   const sync = () => { dateRow.hidden = period !== 'day'; };
   sync();
 

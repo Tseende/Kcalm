@@ -1,7 +1,7 @@
 // Screen 2: "Статистика" — «как я иду»: герой «Вес», календарь дней в норме, показатели, динамика, ссылка на разбор
 import { api } from '../api.js';
 import { lineChart, barChart, stackedBars, makeTip } from '../charts.js';
-import { h, icon, tile, nav, pageHead, segmented, skeletonCards, holdHeight, errorState, emptyState, heroCard, progressBar, statTile, countUp, fmtN, fmtKcal, fmtDur, shortDate, longDate, parseISO, addDays, todayISO, reducedMotion, staggerIn, haptic, plural } from '../ui.js';
+import { h, icon, tile, nav, segmented, skeletonCards, holdHeight, errorState, emptyState, heroCard, progressBar, statTile, countUp, fmtN, fmtKcal, fmtDur, shortDate, longDate, parseISO, addDays, todayISO, reducedMotion, staggerIn, haptic, plural } from '../ui.js';
 
 const RANGES = [['week', 'Неделя'], ['month', 'Месяц'], ['90d', '90 дней']];
 const METRICS = [['kcal', 'Калории'], ['macro', 'БЖУ'], ['water', 'Вода'], ['sleep', 'Сон'], ['steps', 'Шаги']];
@@ -70,7 +70,7 @@ export default async function render(root, ctx) {
   let metric = loadMetric();
   const view = h('div', { class: 'screen' });
   const body = h('div', { class: 'stack' });
-  view.append(pageHead('Статистика', { back: false }), segmented(RANGES, range, (v) => { range = v; saveRange(v); load(); }, 'Период'), body);
+  view.append(segmented(RANGES, range, (v) => { range = v; saveRange(v); load(); }, 'Период'), body);
   root.append(view);
 
   async function load() {

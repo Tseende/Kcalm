@@ -564,6 +564,33 @@ async def test_chat_low_confidence_generic_screenshot_confirm_buttons(db, monkey
     assert any("Активность записал" in t for t in session.texts)
 
 
+@pytest.mark.asyncio
+async def test_unrecognized_screenshot_can_be_resent(db, monkeypatch):
+    """Экран не опознан, ничего не записано: тот же файл, присланный снова, не блокируется
+    ответом «уже записал»."""
+    from app import config
+    monkeypatch.setattr(config, "_config", config.Config(_env_file=None, chat_logs_food=False,
+                                                       allow_public_bot=True))
+    bot, dp, session = build(db)
+    await onboard(dp, bot)
+    calls = []
+
+    async def fake_parse(image_b64, user_id, conn):  # noqa: ANN001
+        calls.append(1)
+        if len(calls) == 1:
+            return {"screen": "unknown", "metrics": {}}
+        return _parsed("generic_activity", {"steps": 8000}, conf=0.95,
+                       day=screens.local_date_of("Europe/Minsk"))
+
+    monkeypatch.setattr(screens, "parse_screenshot", fake_parse)
+    await _feed(dp, bot, _photo(bot, "shot-resend"))
+    assert db.execute("SELECT COUNT(*) c FROM activity_daily").fetchone()[0] == 0
+    await _feed(dp, bot, _photo(bot, "shot-resend"))
+    assert len(calls) == 2
+    assert db.execute("SELECT steps FROM activity_daily").fetchone()[0] == 8000
+    assert not any("уже записал" in t for t in session.texts)
+
+
 # ------------------------------------------------------------------ проводка
 
 def test_tracking_router_registered_and_help_mentions_phrases():

@@ -448,6 +448,7 @@ async def _screenshot_or_hint(msg: Message, db: sqlite3.Connection, user, image:
     """Картинка в чате без режима еды: в базу уходит только скриншот сна, активности или веса."""
     if not await _process_screenshot(msg, db, user, image.data, image.file_hash,
                                      image.photo_path, status):
+        repo.forget_file(db, user["id"], image.file_hash)     # ничего не записано: можно прислать снова
         await status.edit_text(NOT_A_SCREEN)
 
 
@@ -1028,13 +1029,18 @@ async def _process_screenshot(msg: Message, db: sqlite3.Connection, user,
         reason = "; ".join(verdict["reasons"])
         preview = " · ".join(str(v) for v in (parsed.get("raw_text") or [])[:6])
         pending_id = repo.save_pending_input(db, uid, "screenshot_confirm",
-                                             {"raw_id": raw_id, "parsed": parsed})
+                                             {"raw_id": raw_id, "parsed": parsed,
+                                              "file_hash": file_hash})
         await status.edit_text(
             f"Проверь скриншот: {reason}.\n{esc(preview[:500])}",
             reply_markup=_screenshot_confirm_kb(pending_id),
         )
         return True
-    await status.edit_text(_apply_screenshot(db, user, parsed, local_date, raw_id) or (
+    reply = _apply_screenshot(db, user, parsed, local_date, raw_id)
+    if reply is None:
+        # ничего не записано: повтор того же файла не должен упираться в «уже записал»
+        repo.forget_file(db, uid, file_hash)
+    await status.edit_text(reply or (
         "Не смог надёжно прочитать значения на скриншоте (нечитаемо или вне допустимых "
         "границ), ничего не записал. Пришли скриншот ещё раз, лучше целиком и без бликов."))
     return True
@@ -1146,9 +1152,13 @@ async def cb_screen_yes(cb: CallbackQuery, db: sqlite3.Connection) -> None:
 async def cb_screen_no(cb: CallbackQuery, db: sqlite3.Connection) -> None:
     user = _callback_user(cb, db)
     pending_id = int(cb.data.split(":")[1])
-    if not user or not repo.delete_pending_input(db, pending_id, user["id"]):
+    pending = repo.pending_input(db, pending_id, user["id"], "screenshot_confirm") if user else None
+    if not pending or not repo.delete_pending_input(db, pending_id, user["id"]):
         await cb.answer("Подтверждение уже неактуально", show_alert=True)
         return
+    file_hash = json.loads(pending["payload_json"]).get("file_hash")
+    if file_hash:
+        repo.forget_file(db, user["id"], file_hash)           # отклонил: этот же файл можно прислать заново
     await cb.message.edit_text("Не записывал данные скриншота.")
     await cb.answer()
 
