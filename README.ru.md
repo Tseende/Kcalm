@@ -15,6 +15,7 @@
 ![Mini App](https://img.shields.io/badge/Telegram-Mini_App-26A5E4?logo=telegram&logoColor=white)
 ![SQLite / Turso](https://img.shields.io/badge/SQLite-Turso-003B57?logo=sqlite&logoColor=white)
 ![Tests](https://img.shields.io/badge/tests-968_passed-brightgreen)
+![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
 </div>
 
@@ -157,6 +158,10 @@ python3 -m http.server 8770 --directory app/web/static
 - [docs/ONBOARDING.md](docs/ONBOARDING.md): онбординг
 - [docs/DEPLOY_RENDER.md](docs/DEPLOY_RENDER.md): деплой
 - [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md): чужой код и данные, которые используются в проекте
+
+## Лицензия
+
+[MIT](LICENSE)
 
 ## Важно
 

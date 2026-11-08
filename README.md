@@ -15,6 +15,7 @@ Reports, charts and tips live in a Mini App right inside Telegram.
 ![Mini App](https://img.shields.io/badge/Telegram-Mini_App-26A5E4?logo=telegram&logoColor=white)
 ![SQLite / Turso](https://img.shields.io/badge/SQLite-Turso-003B57?logo=sqlite&logoColor=white)
 ![Tests](https://img.shields.io/badge/tests-968_passed-brightgreen)
+![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
 </div>
 
@@ -159,6 +160,10 @@ The project docs are in Russian:
 - [docs/ONBOARDING.md](docs/ONBOARDING.md): onboarding
 - [docs/DEPLOY_RENDER.md](docs/DEPLOY_RENDER.md): deployment
 - [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md): third-party code and data used in the project
+
+## License
+
+[MIT](LICENSE)
 
 ## Disclaimer
 
