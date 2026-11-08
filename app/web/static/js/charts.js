@@ -1,3 +1,4 @@
+import { t, locale } from './i18n.js';
 // Tiny own SVG charts. Colours come from CSS (--ch custom property + classes).
 const NS = 'http://www.w3.org/2000/svg';
 
@@ -9,9 +10,9 @@ function s(tag, attrs, ...kids) {
 }
 
 const W = 360;
-const fmt = (v, d) => (Math.round(v * 10 ** d) / 10 ** d).toLocaleString('ru-RU', { maximumFractionDigits: d });
+const fmt = (v, d) => (Math.round(v * 10 ** d) / 10 ** d).toLocaleString(locale(), { maximumFractionDigits: d });
 
-function empty(text = 'Нет данных за этот период') {
+function empty(text = t('chart.empty')) {
   const d = document.createElement('div');
   d.className = 'chart-empty muted';
   d.textContent = text;
@@ -154,7 +155,7 @@ export function lineChart({ points, height = 190, decimals = 1, color = 'var(--c
   const yOf = (v) => pad.t + ih - ((v - lo) / (hi - lo)) * ih;
   const ticks = [];
   for (let t = lo; t <= hi + step / 1000; t += step) ticks.push(Math.round(t / step) * step);
-  const svg = s('svg', { viewBox: `0 0 ${W} ${height}`, class: 'chart', role: 'img', 'aria-label': 'График веса', style: `--ch:${color}` });
+  const svg = s('svg', { viewBox: `0 0 ${W} ${height}`, class: 'chart', role: 'img', 'aria-label': t('chart.weight'), style: `--ch:${color}` });
   const gid = uid('ag');
   svg.append(s('defs', null, s('linearGradient', { id: gid, x1: '0', y1: '0', x2: '0', y2: '1' },
     s('stop', { offset: '0', style: 'stop-color:var(--ch);stop-opacity:.3' }), s('stop', { offset: '1', style: 'stop-color:var(--ch);stop-opacity:0' }))));
@@ -163,7 +164,7 @@ export function lineChart({ points, height = 190, decimals = 1, color = 'var(--c
   const inRange = goal != null && goal >= lo && goal <= hi;
   if (inRange) {
     svg.append(s('line', { x1: pad.l, x2: W - pad.r, y1: yOf(goal), y2: yOf(goal), class: 'ch-target' }));
-    svg.append(s('text', { x: W - pad.r, y: yOf(goal) - 5, class: 'ch-axis ch-goal-label', 'text-anchor': 'end' }, `цель ${fmt(goal, decimals)}`));
+    svg.append(s('text', { x: W - pad.r, y: yOf(goal) - 5, class: 'ch-axis ch-goal-label', 'text-anchor': 'end' }, t('chart.goal', { v: fmt(goal, decimals) })));
   }
   const tIdx = points.map((p, i) => i).filter((i) => points[i].t !== null && points[i].t !== undefined);
   if (tIdx.length > 1) {
@@ -183,7 +184,7 @@ export function lineChart({ points, height = 190, decimals = 1, color = 'var(--c
   const items = points.map((p, i) => {
     const v = p.t !== null && p.t !== undefined ? p.t : p.y;
     if (v === null || v === undefined) return null;
-    const raw = p.y !== null && p.y !== undefined && p.t !== null && p.t !== undefined && Math.abs(p.y - p.t) >= 0.05 ? `взвешивание ${fmt(p.y, decimals)} ${unit}` : null;
+    const raw = p.y !== null && p.y !== undefined && p.t !== null && p.t !== undefined && Math.abs(p.y - p.t) >= 0.05 ? t('chart.weighin', { v: fmt(p.y, decimals), unit }) : null;
     return { x: x(i), y: yOf(v), lines: [`${p.label} · ${fmt(v, decimals)} ${unit}`.trim(), raw] };
   }).filter(Boolean);
   const wrap = interactive(svg, items, { t: pad.t, b: pad.t + ih });
@@ -259,7 +260,7 @@ export function stackedBars({ bars, height = 170, classes = ['p', 'f', 'c'], ani
       acc += v;
     });
     const [p, f, c] = b.parts;
-    items.push({ x: x(i), y: yOf(acc), lines: [b.label, `Б ${Math.round(p || 0)} · Ж ${Math.round(f || 0)} · У ${Math.round(c || 0)} г`] });
+    items.push({ x: x(i), y: yOf(acc), lines: [b.label, t('chart.macros', { p: Math.round(p || 0), f: Math.round(f || 0), c: Math.round(c || 0) })] });
   });
   return interactive(svg, items, { t: pad.t, b: pad.t + ih });
 }
@@ -271,7 +272,7 @@ export function ring({ value, max, size = 150, stroke = 14, color = 'var(--c-acc
   const c = 2 * Math.PI * r;
   const pct = max > 0 ? Math.min(1, Math.max(0, value / max)) : 0;
   const over = max > 0 && value > max * 1.0001;
-  const svg = s('svg', { viewBox: `0 0 ${size} ${size}`, width: size, height: size, class: 'ring', role: 'img', 'aria-label': `${Math.round(value)} из ${Math.round(max)}`, style: `--ch:${color}` });
+  const svg = s('svg', { viewBox: `0 0 ${size} ${size}`, width: size, height: size, class: 'ring', role: 'img', 'aria-label': t('chart.of', { a: Math.round(value), b: Math.round(max) }), style: `--ch:${color}` });
   svg.append(s('circle', { cx: size / 2, cy: size / 2, r, class: 'ring-track', 'stroke-width': stroke, fill: 'none' }));
   let strokeStyle = null;
   if (gradient) {
@@ -323,7 +324,7 @@ export function sparkline({ values, width = 120, height = 40, animate = false })
   const x = (i) => pad + (i * (width - 2 * pad)) / (v.length - 1);
   const y = (val) => pad + (height - 2 * pad) * (1 - (val - mn) / span);
   const d = v.map((val, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(val).toFixed(1)}`).join('');
-  const svg = s('svg', { viewBox: `0 0 ${width} ${height}`, class: 'spark', role: 'img', 'aria-label': 'Тренд веса' });
+  const svg = s('svg', { viewBox: `0 0 ${width} ${height}`, class: 'spark', role: 'img', 'aria-label': t('chart.trend') });
   svg.append(s('path', { d, class: 'ch-trend spark-line' + (animate ? ' ch-draw' : ''), pathLength: animate ? 1 : null }));
   svg.append(s('circle', { cx: x(v.length - 1), cy: y(v[v.length - 1]), r: 3, class: 'ch-last' }));
   return svg;

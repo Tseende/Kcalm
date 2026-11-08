@@ -1,5 +1,6 @@
 // Fetch wrapper for the Mini App <-> bot API (see docs/V2_API.md).
 import { mockRequest, mockCsv } from './mock.js';
+import { t } from './i18n.js';
 
 export const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
 export const inTelegram = !!(tg && tg.initData);
@@ -32,20 +33,20 @@ function errorFrom(status, data) {
   const code = (data && data.error) || 'http_' + status;
   let msg = data && data.message;
   if (!msg) {
-    if (status === 401) msg = 'Откройте приложение из Telegram, чтобы войти.';
-    else if (status === 403) msg = 'Нет доступа.';
-    else if (status === 404) msg = 'Не найдено.';
-    else if (status === 409 && code === 'not_onboarded') msg = 'Сначала пройдите настройку в чате с ботом.';
-    else if (status === 413) msg = 'Файл слишком большой. Попробуйте фото поменьше.';
-    else if (status === 422 || status === 400) msg = 'Проверьте введённые данные.';
-    else if (status === 429) msg = 'Слишком много запросов. Подождите немного.';
-    else if (status >= 500) msg = 'Ошибка на сервере. Попробуйте ещё раз чуть позже.';
-    else msg = 'Не получилось выполнить запрос.';
+    if (status === 401) msg = t('err.401');
+    else if (status === 403) msg = t('err.403');
+    else if (status === 404) msg = t('err.404');
+    else if (status === 409 && code === 'not_onboarded') msg = t('err.not_onboarded');
+    else if (status === 413) msg = t('err.413');
+    else if (status === 422 || status === 400) msg = t('err.400');
+    else if (status === 429) msg = t('err.429');
+    else if (status >= 500) msg = t('err.5xx');
+    else msg = t('err.generic');
   }
   const err = new ApiError(status, code, msg);
   if (status === 401 && inTelegram && code !== 'not_allowed') {   // not_allowed: человека нет в списке теста, это не устаревшая сессия
     err.expired = true;
-    err.message = 'Сессия устарела. Закройте и снова откройте приложение из чата.';
+    err.message = t('err.expired');
   }
   return err;
 }
@@ -76,7 +77,7 @@ async function request(method, path, { query, body, timeout = 30000 } = {}) {
   const ctrl = new AbortController();
   init.signal = ctrl.signal;
   const timer = setTimeout(() => ctrl.abort(), timeout);
-  const timedOut = () => new ApiError(0, 'timeout', 'Сервер слишком долго отвечает. Попробуйте ещё раз.');
+  const timedOut = () => new ApiError(0, 'timeout', t('err.timeout'));
   // Таймер снимается только после чтения тела: завис ответ посреди передачи — запрос всё равно оборвётся по таймауту.
   try {
     let res;
@@ -88,7 +89,7 @@ async function request(method, path, { query, body, timeout = 30000 } = {}) {
         return mockRequest(method, path, query || {}, body);
       }
       if (e && e.name === 'AbortError') throw timedOut();
-      throw new ApiError(0, 'network', 'Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.');
+      throw new ApiError(0, 'network', t('err.network'));
     }
     if (res.status === 204) {
       realOk = true;

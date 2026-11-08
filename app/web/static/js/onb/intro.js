@@ -1,6 +1,7 @@
 // Три слайда «что я умею»: свайп (scroll-snap) и живые анимации, которые играют, пока слайд на экране.
 import { h } from '../ui.js';
 import { onbImg, REDUCED } from './controls.js';
+import { t } from '../i18n.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const svg = (tag, attrs = {}) => {
@@ -30,18 +31,18 @@ function slidePhoto() {
       h('div', { class: 'onb-plate' }, onbImg('camera_plate', 84)),
       h('div', { class: 'onb-corners' }),
       h('div', { class: 'onb-scan' })),
-    ['Гречка 180 г', 'Котлета 2 шт', 'Салат'].map((t, i) => h('span', { class: 'onb-chip', style: { '--i': i } }, t)),
-    h('span', { class: 'onb-kcal' }, '≈ ', num, ' ккал')));
+    [t('onb.chip1'), t('onb.chip2'), t('onb.chip3')].map((x, i) => h('span', { class: 'onb-chip', style: { '--i': i } }, x)),
+    h('span', { class: 'onb-kcal' }, '≈ ', num, ' ' + t('unit.kcal'))));
   return { el, ms: 4000, run: (later) => { num.textContent = REDUCED ? '640' : '0'; later(1300, () => countTo(num, 640, 1300)); } };
 }
 
 function slideChat() {
   const el = h('div', { class: 'onb-vis' }, h('div', { class: 'onb-chat' },
-    h('div', { class: 'onb-msg user' }, 'Опять тянет на сладкое 😩'),
+    h('div', { class: 'onb-msg user' }, t('onb.chat_user')),
     h('div', { class: 'onb-slot' },
       h('div', { class: 'onb-typing', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')),
-      h('div', { class: 'onb-msg bot' }, 'Давай разберёмся: это голод или усталость? Ты сегодня съела 1450 из 1900 ккал — можно спокойно перекусить')),
-    h('div', { class: 'onb-opts' }, ['Голод', 'Скучно', 'Устала'].map((t, i) => h('span', { class: 'onb-opt', style: { '--i': i } }, t)))));
+      h('div', { class: 'onb-msg bot' }, t('onb.chat_bot'))),
+    h('div', { class: 'onb-opts' }, [t('onb.opt1'), t('onb.opt2'), t('onb.opt3')].map((x, i) => h('span', { class: 'onb-opt', style: { '--i': i } }, x)))));
   return { el, ms: 7500, run: () => {} };
 }
 
@@ -56,28 +57,28 @@ function slideChart() {
   ring.append(svg('circle', { cx: '18', cy: '18', r: '15.915', class: 'bg' }),
     svg('circle', { cx: '18', cy: '18', r: '15.915', class: 'fg', pathLength: '100' }));
   const el = h('div', { class: 'onb-vis' }, h('div', { class: 'onb-chartcard' },
-    h('span', { class: 'onb-badge-kg' }, '−3,2 кг'),
+    h('span', { class: 'onb-badge-kg' }, t('onb.badge_kg')),
     svgEl,
-    h('div', { class: 'onb-ringrow' }, ring, h('div', { class: 'onb-ringtxt' }, h('b', null, '1 450 ккал'), h('span', null, 'из 1 900 на сегодня')))));
+    h('div', { class: 'onb-ringrow' }, ring, h('div', { class: 'onb-ringtxt' }, h('b', null, t('onb.ring_b')), h('span', null, t('onb.ring_s'))))));
   return { el, ms: 5500, run: () => {} };
 }
 
 /** Возвращает {el, index(), goTo(i), cleanup()}; onIndex(i) вызывается при смене слайда. */
 export function intro({ name, onIndex }) {
   const defs = [
-    { img: 'camera_plate', title: 'Сфотографируйте тарелку — остальное сделаю я', sub: 'Калории и БЖУ по фото, тексту или голосовому. Без весов и поиска по базе.', vis: slidePhoto() },
-    { img: 'night_tea', title: 'Поддержу, когда вечером тянет к холодильнику', sub: 'Напишите «хочу сладкого» — разберёмся вместе, без запретов и стыда.', vis: slideChat() },
-    { img: 'chart_down', title: 'Видно, что всё работает', sub: 'Вес, сон, шаги и вода в одном месте. Вечером — итог дня, в воскресенье — разбор недели.', vis: slideChart() },
+    { img: 'camera_plate', title: t('onb.s1_title'), sub: t('onb.s1_sub'), vis: slidePhoto() },
+    { img: 'night_tea', title: t('onb.s2_title'), sub: t('onb.s2_sub'), vis: slideChat() },
+    { img: 'chart_down', title: t('onb.s3_title'), sub: t('onb.s3_sub'), vis: slideChart() },
   ];
-  const slides = defs.map((d, i) => h('section', { class: 'onb-slide', 'aria-roledescription': 'слайд', 'aria-label': `${i + 1} из ${defs.length}` },
+  const slides = defs.map((d, i) => h('section', { class: 'onb-slide', 'aria-roledescription': t('onb.slide'), 'aria-label': t('onb.slide_n', { i: i + 1, n: defs.length }) },
     h('div', { class: 'onb-head' },
-      i === 0 && name ? h('div', { class: 'onb-hello' }, `Привет, ${name}!`) : null,
+      i === 0 && name ? h('div', { class: 'onb-hello' }, t('onb.hello', { name })) : null,
       onbImg(d.img, 72),
       h('h1', { class: 'onb-title' }, d.title),
       h('p', { class: 'onb-sub' }, d.sub)),
     d.vis.el));
   const dots = defs.map(() => h('span', { class: 'onb-dot' }));
-  const car = h('div', { class: 'onb-car', role: 'group', 'aria-label': 'Что умеет бот' }, slides);
+  const car = h('div', { class: 'onb-car', role: 'group', 'aria-label': t('onb.car_aria') }, slides);
   const el = h('div', { class: 'onb-intro', style: { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0' } }, car, h('div', { class: 'onb-dots' }, dots));
 
   let cur = -1;

@@ -1,5 +1,6 @@
 // Сканер штрихкода камерой. BarcodeDetector, если он есть (Android), иначе ZXing (iOS WebView его не имеет).
 import { h, icon, haptic } from './ui.js';
+import { t } from './i18n.js';
 
 const FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e'];
 let zxLoading = null;
@@ -11,7 +12,7 @@ function loadZX() {
       const s = document.createElement('script');
       s.src = 'vendor/zxing.min.js?v=1';
       s.onload = () => resolve(window.ZXing);
-      s.onerror = () => { zxLoading = null; reject(new Error('Не удалось загрузить сканер')); };
+      s.onerror = () => { zxLoading = null; reject(new Error(t('scan.loadfail'))); };
       document.head.append(s);
     });
   }
@@ -83,14 +84,14 @@ export function scanBarcode() {
     const video = h('video', { class: 'scan-video', muted: true, autoplay: true });
     video.setAttribute('playsinline', '');
     video.muted = true;
-    const hint = h('div', { class: 'scan-hint', 'aria-live': 'polite' }, 'Наведите камеру на штрихкод');
-    const torch = h('button', { class: 'scan-btn round', type: 'button', hidden: true, 'aria-label': 'Фонарик' }, icon('bolt', 22));
-    const overlay = h('div', { class: 'scan', role: 'dialog', 'aria-label': 'Сканер штрихкода' },
+    const hint = h('div', { class: 'scan-hint', 'aria-live': 'polite' }, t('scan.hint'));
+    const torch = h('button', { class: 'scan-btn round', type: 'button', hidden: true, 'aria-label': t('scan.torch') }, icon('bolt', 22));
+    const overlay = h('div', { class: 'scan', role: 'dialog', 'aria-label': t('scan.title') },
       video,
-      h('div', { class: 'scan-top' }, h('button', { class: 'scan-btn round', type: 'button', 'aria-label': 'Закрыть', onclick: () => finish(null) }, icon('close', 22)), torch),
+      h('div', { class: 'scan-top' }, h('button', { class: 'scan-btn round', type: 'button', 'aria-label': t('common.close'), onclick: () => finish(null) }, icon('close', 22)), torch),
       h('div', { class: 'scan-frame' }, h('i', { class: 'scan-line' })),
       hint,
-      h('div', { class: 'scan-bar' }, h('button', { class: 'scan-btn', type: 'button', onclick: () => finish({ manual: true }) }, 'Ввести цифры вручную')));
+      h('div', { class: 'scan-bar' }, h('button', { class: 'scan-btn', type: 'button', onclick: () => finish({ manual: true }) }, t('scan.manual'))));
     document.body.append(overlay);
 
     function finish(result) {
@@ -132,7 +133,7 @@ export function scanBarcode() {
             if (code && validBarcode(code)) { haptic('success'); finish({ code }); return; }
           } catch (e) { /* кадр не распознан */ }
         }
-        if (Date.now() - started > 12000) hint.textContent = 'Не читается? Поднесите ближе, добавьте света или введите цифры вручную';
+        if (Date.now() - started > 12000) hint.textContent = t('scan.slow');
         timer = setTimeout(tick, 160);
       };
       tick();

@@ -2,6 +2,7 @@
 import { h, icon, haptic, fmtN, fmtKcal, longDate } from '../ui.js';
 import { onbImg, REDUCED } from './controls.js';
 import { countTo } from './intro.js';
+import { t, locale } from '../i18n.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const svgEl = (tag, attrs = {}) => {
@@ -14,11 +15,11 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Экран «Считаю вашу норму». run() — запрос; экран держится не меньше 1,8 с. Возвращает {el, done: Promise}. */
 export function calcView(run) {
-  const rows = ['Обмен веществ по формуле IOM', 'Поправка на активность', 'Безопасный темп'];
-  const checks = rows.map((t) => h('div', { class: 'onb-check' }, h('span', { class: 'ok' }, icon('check', 14)), t));
+  const rows = [t('onb.calc1'), t('onb.calc2'), t('onb.calc3')];
+  const checks = rows.map((x) => h('div', { class: 'onb-check' }, h('span', { class: 'ok' }, icon('check', 14)), x));
   const el = h('div', { class: 'onb-step onb-calc', 'aria-live': 'polite' },
     h('div', { class: 'onb-spinwrap' }, h('div', { class: 'onb-spinring' }), onbImg('scale', 64)),
-    h('h1', { class: 'onb-title' }, 'Считаю вашу норму'),
+    h('h1', { class: 'onb-title' }, t('onb.calc_title')),
     h('div', { class: 'onb-checks' }, checks));
   checks.forEach((c, i) => setTimeout(() => c.classList.add('on'), REDUCED ? 0 : 250 + i * 520));
   const done = Promise.all([run(), wait(REDUCED ? 0 : MIN_CALC_MS)]).then(([r]) => r);
@@ -49,10 +50,10 @@ function goalChart(a, data) {
   const y0 = lose ? 14 : 40, y1 = lose ? 62 : 40;
   const path = svgEl('path', { d: `M12 ${y0} C 110 ${y0 + (lose ? 4 : 0)}, 190 ${y1 - (lose ? 4 : 0)}, 288 ${y1}`, class: 'line', pathLength: '1' });
   s.append(path, svgEl('circle', { cx: 12, cy: y0, r: 6, class: 'pt' }), svgEl('circle', { cx: 288, cy: y1, r: 6, class: 'pt' }));
-  const left = h('span', null, h('small', null, 'Сейчас'), h('b', null, fmtN(a.weight_kg) + ' кг'));
+  const left = h('span', null, h('small', null, t('onb.now')), h('b', null, fmtN(a.weight_kg) + ' ' + t('unit.kg')));
   const right = lose
-    ? h('span', null, h('small', null, longDate(data.goal_date)), h('b', null, fmtN(a.goal_weight_kg) + ' кг'))
-    : h('span', null, h('small', null, 'Цель'), h('b', null, 'Держим вес'));
+    ? h('span', null, h('small', null, longDate(data.goal_date)), h('b', null, fmtN(a.goal_weight_kg) + ' ' + t('unit.kg')))
+    : h('span', null, h('small', null, t('onb.goal')), h('b', null, t('onb.keep')));
   return { el: h('div', { class: 'onb-goalcard' }, s, h('div', { class: 'onb-goalrow' }, left, right)), path };
 }
 
@@ -61,33 +62,33 @@ function goalChart(a, data) {
  * Возвращает {el, play()}: play() запускает конфетти, счётчик и заполнение полосок.
  */
 export function resultView(a, data, { care }) {
-  const t = data.targets || {};
-  const num = h('b', null, REDUCED ? fmtKcal(t.kcal) : '0');
+  const tg = data.targets || {};
+  const num = h('b', null, REDUCED ? fmtKcal(tg.kcal) : '0');
   const norm = care
-    ? h('div', { class: 'onb-norm' }, h('div', { class: 'care' }, 'Норма рассчитана, цифры спрячу'))
-    : h('div', { class: 'onb-norm' }, h('small', null, 'Ваша норма'), num, h('span', { class: 'unit' }, 'ккал в день'));
-  const kcal = Math.max(1, t.kcal || 1);
+    ? h('div', { class: 'onb-norm' }, h('div', { class: 'care' }, t('onb.care_norm')))
+    : h('div', { class: 'onb-norm' }, h('small', null, t('onb.norm')), num, h('span', { class: 'unit' }, t('onb.kcal_day')));
+  const kcal = Math.max(1, tg.kcal || 1);
   const macro = (label, g, kcalPerG, color) => {
     const bar = h('i');
     bar.style.setProperty('--col', color);
     bar.style.setProperty('--w', Math.min(1, (g * kcalPerG) / kcal).toFixed(2));
-    return { bar, row: h('div', { class: 'onb-mac' }, h('span', null, label), h('div', { class: 'onb-mac-bar' }, bar), h('b', null, `${Math.round(g)} г`)) };
+    return { bar, row: h('div', { class: 'onb-mac' }, h('span', null, label), h('div', { class: 'onb-mac-bar' }, bar), h('b', null, `${Math.round(g)} ${t('unit.g')}`)) };
   };
-  const m = [macro('Белки', t.protein, 4, 'var(--c-p)'), macro('Жиры', t.fat, 9, 'var(--c-f)'), macro('Углеводы', t.carbs, 4, 'var(--c-c)')];
+  const m = [macro(t('onb.protein'), tg.protein, 4, 'var(--c-p)'), macro(t('onb.fat'), tg.fat, 9, 'var(--c-f)'), macro(t('onb.carbs'), tg.carbs, 4, 'var(--c-c)')];
   const macros = care ? null : h('div', { class: 'onb-macros' }, m.map((x) => x.row),
-    t.water_ml ? h('div', { class: 'onb-water' }, icon('droplet', 18), `Вода: около ${t.water_ml.toLocaleString('ru-RU')} мл в день`) : null);
+    tg.water_ml ? h('div', { class: 'onb-water' }, icon('droplet', 18), t('onb.water', { v: tg.water_ml.toLocaleString(locale()) })) : null);
   const chart = care ? null : goalChart(a, data);
   const notes = (data.notes || []).map((n) => h('div', { class: 'onb-note' }, n));
   const el = h('div', { class: 'onb-step onb-res' },
-    h('div', { class: 'onb-head' }, onbImg('party', 88), h('h1', { class: 'onb-title' }, 'Готово!')),
+    h('div', { class: 'onb-head' }, onbImg('party', 88), h('h1', { class: 'onb-title' }, t('onb.ready'))),
     norm, macros, chart ? chart.el : null, notes,
-    h('p', { class: 'onb-legal' }, 'Это не медицинский сервис, оценки приблизительные. Если вы беременны, кормите грудью, есть диабет или расстройство пищевого поведения — обсудите похудение с врачом.'));
+    h('p', { class: 'onb-legal' }, t('onb.legal')));
   const timers = [];
   function play() {
     haptic('success');
     if (REDUCED) { m.forEach((x) => x.bar.classList.add('on')); if (chart) chart.path.classList.add('on'); return; }
     el.append(confetti());
-    if (!care) countTo(num, t.kcal, 900, (n) => fmtKcal(n));
+    if (!care) countTo(num, tg.kcal, 900, (n) => fmtKcal(n));
     m.forEach((x, i) => timers.push(setTimeout(() => x.bar.classList.add('on'), 500 + i * 180)));
     if (chart) timers.push(setTimeout(() => chart.path.classList.add('on'), 900));
   }

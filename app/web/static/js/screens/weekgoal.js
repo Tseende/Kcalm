@@ -1,8 +1,9 @@
 // Weekly mini-goal card: pick one habit for the week, progress is counted from the diary.
 import { api } from '../api.js';
-import { h, icon, glyph, toast, haptic, nav, sectionTitle, plural } from '../ui.js';
+import { h, icon, glyph, toast, haptic, nav, sectionTitle } from '../ui.js';
+import { t, tn } from '../i18n.js';
 
-const days = (n) => plural(n, 'день', 'дня', 'дней').replace(/^-?\d+ /, '');
+const days = (n) => tn('wg.days', n).replace(/^-?\d+ /, '');
 
 // Celebrate once per week, on whichever screen first sees the goal done. Storage may be unavailable.
 function celebrateOnce(g, weekStart, el) {
@@ -13,7 +14,7 @@ function celebrateOnce(g, weekStart, el) {
   } catch (e) { /* private mode: celebrate anyway, at worst twice */ }
   haptic('success');
   el.classList.add('celebrate');
-  toast(`Цель недели выполнена: ${g.title.toLowerCase()} ${g.done} из ${g.target}`, 'ok');
+  toast(t('wg.done_toast', { title: g.title.toLowerCase(), a: g.done, b: g.target }), 'ok');
 }
 
 // Была ли цель при прошлом показе: решает, рисовать ли заглушку на «Сегодня» (без цели блока нет, и заглушка «прыгала» бы).
@@ -47,7 +48,7 @@ export function weekGoalBlock(ctx, { withRecap = false, compact = false } = {}) 
   const clear = () => act(() => api.del('/week-goal'));
 
   function dots(g) {
-    return h('div', { class: 'wg-dots', role: 'img', 'aria-label': `${g.done} из ${g.target} ${days(g.target)}` },
+    return h('div', { class: 'wg-dots', role: 'img', 'aria-label': t('wg.dots_aria', { a: g.done, b: g.target, d: days(g.target) }) },
       g.cells.map((c) => h('span', { class: 'wg-dot ' + c.state })));
   }
 
@@ -57,30 +58,30 @@ export function weekGoalBlock(ctx, { withRecap = false, compact = false } = {}) 
         glyph(g.icon, 36),
         h('div', { class: 'grow' },
           h('div', { class: 'row-title' }, g.title),
-          h('div', { class: 'muted small' }, `${g.target} ${days(g.target)} из 7`)),
+          h('div', { class: 'muted small' }, t('wg.of7', { n: g.target, d: days(g.target) }))),
         h('b', { class: 'wg-count' }, `${g.done}/${g.target}`)),
       dots(g),
       h('div', { class: 'small' }, g.message),
       h('div', { class: 'muted small' }, g.hint),
-      h('button', { class: 'btn-link small', type: 'button', onclick: clear }, 'Выбрать другую'));
+      h('button', { class: 'btn-link small', type: 'button', onclick: clear }, t('wg.change')));
   }
 
   function optionsCard(options) {
     return h('section', { class: 'card wg-card' },
-      h('div', { class: 'row-title' }, 'Цель на эту неделю'),
-      h('div', { class: 'muted small' }, 'Одна простая привычка. Планка выбрана чуть выше того, что получилось на прошлой неделе.'),
+      h('div', { class: 'row-title' }, t('wg.this_week')),
+      h('div', { class: 'muted small' }, t('wg.pick_hint')),
       h('div', { class: 'stack-sm' }, options.map((o) => h('button', { class: 'wg-opt', type: 'button', onclick: () => choose(o) },
         glyph(o.icon, 36),
-        h('span', { class: 'grow' }, h('b', null, o.title), h('span', { class: 'muted small wg-sub' }, `${o.target} ${days(o.target)} из 7`)),
+        h('span', { class: 'grow' }, h('b', null, o.title), h('span', { class: 'muted small wg-sub' }, t('wg.of7', { n: o.target, d: days(o.target) }))),
         icon('next', 16)))));
   }
 
   function recapCard(r) {
-    const kids = [sectionTitle('Итог прошлой недели')];
+    const kids = [sectionTitle(t('wg.recap'))];
     const rows = [];
     if (r.goal) {
       rows.push(h('div', { class: 'an-item' }, h('span', { class: 'an-mark ' + (r.goal.achieved ? 'good' : '') }, icon(r.goal.achieved ? 'check' : 'target', 16)),
-        h('span', null, `${r.goal.title} ${r.goal.done} дн. из 7 — цель (${r.goal.target}) ` + (r.goal.achieved ? 'выполнена' : 'не взялась, это нормально'))));
+        h('span', null, t('wg.recap_line', { title: r.goal.title, done: r.goal.done, target: r.goal.target, res: r.goal.achieved ? t('wg.achieved') : t('wg.missed') }))));
     }
     r.good.forEach((g) => rows.push(h('div', { class: 'an-item' }, h('span', { class: 'an-mark good' }, icon('check', 16)), h('span', null, g))));
     kids.push(h('div', { class: 'card an-list' }, rows));
@@ -93,10 +94,10 @@ export function weekGoalBlock(ctx, { withRecap = false, compact = false } = {}) 
     if (!g) {
       return h('button', { class: 'card wg-strip', type: 'button', onclick: open },
         h('span', { class: 'wg-ico wg-ico-line', 'aria-hidden': 'true' }, icon('target', 20)),
-        h('span', { class: 'grow' }, h('span', { class: 'row-title' }, 'Цель на неделю'), h('span', { class: 'muted small wg-sub' }, 'Выберите одну привычку')),
+        h('span', { class: 'grow' }, h('span', { class: 'row-title' }, t('wg.strip')), h('span', { class: 'muted small wg-sub' }, t('wg.strip_hint'))),
         icon('next', 16));
     }
-    return h('button', { class: 'card wg-strip' + (g.achieved ? ' achieved' : ''), type: 'button', onclick: open, 'aria-label': `Цель недели: ${g.title}, ${g.done} из ${g.target}` },
+    return h('button', { class: 'card wg-strip' + (g.achieved ? ' achieved' : ''), type: 'button', onclick: open, 'aria-label': t('wg.strip_aria', { title: g.title, a: g.done, b: g.target }) },
       h('span', { class: 'wg-ico wg-ico-line' + (g.achieved ? ' done' : ''), 'aria-hidden': 'true' }, icon(g.achieved ? 'check' : 'target', 20)),
       h('span', { class: 'grow wg-strip-main' }, h('span', { class: 'row-title' }, g.title), dots(g)),
       h('b', { class: 'wg-count' }, `${g.done}/${g.target}`));

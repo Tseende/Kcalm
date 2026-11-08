@@ -4,9 +4,10 @@ import { weekGoalBlock } from './weekgoal.js';
 import { ring, sparkline } from '../charts.js';
 import { onbImg } from '../onb/controls.js';
 import { h, icon, tile, glyph, nav, segmented, shortDate, fmtN, skeletonCards, holdHeight, emptyState, errorState, sectionTitle, todayISO, dateSwitch, countUp, staggerIn, reducedMotion, heroCard, progressBar, statTile } from '../ui.js';
+import { t } from '../i18n.js';
 
 let curDate = todayISO();
-const PERIODS = [['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц']];
+const PERIODS = [['day', t('an.p_day')], ['week', t('stats.r_week')], ['month', t('stats.r_month')]];
 function loadPeriod() { try { const v = localStorage.getItem('an_period'); return PERIODS.some((x) => x[0] === v) ? v : 'day'; } catch (e) { return 'day'; } }
 function savePeriod(v) { try { localStorage.setItem('an_period', v); } catch (e) { /* ignore */ } }
 
@@ -14,7 +15,7 @@ function savePeriod(v) { try { localStorage.setItem('an_period', v); } catch (e)
 function statusChips(items) {
   const n = { good: 0, ok: 0, bad: 0 };
   items.forEach((m) => { if (n[m.status] !== undefined) n[m.status] += 1; });
-  const defs = [['good', 'в норме'], ['ok', 'почти'], ['bad', 'поправить']].filter(([k]) => n[k]);
+  const defs = [['good', t('stats.lg_ok')], ['ok', t('an.chip_ok')], ['bad', t('an.chip_bad')]].filter(([k]) => n[k]);
   if (!defs.length) return null;
   return h('div', { class: 'an-chips' }, defs.map(([k, t]) => h('span', { class: 'an-chip ' + k }, h('b', null, String(n[k])), t)));
 }
@@ -52,8 +53,8 @@ function heroVerdict(items, title, sub, extra) {
 function numOf(str) {
   if (str == null) return null;
   const t = String(str).replace(/[  ]/g, ' ');
-  const hm = t.match(/(\d+)\+?\s*ч(?![а-я])/);
-  const mm = t.match(/(\d+)\s*мин/) || t.match(/(\d+)\s*м(?![а-я])/);
+  const hm = t.match(/(\d+)\+?\s*(?:ч|h)(?![а-яa-z])/);
+  const mm = t.match(/(\d+)\s*(?:мин|min)/) || t.match(/(\d+)\s*(?:м|m)(?![а-яa-z])/);
   if (hm || mm) return (hm ? +hm[1] * 60 : 0) + (mm ? +mm[1] : 0);
   const m = t.replace(/(\d)\s+(?=\d)/g, '$1').replace(',', '.').match(/\d+(\.\d+)?/);
   return m ? parseFloat(m[0]) : null;
@@ -78,12 +79,12 @@ const tipCard = (t) => h('div', { class: 'card an-tip' }, glyph(t.icon, 36), h('
 function moreTips(list, shown = 3) {
   const box = h('div', { class: 'stack-sm' }, list.slice(0, shown).map(tipCard));
   if (list.length <= shown) return box;
-  const btn = h('button', { class: 'an-more', type: 'button', onclick: () => { box.append(...list.slice(shown).map(tipCard)); btn.remove(); } }, `Показать ещё ${list.length - shown}`);
+  const btn = h('button', { class: 'an-more', type: 'button', onclick: () => { box.append(...list.slice(shown).map(tipCard)); btn.remove(); } }, t('an.more', { n: list.length - shown }));
   box.append(btn);
   return box;
 }
 const pills = (good) => h('div', { class: 'pills' }, good.map((g) => h('span', { class: 'pill-good' }, h('span', { class: 'pill-ck' }, icon('check', 13)), g)));
-const signed = (v, d = 1) => (v > 0 ? '+' : v < 0 ? '−' : '') + fmtN(Math.abs(v), d) + ' кг';
+const signed = (v, d = 1) => (v > 0 ? '+' : v < 0 ? '−' : '') + fmtN(Math.abs(v), d) + ' ' + t('unit.kg');
 
 const TILE_ICON = {
   kcal: ['tools-kitchen', 'orange'], protein: ['egg-fried', 'blue'], water: ['droplet', 'teal'],
@@ -98,7 +99,7 @@ export default async function render(root, ctx) {
   let period = loadPeriod();
   const sw = dateSwitch(curDate, (d) => { curDate = d; load(); });
   const dateRow = sw.el;
-  const seg = segmented(PERIODS, period, (v) => { period = v; savePeriod(v); sync(); load(); }, 'Период анализа');
+  const seg = segmented(PERIODS, period, (v) => { period = v; savePeriod(v); sync(); load(); }, t('an.period'));
   view.append(seg, dateRow, body);
   const sync = () => { dateRow.hidden = period !== 'day'; };
   sync();
@@ -143,25 +144,25 @@ export default async function render(root, ctx) {
   }
 
   function drawPeriod(a) {
-    const word = a.period === 'week' ? 'неделю' : 'месяц';
+    const word = a.period === 'week' ? t('an.word_week') : t('an.word_month');
     const nb = (t) => t.replace(/ /g, '\u00A0');   // «6 нояб.» не рвётся на две строки
     const range = `${nb(shortDate(a.from))} — ${nb(shortDate(a.to))}`;
     if (!a.logged_days) {
-      body.replaceChildren(emptyState('sparkles', 'Пока мало данных', `За ${word} нет записей о еде. Записывайте приёмы пищи, и здесь появится разбор по всем показателям.`,
-        h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => nav.go('/add/meal') }, 'Добавить приём пищи')));
+      body.replaceChildren(emptyState('sparkles', t('stats.empty_title'), t('an.no_food', { w: word }),
+        h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => nav.go('/add/meal') }, t('an.add_meal'))));
       return;
     }
-    const kids = [heroVerdict(a.metrics, a.headline, [`Разбор за ${word}`, h('span', { class: 'an-hero-range' }, range)])];
-    if (a.focus) kids.push(focusCard(a.period === 'week' ? 'Главное на следующую неделю' : 'Главное на ближайшее время', a.focus));
+    const kids = [heroVerdict(a.metrics, a.headline, [t('an.review', { w: word }), h('span', { class: 'an-hero-range' }, range)])];
+    if (a.focus) kids.push(focusCard(a.period === 'week' ? t('an.focus_week') : t('an.focus_month'), a.focus));
     if (a.metrics.length) {
-      kids.push(sectionTitle('Показатели'),
+      kids.push(sectionTitle(t('an.metrics')),
         h('div', { class: 'stat-grid' }, a.metrics.map((m, i) => {
           const [ic, col] = TILE_ICON[m.key] || ['sparkles', 'blue'];
           let bar = null; let st = m.status;
           const goalTxt = m.key === 'logged' ? null : m.goal;
-          const cap = [goalTxt, m.note && m.note.replace(/^(цель достигнута|в норме)\s+/, '')].filter(Boolean).join(' · ') || null;
+          const cap = [goalTxt, m.note && m.note.replace(/^(цель достигнута|в норме|goal reached|on target)\s+/, '')].filter(Boolean).join(' · ') || null;
           const t = statTile({ icon: ic, color: col, title: m.label, value: m.value, status: BAR_STATUS[st] || 'none',
-            delta: m.delta ? h('span', { class: 'chip-delta ' + m.delta.dir }, m.delta.text.replace(' к прошлому', '')) : null, caption: cap });
+            delta: m.delta ? h('span', { class: 'chip-delta ' + m.delta.dir }, m.delta.text.replace(' к прошлому', '').replace(' vs previous', '')) : null, caption: cap });
           if (m.key === 'logged') { const mm = String(m.value).match(/(\d+)\D+(\d+)/); if (mm) bar = progressBar(+mm[1], +mm[2], { status: BAR_STATUS[st] || 'good' }); } else if (m.key !== 'rhythm') bar = metricBar(m.value, m.goal, st, i);
           if (bar) t.insertBefore(bar, t.querySelector('.stat-tile-foot'));
           return t;
@@ -170,56 +171,56 @@ export default async function render(root, ctx) {
     const w = a.weight;
     if (w && w.change != null) {
       const toGoal = w.remaining != null && w.goal != null
-        ? (Math.abs(w.remaining) < 0.2 ? 'Цель достигнута' : `До цели ${fmtN(Math.abs(w.remaining), 1)} кг` + (w.eta_weeks ? `, при таком темпе ≈ ${w.eta_weeks} нед.` : ''))
+        ? (Math.abs(w.remaining) < 0.2 ? t('stats.goal_reached') : t('an.to_goal', { v: fmtN(Math.abs(w.remaining), 1) }) + (w.eta_weeks ? t('an.eta', { n: w.eta_weeks }) : ''))
         : null;
       const spark = w.points.length < 3 ? null : sparkline({ values: w.points.map((p) => p.v), width: 120, height: 48, animate: !reducedMotion() });
-      kids.push(sectionTitle('Вес'),
+      kids.push(sectionTitle(t('add.weight')),
         h('section', { class: 'card an-weight' },
           h('div', { class: 'an-w-top' },
-            h('div', null, h('div', { class: 'an-w-val' }, signed(w.change)), h('div', { class: 'muted small' }, `тренд за период · ${signed(w.per_week, 2)} в нед.`)),
+            h('div', null, h('div', { class: 'an-w-val' }, signed(w.change)), h('div', { class: 'muted small' }, t('an.w_trend', { v: signed(w.per_week, 2) }))),
             spark ? h('div', { class: 'an-w-spark' }, spark) : null),
           toGoal ? h('div', { class: 'an-w-goal' }, toGoal) : null,
-          w.expected_change != null ? h('div', { class: 'muted small' }, `По записанной еде ожидалось около ${signed(w.expected_change)}`) : null,
+          w.expected_change != null ? h('div', { class: 'muted small' }, t('an.w_expected', { v: signed(w.expected_change) })) : null,
           h('button', { class: 'an-w-link', type: 'button', onclick: () => {
             try { localStorage.setItem('stats_range', a.period === 'week' ? 'week' : 'month'); } catch (e) { /* ignore */ }
             nav.go('/stats');
-          } }, 'График', icon('next', 16))));
+          } }, t('an.chart'), icon('next', 16))));
     } else if (w && w.weighins) {
-      kids.push(sectionTitle('Вес'), h('div', { class: 'card an-tip' }, 'Взвешиваний пока мало: для тренда нужно хотя бы два замера за период.'));
+      kids.push(sectionTitle(t('add.weight')), h('div', { class: 'card an-tip' }, t('an.few_weighins')));
     }
-    if (a.good.length) kids.push(sectionTitle('Что получилось'), pills(a.good));
+    if (a.good.length) kids.push(sectionTitle(t('an.good')), pills(a.good));
     if (a.patterns.length) {
-      kids.push(sectionTitle('Закономерности'),
+      kids.push(sectionTitle(t('an.patterns')),
         h('div', { class: 'stack-sm' }, a.patterns.map((t) => h('div', { class: 'card an-tip an-pattern' }, glyph(t.icon, 36),
           h('div', { class: 'an-tip-body' }, h('div', { class: 'an-tip-title' }, t.title), h('div', null, t.text))))));
     }
-    if (a.tips.length) kids.push(sectionTitle('Что поправить'), moreTips(a.tips));
+    if (a.tips.length) kids.push(sectionTitle(t('an.fix')), moreTips(a.tips));
     if (a.logged_days < Math.ceil(a.days / 2)) {
-      kids.push(h('div', { class: 'muted small an-foot' }, 'Записей немного, поэтому выводы приблизительные.'));
+      kids.push(h('div', { class: 'muted small an-foot' }, t('an.few_entries')));
     }
     body.replaceChildren(...kids);
     staggerIn(body, kids);
   }
 
   function draw(a) {
-    const kids = [heroVerdict(a.rows, a.headline, a.closed ? 'Итог дня по записям и данным браслета' : 'День ещё идёт: недобор пока не считаем')];
+    const kids = [heroVerdict(a.rows, a.headline, a.closed ? t('an.closed') : t('an.open'))];
 
     if (a.rows.length) {
       kids.push(h('div', { class: 'card an-rows2' }, a.rows.map((r, i) => h('div', { class: 'an2-row' },
         h('div', { class: 'an2-top' },
           h('span', { class: 'an-ico ' + r.status }, glyph(r.label, 30)),
           h('span', { class: 'an-label' }, r.label),
-          h('span', { class: 'an2-val' }, r.value, r.status === 'none' ? null : h('span', { class: 'muted small' }, ' из ' + r.goal))),
+          h('span', { class: 'an2-val' }, r.value, r.status === 'none' ? null : h('span', { class: 'muted small' }, t('an.of') + r.goal))),
         metricBar(r.value, r.goal, r.status, i)))));
     }
-    if (a.good.length) kids.push(sectionTitle('Что получилось'), pills(a.good));
+    if (a.good.length) kids.push(sectionTitle(t('an.good')), pills(a.good));
     if (a.tips.length) {
-      kids.push(focusCard('Главное на завтра', a.tips[0]));
-      if (a.tips.length > 1) kids.push(sectionTitle('Ещё поправить'), moreTips(a.tips.slice(1)));
+      kids.push(focusCard(t('an.focus_tomorrow'), a.tips[0]));
+      if (a.tips.length > 1) kids.push(sectionTitle(t('an.more_fix')), moreTips(a.tips.slice(1)));
     }
     if (!a.good.length && !a.tips.length) {
-      kids.push(emptyState('sparkles', 'Пока нечего анализировать', 'Запишите еду, воду и сон, и здесь появится разбор дня.',
-        h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => nav.go('/add/meal') }, 'Добавить приём пищи')));
+      kids.push(emptyState('sparkles', t('an.nothing'), t('an.nothing_text'),
+        h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => nav.go('/add/meal') }, t('an.add_meal'))));
     }
     if (curDate === todayISO()) kids.push(weekGoalBlock(ctx, { withRecap: true }));
     body.replaceChildren(...kids);

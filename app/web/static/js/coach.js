@@ -5,6 +5,7 @@
 // Запускается из main.js после каждого render(): coach.maybeShow({ path }).
 import { tg, isMock } from './api.js';
 import { h, haptic } from './ui.js';
+import { t } from './i18n.js';
 
 const KEY = 'coach_seen';
 const MAX_STEPS = 4;          // шагов в одном туре; остальное покажется при следующем заходе
@@ -22,53 +23,53 @@ const rowByTitle = (t) => {
 // when: доп. условие. round: круглая подсветка. pad: поля подсветки. placement: auto | above | below.
 export const TIPS = [
   { id: 'today.ring', route: 'today', target: '.today .kcal-card', pad: 4, radius: 22,
-    title: 'Сколько ещё можно сегодня', text: 'Кольцо показывает, сколько калорий осталось до нормы. Ниже — белки, жиры и углеводы: сколько ещё влезает в день.' },
+    title: t('coach.today.ring.t'), text: t('coach.today.ring.x') },
   { id: 'today.date', route: 'today', target: '.today .date-switch', pad: 2,
-    title: 'Дни переключаются тут', text: 'Стрелки или свайп влево-вправо по этой строке — вчера, позавчера. Если смотришь прошлый день, тап по дате вернёт на сегодня.' },
+    title: t('coach.today.date.t'), text: t('coach.today.date.x') },
   { id: 'today.water', route: 'today', target: '.water-card .quick',
-    title: 'Вода в одно касание', text: 'Стакан воды — одно нажатие: +200, +300 или +500 мл. Нажато по ошибке? Кнопка со стрелкой отменит последнюю порцию.' },
+    title: t('coach.today.water.t'), text: t('coach.today.water.x') },
   { id: 'today.plus', route: 'today', target: '.tab-plus .plus-circle', round: true, pad: 7,
-    title: 'Начни с «+»', text: 'Нажми, чтобы записать еду: сфотографируй тарелку или опиши словами. Там же вода, вес, сон и активность.' },
+    title: t('coach.today.plus.t'), text: t('coach.today.plus.x') },
   { id: 'today.meal', route: 'today', target: () => q('.today .meal-row'),
-    title: 'Приём можно поправить', text: 'Открой любой приём: там можно изменить граммы у блюда, и калории пересчитаются сами.' },
+    title: t('coach.today.meal.t'), text: t('coach.today.meal.x') },
   { id: 'today.often', route: 'today', target: () => q('.today .often:not([hidden])'),
-    title: 'Повторить как обычно', text: 'Блюда, которые встречаются у тебя не раз, собраны здесь. Тап по карточке записывает приём сразу, отменить можно в плашке сверху.' },
+    title: t('coach.today.often.t'), text: t('coach.today.often.x') },
 
   { id: 'meal.grams', route: 'meal', target: '.item .stepper',
-    title: 'Граммы можно поправить', text: 'Плюс и минус меняют вес на 10 г. Нажми на само число, чтобы вписать точнее. Калории и БЖУ пересчитаются.' },
+    title: t('coach.meal.grams.t'), text: t('coach.meal.grams.x') },
   { id: 'meal.actions', route: 'meal', target: '.item .item-actions',
-    title: 'Три значка у блюда', text: 'Штрихкод уточняет продукт по упаковке, закладка сохраняет его в «Мои продукты», корзина убирает позицию.' },
-  { id: 'meal.refine', route: 'meal', target: () => q('.meal-actions .act[title="Уточнить"]'), pad: 4, radius: 16,
-    title: 'Уточни словами', text: 'Напиши детали: «на сливочном масле», «соус сметанный». Бот пересчитает позиции.' },
+    title: t('coach.meal.actions.t'), text: t('coach.meal.actions.x') },
+  { id: 'meal.refine', route: 'meal', target: () => q(`.meal-actions .act[title="${t('meal.refine')}"]`), pad: 4, radius: 16,
+    title: t('coach.meal.refine.t'), text: t('coach.meal.refine.x') },
   { id: 'meal.fav', route: 'meal', target: () => q('.meal-actions .act[aria-pressed]'), pad: 4, radius: 16,
-    title: 'Звезда — в избранное', text: 'Любимое блюдо потом можно записать одним касанием прямо при добавлении приёма.' },
+    title: t('coach.meal.fav.t'), text: t('coach.meal.fav.x') },
 
   { id: 'addmeal.photo', route: 'addmeal', target: '.capture .cap-grid',
-    title: 'Фото — самый быстрый путь', text: 'Снимай или выбирай из галереи. До 6 фото на блюдо: тарелка, упаковка, этикетка. Так оценка точнее.' },
+    title: t('coach.addmeal.photo.t'), text: t('coach.addmeal.photo.x') },
   { id: 'addmeal.text', route: 'addmeal', target: '.compose-keep',
-    title: 'Или просто напиши', text: 'Опиши словами, что было на тарелке, с примерным весом: «овсянка 250 г, банан». Фото не обязательно.' },
+    title: t('coach.addmeal.text.t'), text: t('coach.addmeal.text.x') },
   { id: 'addmeal.quick', route: 'addmeal', target: () => { const el = q('#view .quick-list'); return el && !el.closest('[hidden]') ? el.parentElement : null; },
-    title: 'Избранное и частые', text: 'Тап по строке записывает такой же приём сразу. Звёздочка закрепляет любимые наверху списка.' },
+    title: t('coach.addmeal.quick.t'), text: t('coach.addmeal.quick.x') },
 
   { id: 'stats.range', route: 'stats', target: '#view .seg',
-    title: 'Выбери период', text: 'Неделя, месяц или 90 дней: графики и цифры ниже пересчитаются под выбранный срок.' },
+    title: t('coach.stats.range.t'), text: t('coach.stats.range.x') },
   { id: 'stats.heat', route: 'stats', target: '.st-heat .hm-wrap',
-    title: 'Дни в норме', text: 'Одна клетка — один день, цвет показывает, удалось ли уложиться в норму. Тапни по клетке, чтобы увидеть дату и калории.' },
+    title: t('coach.stats.heat.t'), text: t('coach.stats.heat.x') },
 
   { id: 'analysis.period', route: 'analysis', target: '#view .seg',
-    title: 'День, неделя или месяц', text: 'Разбор и советы подстроятся под период. За день видно итог по записям, за неделю и месяц — тренд.' },
+    title: t('coach.analysis.period.t'), text: t('coach.analysis.period.x') },
   { id: 'analysis.focus', route: 'analysis', target: '.an-focus',
-    title: 'Главное — одно', text: 'Не нужно править всё сразу. Начни с этого совета, остальные подождут.' },
+    title: t('coach.analysis.focus.t'), text: t('coach.analysis.focus.x') },
 
-  { id: 'menu.products', route: 'menu', target: () => rowByTitle('Мои продукты'),
-    title: 'Свои продукты', text: 'Сохраняй то, что ешь часто: любимый йогурт, домашний соус. Потом их можно добавить к приёму в пару касаний.' },
-  { id: 'menu.dishes', route: 'menu', target: () => rowByTitle('Моя посуда'),
-    title: 'Посуда помогает считать порции', text: 'Добавь свою тарелку или миску: размер порции по фото оценится точнее. Выбрать посуду можно при добавлении приёма.' },
+  { id: 'menu.products', route: 'menu', target: () => rowByTitle(t('menu.products')),
+    title: t('coach.menu.products.t'), text: t('coach.menu.products.x') },
+  { id: 'menu.dishes', route: 'menu', target: () => rowByTitle(t('menu.dishes')),
+    title: t('coach.menu.dishes.t'), text: t('coach.menu.dishes.x') },
 
   { id: 'drink.pick', route: 'drink', target: '.drink-grid', maxH: 290,
-    title: 'Сначала напиток', text: 'Выбери, что пьёшь. Чай и кофе засчитываются в воду, у сладких можно добавить сахар.' },
+    title: t('coach.drink.pick.t'), text: t('coach.drink.pick.x') },
   { id: 'drink.size', route: 'drink', target: () => q('.drink-label + .chips'),
-    title: 'Потом объём', text: 'Тапни готовый размер или впиши свой. Кнопка «Добавить» внизу сохранит напиток.' },
+    title: t('coach.drink.size.t'), text: t('coach.drink.size.x') },
 ];
 
 const ROUTES = [
@@ -224,7 +225,7 @@ async function run(route, token) {
 function start(route, steps) {
   const catchers = ['t', 'b', 'l', 'r'].map((k) => h('div', { class: 'coach-catch', 'data-k': k }));
   const hole = h('div', { class: 'coach-hole' });
-  const bubble = h('div', { class: 'coach-bubble', role: 'dialog', 'aria-live': 'polite', 'aria-label': 'Подсказка' });
+  const bubble = h('div', { class: 'coach-bubble', role: 'dialog', 'aria-live': 'polite', 'aria-label': t('coach.aria') });
   const root = h('div', { class: 'coach' }, hole, ...catchers, bubble);
   document.body.append(root);
   const a = { route, steps, i: -1, el: null, tip: null, root, hole, bubble, catchers, shownAt: 0, stepToken: 0, timer: 0, raf: 0 };
@@ -395,13 +396,13 @@ async function showStep(i, first) {
   b.replaceChildren(
     n > 1 ? h('div', { class: 'coach-prog', 'aria-hidden': 'true' },
       h('span', { class: 'coach-dots' }, a.steps.map((_, k) => h('i', { class: k === i ? 'on' : '' }))),
-      h('span', { class: 'coach-count' }, `${i + 1} из ${n}`)) : null,
+      h('span', { class: 'coach-count' }, t('coach.count', { i: i + 1, n }))) : null,
     h('div', { class: 'coach-title' }, tip.title),
     h('div', { class: 'coach-text' }, tip.text),
     h('div', { class: 'coach-foot' },
-      n > 1 && !last ? h('button', { class: 'coach-skip', type: 'button', onclick: skipAll }, 'Пропустить') : h('span'),
-      h('button', { class: 'coach-next', type: 'button', onclick: advance }, last ? 'Понятно' : 'Дальше')));
-  b.setAttribute('aria-label', 'Подсказка: ' + tip.title);
+      n > 1 && !last ? h('button', { class: 'coach-skip', type: 'button', onclick: skipAll }, t('onb.skip')) : h('span'),
+      h('button', { class: 'coach-next', type: 'button', onclick: advance }, last ? t('coach.ok') : t('onb.next'))));
+  b.setAttribute('aria-label', t('coach.aria') + ': ' + tip.title);
 
   // высота пузыря известна только после раскладки: меряем, затем при необходимости прокручиваем
   const vw = window.innerWidth;

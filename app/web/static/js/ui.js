@@ -1,6 +1,7 @@
 // Small DOM helpers, Telegram wrappers, formatters. All server strings go through textContent.
 import { tg, inTelegram, api } from './api.js';
 import { PATHS } from './icons.js';
+import { t, tn, lang, locale } from './i18n.js';
 
 export { tg, inTelegram };
 
@@ -62,7 +63,8 @@ const GLYPH = {
   '🍚': ['bowl', 'orange'], '🧭': ['target', 'purple'], '🧮': ['chart-bar', 'blue'], '⏱': ['clock', 'blue'],
   '🕐': ['clock', 'orange'], '⚖️': ['scale', 'purple'], '⚖': ['scale', 'purple'], '📈': ['chart-bar', 'orange'], '✅': ['check', 'green'],
 };
-const LABEL_GLYPH = { 'Калории': '🍽', 'Белок': '🥩', 'Вода': '💧', 'Шаги': '🚶', 'Сон': '😴', 'Дней с едой': '📆' };
+const LABEL_GLYPH = { 'Калории': '🍽', 'Белок': '🥩', 'Вода': '💧', 'Шаги': '🚶', 'Сон': '😴', 'Дней с едой': '📆',
+  Calories: '🍽', Protein: '🥩', Water: '💧', Steps: '🚶', Sleep: '😴', 'Days logged': '📆' };
 /** Мягкая плитка с иконкой вместо эмодзи. key: эмодзи или название показателя; color перекрывает цвет по умолчанию. */
 export function glyph(key, size = 36, color) {
   const [name, col] = GLYPH[LABEL_GLYPH[key] || key] || ['sparkles', 'blue'];
@@ -98,13 +100,13 @@ export function statTile({ icon: ic, color = 'blue', title, value, bar = null, s
 }
 
 // --------------------------------------------------------------- formatters
-const nf = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 });
+const nf = new Intl.NumberFormat(locale(), { maximumFractionDigits: 1 });
 export const fmtN = (n) => (n === null || n === undefined || isNaN(n) ? '—' : nf.format(Math.round(n * 10) / 10));
-export const fmtKcal = (n) => (n === null || n === undefined || isNaN(n) ? '—' : Math.round(n).toLocaleString('ru-RU'));
+export const fmtKcal = (n) => (n === null || n === undefined || isNaN(n) ? '—' : Math.round(n).toLocaleString(locale()));
 export function fmtDur(min) {
   if (min === null || min === undefined || isNaN(min)) return '—';
   const m = Math.round(min);
-  return `${Math.floor(m / 60)} ч ${String(m % 60).padStart(2, '0')} м`;
+  return t('fmt.dur', { h: Math.floor(m / 60), m: String(m % 60).padStart(2, '0') });
 }
 // ------------------------------------------------------------------ motion
 export const reducedMotion = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -145,11 +147,6 @@ export function setThemePref(v) {
 }
 
 export const isDark = () => (inTelegram && tg && tg.colorScheme ? tg.colorScheme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches);
-export function plural(n, one, few, many) {
-  const a = Math.abs(n) % 100; const b = a % 10;
-  const w = a > 10 && a < 20 ? many : b === 1 ? one : b >= 2 && b <= 4 ? few : many;
-  return `${n} ${w}`;
-}
 export const pad2 = (n) => String(n).padStart(2, '0');
 export function isoDate(d) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -169,50 +166,50 @@ export function addDays(iso, n) {
   return isoDate(d);
 }
 export function dateLabel(iso) {
-  const t = todayISO();
-  if (iso === t) return 'Сегодня';
-  if (iso === addDays(t, -1)) return 'Вчера';
-  if (iso === addDays(t, 1)) return 'Завтра';
-  return new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: 'numeric', month: 'long' }).format(parseISO(iso));
+  const td = todayISO();
+  if (iso === td) return t('date.today');
+  if (iso === addDays(td, -1)) return t('date.yesterday');
+  if (iso === addDays(td, 1)) return t('date.tomorrow');
+  return new Intl.DateTimeFormat(locale(), { weekday: 'short', day: 'numeric', month: 'long' }).format(parseISO(iso));
 }
-export const longDate = (iso) => new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(parseISO(iso));
-export const shortDate = (iso) => new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(parseISO(iso));
+export const longDate = (iso) => new Intl.DateTimeFormat(locale(), { day: 'numeric', month: 'long' }).format(parseISO(iso));
+export const shortDate = (iso) => new Intl.DateTimeFormat(locale(), { day: 'numeric', month: 'short' }).format(parseISO(iso));
 
 export const MEAL_TYPES = {
-  breakfast: { label: 'Завтрак', icon: 'egg-fried', color: 'orange' },
-  lunch: { label: 'Обед', icon: 'soup', color: 'green' },
-  dinner: { label: 'Ужин', icon: 'tools-kitchen-2', color: 'purple' },
-  snack: { label: 'Перекус', icon: 'apple', color: 'red' },
+  breakfast: { label: t('meal.breakfast'), icon: 'egg-fried', color: 'orange' },
+  lunch: { label: t('meal.lunch'), icon: 'soup', color: 'green' },
+  dinner: { label: t('meal.dinner'), icon: 'tools-kitchen-2', color: 'purple' },
+  snack: { label: t('meal.snack'), icon: 'apple', color: 'red' },
 };
-export const mealType = (t) => MEAL_TYPES[t] || { label: 'Приём', icon: 'tools-kitchen', color: 'blue' };
+export const mealType = (ty) => MEAL_TYPES[ty] || { label: t('meal.generic'), icon: 'tools-kitchen', color: 'blue' };
 
 export const DISH_KINDS = {
-  plate: { label: 'Тарелка', icon: 'tools-kitchen-2', color: 'blue' },
-  deep_plate: { label: 'Глубокая тарелка', icon: 'soup', color: 'teal' },
-  bowl: { label: 'Миска', icon: 'bowl', color: 'green' },
-  salad_bowl: { label: 'Салатник', icon: 'bowl', color: 'green' },
-  mug: { label: 'Кружка', icon: 'coffee', color: 'orange' },
-  cup: { label: 'Чашка', icon: 'cup', color: 'pink' },
-  glass: { label: 'Стакан', icon: 'glass-full', color: 'indigo' },
-  pan: { label: 'Сковорода', icon: 'cooker', color: 'red' },
-  pot: { label: 'Кастрюля', icon: 'cooker', color: 'gray' },
-  container: { label: 'Контейнер', icon: 'box', color: 'purple' },
-  jar: { label: 'Банка', icon: 'box', color: 'teal' },
-  thermos: { label: 'Термос', icon: 'cup', color: 'green' },
-  other: { label: 'Другое', icon: 'tools-kitchen', color: 'gray' },
+  plate: { label: t('dish.plate'), icon: 'tools-kitchen-2', color: 'blue' },
+  deep_plate: { label: t('dish.deep_plate'), icon: 'soup', color: 'teal' },
+  bowl: { label: t('dish.bowl'), icon: 'bowl', color: 'green' },
+  salad_bowl: { label: t('dish.salad_bowl'), icon: 'bowl', color: 'green' },
+  mug: { label: t('dish.mug'), icon: 'coffee', color: 'orange' },
+  cup: { label: t('dish.cup'), icon: 'cup', color: 'pink' },
+  glass: { label: t('dish.glass'), icon: 'glass-full', color: 'indigo' },
+  pan: { label: t('dish.pan'), icon: 'cooker', color: 'red' },
+  pot: { label: t('dish.pot'), icon: 'cooker', color: 'gray' },
+  container: { label: t('dish.container'), icon: 'box', color: 'purple' },
+  jar: { label: t('dish.jar'), icon: 'box', color: 'teal' },
+  thermos: { label: t('dish.thermos'), icon: 'cup', color: 'green' },
+  other: { label: t('dish.other'), icon: 'tools-kitchen', color: 'gray' },
 };
 export const dishKind = (k) => DISH_KINDS[k] || DISH_KINDS.other;
 
 export function macroLine(o) {
-  return `Б ${fmtN(o.protein)} · Ж ${fmtN(o.fat)} · У ${fmtN(o.carbs)}`;
+  return `${t('macro.p')} ${fmtN(o.protein)} · ${t('macro.f')} ${fmtN(o.fat)} · ${t('macro.c')} ${fmtN(o.carbs)}`;
 }
 
 /** Чипы БЖУ с цветной точкой. `unit` дописывает « г»; `extra` — дополнительные чипы в конце; `pills` — крупные плашки как на экране приёма. */
 export function macroChips({ p, f, c }, { unit = '', extra = null, cls = '', pills = false } = {}) {
-  const defs = [['p', 'Б', p], ['f', 'Ж', f], ['c', 'У', c]];
+  const defs = [['p', t('macro.p'), p], ['f', t('macro.f'), f], ['c', t('macro.c'), c]];
   if (pills) {
     return h('div', { class: 'pills' + (cls ? ' ' + cls : '') },
-      defs.map(([k, letter, v]) => h('span', { class: 'pill pill-' + k }, letter + ' ', h('b', null, fmtN(v)), ' г')));
+      defs.map(([k, letter, v]) => h('span', { class: 'pill pill-' + k }, letter + ' ', h('b', null, fmtN(v)), ' ' + t('unit.g'))));
   }
   return h('span', { class: 'macs' + (cls ? ' ' + cls : '') },
     defs.map(([k, letter, v]) => h('span', { class: 'mac ' + k }, h('i'), `${letter} ${fmtN(v)}${unit}`)), extra);
@@ -221,8 +218,8 @@ export function macroChips({ p, f, c }, { unit = '', extra = null, cls = '', pil
 /** Переключатель дня «‹ дата ›»: стрелки, тап по дате (к сегодня) и свайп по шапке. onChange(date, dir): dir -1 назад, +1 вперёд. */
 export function dateSwitch(initial, onChange) {
   let cur = initial;
-  const prev = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Предыдущий день', onclick: () => step(-1) }, icon('back'));
-  const next = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Следующий день', onclick: () => step(1) }, icon('next'));
+  const prev = h('button', { class: 'icon-btn', type: 'button', 'aria-label': t('date.prev'), onclick: () => step(-1) }, icon('back'));
+  const next = h('button', { class: 'icon-btn', type: 'button', 'aria-label': t('date.next'), onclick: () => step(1) }, icon('next'));
   const label = h('button', { class: 'date-label', type: 'button', onclick: () => {
     if (cur === todayISO()) return;
     cur = todayISO(); paint(); haptic('selection'); onChange(cur, 1);
@@ -231,7 +228,7 @@ export function dateSwitch(initial, onChange) {
   function paint() {
     const isToday = cur === todayISO();
     label.replaceChildren(h('span', { class: 'date-main' }, dateLabel(cur)),
-      h('span', { class: 'date-sub' }, isToday ? longDate(cur) : 'нажмите, чтобы вернуться к сегодня'));
+      h('span', { class: 'date-sub' }, isToday ? longDate(cur) : t('date.back_today')));
     next.disabled = isToday;
   }
   function step(n) {
@@ -309,7 +306,7 @@ function showKbBar() {
     class: 'btn btn-secondary kbbar-hide', type: 'button',
     onpointerdown: (e) => e.preventDefault(),
     onclick: () => document.activeElement?.blur?.(),
-  }, 'Свернуть');
+  }, t('kb.hide'));
   kbBar.replaceChildren(kbHide, kbBtn);
   kbBar.hidden = false;
   paintKbBtn();
@@ -442,11 +439,11 @@ export const nav = {
 };
 
 // -------------------------------------------------------------- components
-const GENERIC_ERR = 'Что-то пошло не так. Попробуйте ещё раз.';
+const GENERIC_ERR = t('err.something');
 /** Текст ошибки для пользователя: русские сообщения сервера показываем как есть, технический текст (TypeError и т.п.) прячем в консоль. */
 export function friendly(err, fallback = GENERIC_ERR) {
   const m = typeof err === 'string' ? err : err && err.message;
-  if (typeof m === 'string' && /[а-яё]/i.test(m)) return m;
+  if (typeof m === 'string' && (/[а-яё]/i.test(m) || (lang() === 'en' && (typeof err === 'string' || (err && (err.status !== undefined || err.user)))))) return m;
   if (err) console.warn('[app]', err);
   return fallback;
 }
@@ -470,7 +467,7 @@ export function toast(msg, kind = '', { undo } = {}) {
         haptic('light');
         dataChanged();
       } catch (e) { toast(e, 'error'); }
-    } }, 'Отменить'));
+    } }, t('common.undo')));
   }
   $('#toasts').append(t);
   if (kind === 'error') haptic('error');
@@ -486,7 +483,7 @@ export function closeAllSheets() { [...openSheets].forEach((s) => s.close()); }
 
 export function sheet({ title, content, onClose } = {}) {
   const wrap = h('div', { class: 'sheet-wrap' });
-  const panel = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title || 'Окно', tabindex: '-1' },
+  const panel = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title || t('sheet.default'), tabindex: '-1' },
     h('div', { class: 'grabber' }),
     title ? h('div', { class: 'sheet-title' }, title) : null,
     content);
@@ -578,23 +575,23 @@ export function emptyState(iconName, title, text, action) {
 
 /** Кнопка для истёкшей сессии: «Обновить» перезагрузила бы страницу с теми же устаревшими данными, помогает только повторное открытие из чата. */
 export function sessionExpiredButton() {
-  return h('button', { class: 'btn btn-primary', type: 'button', onclick: () => { try { tg.close(); } catch (e) { location.reload(); } } }, 'Закрыть приложение');
+  return h('button', { class: 'btn btn-primary', type: 'button', onclick: () => { try { tg.close(); } catch (e) { location.reload(); } } }, t('common.close_app'));
 }
 
 export function errorState(root, err, retry) {
   if (err) console.error(err);
   if (err && err.expired) {
-    root.replaceChildren(emptyState('lock', 'Сессия устарела', err.message, sessionExpiredButton()));
+    root.replaceChildren(emptyState('lock', t('state.expired'), err.message, sessionExpiredButton()));
     return;
   }
-  root.replaceChildren(emptyState('mood-sad', 'Не получилось загрузить', friendly(err, 'Проверьте соединение и попробуйте ещё раз.'),
-    retry ? h('button', { class: 'btn btn-secondary', type: 'button', onclick: retry }, 'Повторить') : null));
+  root.replaceChildren(emptyState('mood-sad', t('state.load_fail'), friendly(err, t('state.check_conn')),
+    retry ? h('button', { class: 'btn btn-secondary', type: 'button', onclick: retry }, t('common.retry')) : null));
 }
 
 // Telegram-like top bar: [< Назад] centered title [right]
 export function pageHead(title, { right, back = true, parent = '/today' } = {}) {
   return h('header', { class: 'page-head' + (back ? '' : ' large') },
-    h('div', { class: 'ph-side' }, back ? h('button', { class: 'back-btn', type: 'button', 'aria-label': 'Назад', onclick: () => nav.back(parent) }, icon('back', 24), h('span', null, 'Назад')) : null),
+    h('div', { class: 'ph-side' }, back ? h('button', { class: 'back-btn', type: 'button', 'aria-label': t('common.back'), onclick: () => nav.back(parent) }, icon('back', 24), h('span', null, t('common.back'))) : null),
     h('h1', null, title),
     h('div', { class: 'ph-side end' }, right || null));
 }
@@ -653,7 +650,8 @@ export function group(rows, footnote) {
 // Не type=number: в iOS WebKit он теряет запятую (значение становится пустым), плохо выделяется,
 // каретка прыгает, а Enter включает встроенную проверку step/min/max. Здесь обычный текст с цифровой
 // клавиатурой: лишнее вырезаем на лету, каретку сохраняем, границы проверяет код экрана (numCheck).
-const fmtDec = (v) => (v === null || v === undefined || v === '' || (typeof v === 'number' && isNaN(v)) ? '' : String(v).replace('.', ','));
+const DEC = lang() === 'en' ? '.' : ',';   // десятичный разделитель в полях ввода
+const fmtDec = (v) => (v === null || v === undefined || v === '' || (typeof v === 'number' && isNaN(v)) ? '' : String(v).replace('.', DEC));
 export { fmtDec as numFmt };
 
 // Выделить всё при фокусе, в том числе на iOS, где select() сразу после фокуса не срабатывает.
@@ -703,15 +701,15 @@ export function numInput(props = {}) {
       let k = null;
       if (ch >= '0' && ch <= '9') {
         if (sep) { if (fracLen < dec) { k = ch; fracLen++; } } else if (intLen < maxInt) { k = ch; intLen++; }
-      } else if (!int && (ch === ',' || ch === '.') && !sep) { k = ','; sep = true; }
+      } else if (!int && (ch === ',' || ch === '.') && !sep) { k = DEC; sep = true; }
       if (k !== null) { out += k; if (i < caret) kept++; }
     }
     // «007» -> «7», «,5» -> «0,5»
-    while (out.length > 1 && out[0] === '0' && out[1] !== ',') { out = out.slice(1); if (kept > 0) kept--; }
-    if (out[0] === ',') { out = '0' + out; kept++; }
+    while (out.length > 1 && out[0] === '0' && out[1] !== DEC) { out = out.slice(1); if (kept > 0) kept--; }
+    if (out[0] === DEC) { out = '0' + out; kept++; }
     setClean(el, out, kept);
   });
-  el.addEventListener('blur', () => { if (el.value.endsWith(',')) el.value = el.value.slice(0, -1); });
+  el.addEventListener('blur', () => { if (el.value.endsWith(DEC)) el.value = el.value.slice(0, -1); });
   doneOnEnter(el);
   if (select) selectAllOnFocus(el);
   return el;
@@ -749,11 +747,11 @@ export function numSet(input, v) { input.value = fmtDec(v); }
 // Проверка границ из numInput: текст ошибки или null. Пустое поле не ошибка, это решает экран.
 export function numCheck(input, label) {
   const v = numVal(input);
-  if (v === null) return String(input.value).trim() ? `${label}: введите число` : null;
+  if (v === null) return String(input.value).trim() ? t('num.enter', { label }) : null;
   const { min, max } = input._num || {};
   if ((min != null && v < min) || (max != null && v > max)) {
-    if (min != null && max != null) return `${label}: от ${fmtDec(min)} до ${fmtDec(max)}`;
-    return max != null ? `${label}: не больше ${fmtDec(max)}` : `${label}: не меньше ${fmtDec(min)}`;
+    if (min != null && max != null) return t('num.range', { label, min: fmtDec(min), max: fmtDec(max) });
+    return max != null ? t('num.max', { label, v: fmtDec(max) }) : t('num.min', { label, v: fmtDec(min) });
   }
   return null;
 }
@@ -771,7 +769,7 @@ export function photoImg(url, cls = '', alt = '', fallback = null) {
     }
     img.classList.add('broken');
     if (img.nextElementSibling && img.nextElementSibling.classList.contains('img-ph')) return;
-    img.after(h('span', { class: 'img-ph', role: 'img', 'aria-label': alt ? alt + ': не загрузилось' : 'Фото не загрузилось' }, icon('photo', 28)));
+    img.after(h('span', { class: 'img-ph', role: 'img', 'aria-label': alt ? t('photo.fail_alt', { alt }) : t('photo.fail') }, icon('photo', 28)));
   };
   img.addEventListener('load', () => img.classList.remove('img-wait'));
   img.addEventListener('error', fail);
@@ -803,7 +801,7 @@ export async function compressImage(file, max = 1600, quality = 0.85) {
     return new File([blob], (file.name || 'photo').replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' });
   } catch (e) {
     if (/^image\/(jpeg|png|webp)$/.test(type)) return file; // server accepts these as is
-    throw new Error('Не удалось прочитать фото. Сохраните его как JPEG или PNG и попробуйте ещё раз.');
+    throw Object.assign(new Error(t('photo.unreadable')), { user: true });
   }
 }
 
@@ -817,8 +815,8 @@ export function debounce(fn, ms = 300) {
 
 export function busyOverlay(text, sub) {
   const t0 = Date.now();
-  const timer = h('div', { class: 'muted' }, '0 с');
-  const iv = setInterval(() => { timer.textContent = Math.round((Date.now() - t0) / 1000) + ' с'; }, 1000);
+  const timer = h('div', { class: 'muted' }, t('busy.sec', { n: 0 }));
+  const iv = setInterval(() => { timer.textContent = t('busy.sec', { n: Math.round((Date.now() - t0) / 1000) }); }, 1000);
   const el = h('div', { class: 'busy', role: 'alert', 'aria-live': 'assertive' },
     h('div', { class: 'busy-box' }, h('div', { class: 'spinner' }), h('div', { class: 'busy-title' }, text), sub ? h('div', { class: 'muted' }, sub) : null, timer));
   $('#overlay').append(el);

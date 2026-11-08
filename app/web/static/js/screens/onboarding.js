@@ -1,14 +1,15 @@
 // Онбординг первого запуска: интро, 11 вопросов (по одному на экран), расчёт и результат.
 // Состояние живёт в sessionStorage: закрыли и открыли — продолжаем с того же шага.
 import { api } from '../api.js';
-import { h, icon, haptic, toast, toggle, mainButton, backButton, todayISO, addDays, longDate, fmtN, plural } from '../ui.js';
+import { h, icon, haptic, toast, toggle, mainButton, backButton, todayISO, addDays, longDate, fmtN, numFmt } from '../ui.js';
 import { onbImg, cards, drum, ruler, REDUCED } from '../onb/controls.js';
 import { intro } from '../onb/intro.js';
 import { calcView, resultView } from '../onb/result.js';
+import { t, tn } from '../i18n.js';
 
 const KEY = 'onb_state';
 const MIN_BMI = 18.5;
-const UNDERAGE = 'Бот считает дефицит калорий и рассчитан на взрослых (18+). Детям и подросткам диету подбирает только врач: ограничения в питании в этом возрасте могут навредить росту и здоровью.';
+const UNDERAGE = t('onb.underage');
 const nowYear = new Date().getFullYear();
 
 const bmiOf = (a) => (a.weight_kg && a.height_cm ? a.weight_kg / (a.height_cm / 100) ** 2 : null);
@@ -54,10 +55,10 @@ export default function onboarding(root, { me, onDone }) {
   if (['calc', 'result'].includes(S.step)) S.step = 'reminders';
 
   const prog = h('i');
-  const back = h('button', { class: 'onb-back', type: 'button', 'aria-label': 'Назад', onclick: () => goBack() }, icon('back', 24));
-  const skip = h('button', { class: 'onb-skip', type: 'button', onclick: () => { haptic('light'); show('goal', 'fwd'); } }, 'Пропустить');
+  const back = h('button', { class: 'onb-back', type: 'button', 'aria-label': t('common.back'), onclick: () => goBack() }, icon('back', 24));
+  const skip = h('button', { class: 'onb-skip', type: 'button', onclick: () => { haptic('light'); show('goal', 'fwd'); } }, t('onb.skip'));
   const stage = h('div', { class: 'onb-stage' });
-  const wrap = h('div', { class: 'onb' }, h('div', { class: 'onb-top' }, back, h('div', { class: 'onb-prog', role: 'progressbar', 'aria-label': 'Прогресс настройки' }, prog), skip), stage);
+  const wrap = h('div', { class: 'onb' }, h('div', { class: 'onb-top' }, back, h('div', { class: 'onb-prog', role: 'progressbar', 'aria-label': t('onb.progress') }, prog), skip), stage);
   root.replaceChildren(wrap);
 
   let cur = null;          // {step, el, cleanup}
@@ -114,9 +115,9 @@ export default function onboarding(root, { me, onDone }) {
 
   // ------------------------------------------------------------ построение шагов
   const head = (imgKey, title, why, size = 72) => h('div', { class: 'onb-head' }, imgKey ? onbImg(imgKey, size) : null, why ? h('div', { class: 'onb-why' }, why) : null, h('h1', { class: 'onb-title' }, title));
-  const NEXT = { text: 'Дальше', fn: () => goNext() };
+  const NEXT = { text: t('onb.next'), fn: () => goNext() };
   // карточки: выбор сам ведёт дальше; кнопка нужна тем, кто вернулся назад к уже выбранному ответу
-  const cardMain = (has) => ({ text: 'Дальше', fn: () => goNext(), disabled: !has });
+  const cardMain = (has) => ({ text: t('onb.next'), fn: () => goNext(), disabled: !has });
   const picked = () => { mainButton.setDisabled(false); auto(); };
 
   function build(step) {
@@ -141,25 +142,25 @@ export default function onboarding(root, { me, onDone }) {
   function buildIntro() {
     const it = intro({
       name,
-      onIndex: (i) => { if (cur && cur.step === 'intro') mainButton.setText(i === it.count - 1 ? 'Поехали' : 'Дальше'); },
+      onIndex: (i) => { if (cur && cur.step === 'intro') mainButton.setText(i === it.count - 1 ? t('onb.go') : t('onb.next')); },
     });
     const next = () => { if (it.index() >= it.count - 1) show('goal', 'fwd'); else it.goTo(it.index() + 1); };
-    return { el: h('div', { class: 'onb-step-intro', style: { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0' } }, it.el), main: { text: 'Дальше', fn: next }, cleanup: it.cleanup };
+    return { el: h('div', { class: 'onb-step-intro', style: { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0' } }, it.el), main: { text: t('onb.next'), fn: next }, cleanup: it.cleanup };
   }
 
   function buildGoal() {
     const items = [
-      { value: 'lose', title: 'Похудеть', sub: 'Спокойный темп, без жёстких диет', img: 'scale' },
-      { value: 'maintain', title: 'Держать вес', sub: 'Следить за питанием без дефицита', img: 'heart_check' },
-      { value: 'craving', title: 'Не срываться вечером', sub: 'Разберёмся с тягой к холодильнику', img: 'night_tea' },
-      { value: 'mindful', title: 'Есть осознанно', sub: 'Понять, что и зачем вы едите', img: 'salad' },
+      { value: 'lose', title: t('onb.g_lose'), sub: t('onb.g_lose_s'), img: 'scale' },
+      { value: 'maintain', title: t('onb.g_maint'), sub: t('onb.g_maint_s'), img: 'heart_check' },
+      { value: 'craving', title: t('onb.g_craving'), sub: t('onb.g_craving_s'), img: 'night_tea' },
+      { value: 'mindful', title: t('onb.g_mindful'), sub: t('onb.g_mindful_s'), img: 'salad' },
     ];
-    return { el: h('div', null, head(null, 'Что для вас сейчас главное?', 'Так я подстрою советы под вас.'), cards(items, a.goal, (v) => { a.goal = v; save(); picked(); })), main: cardMain(!!a.goal) };
+    return { el: h('div', null, head(null, t('onb.goal_q'), t('onb.goal_why')), cards(items, a.goal, (v) => { a.goal = v; save(); picked(); })), main: cardMain(!!a.goal) };
   }
 
   function buildSex() {
-    const items = [{ value: 'male', title: 'Мужской', img: 'male' }, { value: 'female', title: 'Женский', img: 'female' }];
-    return { el: h('div', null, head(null, 'Ваш пол', 'Обмен веществ у мужчин и женщин разный — так норма точнее.'), cards(items, a.sex, (v) => { a.sex = v; save(); picked(); }, { cols: 2 })), main: cardMain(!!a.sex) };
+    const items = [{ value: 'male', title: t('onb.male'), img: 'male' }, { value: 'female', title: t('onb.female'), img: 'female' }];
+    return { el: h('div', null, head(null, t('onb.sex_q'), t('onb.sex_why')), cards(items, a.sex, (v) => { a.sex = v; save(); picked(); }, { cols: 2 })), main: cardMain(!!a.sex) };
   }
 
   function buildYear() {
@@ -168,34 +169,34 @@ export default function onboarding(root, { me, onDone }) {
     for (let y = nowYear - 90; y <= nowYear - 10; y++) years.push({ v: y, label: String(y) });
     const age = h('div', { class: 'onb-age', 'aria-live': 'polite' });
     const paintAge = () => {
-      if (!a.year_set) { age.replaceChildren(h('span', { class: 'muted' }, 'Прокрутите и выберите год')); return; }
-      const n = nowYear - a.birth_year; age.replaceChildren(h('b', null, plural(n, 'год', 'года', 'лет')));
+      if (!a.year_set) { age.replaceChildren(h('span', { class: 'muted' }, t('onb.year_hint'))); return; }
+      const n = nowYear - a.birth_year; age.replaceChildren(h('b', null, tn('onb.years', n)));
     };
     const pick = (v) => { a.birth_year = v; a.year_set = true; save(); paintAge(); mainButton.setDisabled(false); };
     paintAge();
     const d = drum(years, shown, (v) => pick(v), { cls: 'wide' });
     d.el.addEventListener('click', () => { if (!a.year_set) pick(d.get()); });   // тап по текущему году тоже подтверждает выбор
     return {
-      el: h('div', null, head(null, 'Год рождения', 'Возраст влияет на расчёт нормы.'), h('div', { class: 'onb-pick' }, d.el, age)),
-      main: { text: 'Дальше', disabled: !a.year_set, fn: () => { if (!a.year_set) return; if (nowYear - a.birth_year < 18) show('stop', 'fwd'); else goNext(); } },
+      el: h('div', null, head(null, t('onb.year_q'), t('onb.year_why')), h('div', { class: 'onb-pick' }, d.el, age)),
+      main: { text: t('onb.next'), disabled: !a.year_set, fn: () => { if (!a.year_set) return; if (nowYear - a.birth_year < 18) show('stop', 'fwd'); else goNext(); } },
     };
   }
 
   function buildStop() {
-    return { el: h('div', { class: 'onb-stop' }, onbImg('heart_check', 96), h('h1', { class: 'onb-title' }, 'Пока без меня'), h('p', { class: 'onb-sub' }, UNDERAGE)) };
+    return { el: h('div', { class: 'onb-stop' }, onbImg('heart_check', 96), h('h1', { class: 'onb-title' }, t('onb.stop')), h('p', { class: 'onb-sub' }, UNDERAGE)) };
   }
 
   function buildHeight() {
     if (!a.height_cm) a.height_cm = a.sex === 'male' ? 176 : 165;
     const val = h('b', null, String(a.height_cm));
     const r = ruler({ min: 120, max: 230, step: 1, value: a.height_cm, orientation: 'v', tick: 10, major: 5, labelEvery: 10, onChange: (v) => { a.height_cm = v; val.textContent = String(v); save(); } });
-    return { el: h('div', null, head(null, 'Ваш рост', 'Нужен, чтобы посчитать ИМТ и норму калорий.'), h('div', { class: 'onb-vrow' }, h('div', { class: 'onb-big' }, val, h('span', null, 'см')), r.el)), main: NEXT };
+    return { el: h('div', null, head(null, t('onb.h_q'), t('onb.h_why')), h('div', { class: 'onb-vrow' }, h('div', { class: 'onb-big' }, val, h('span', null, t('unit.cm'))), r.el)), main: NEXT };
   }
 
   function bmiText() {
     const b = bmiOf(a);
     if (b === null) return '';
-    return `ИМТ ${fmtN(b)}`;
+    return t('onb.bmi', { v: fmtN(b) });
   }
 
   function buildWeight() {
@@ -204,14 +205,14 @@ export default function onboarding(root, { me, onDone }) {
     const pill = h('span', { class: 'onb-pill' }, bmiText());
     const hint = h('p', { class: 'onb-hint', 'aria-live': 'polite' });
     const paint = () => {
-      val.textContent = a.weight_kg.toFixed(1).replace('.', ',');
+      val.textContent = numFmt(a.weight_kg.toFixed(1));
       pill.textContent = bmiText();
-      hint.textContent = bmiOf(a) < MIN_BMI ? 'Ниже ИМТ 18,5 дефицит не включаем — будем держать вес.' : '';
+      hint.textContent = bmiOf(a) < MIN_BMI ? t('onb.low_bmi') : '';
     };
     paint();
     const r = ruler({ min: 35, max: 300, step: 0.1, value: a.weight_kg, tick: 9, major: 1, labelEvery: 1, decimals: 0, onChange: (v) => { a.weight_kg = r1(v); save(); paint(); } });
-    return { el: h('div', null, head(null, 'Ваш вес сейчас', 'Это точка отсчёта. Потом вес можно просто присылать скриншотом весов.'),
-      h('div', { class: 'onb-center' }, h('div', { class: 'onb-big' }, val, h('span', null, 'кг')), pill), r.el, hint), main: NEXT };
+    return { el: h('div', null, head(null, t('onb.w_q'), t('onb.w_why')),
+      h('div', { class: 'onb-center' }, h('div', { class: 'onb-big' }, val, h('span', null, t('unit.kg'))), pill), r.el, hint), main: NEXT };
   }
 
   function buildTarget() {
@@ -221,37 +222,37 @@ export default function onboarding(root, { me, onDone }) {
     const diff = h('span', { class: 'onb-pill big' });
     const hint = h('p', { class: 'onb-hint', 'aria-live': 'polite' });
     const paint = () => {
-      val.textContent = a.goal_weight_kg.toFixed(1).replace('.', ',');
+      val.textContent = numFmt(a.goal_weight_kg.toFixed(1));
       const d = r1(a.weight_kg - a.goal_weight_kg);
-      diff.textContent = d > 0 ? `−${fmtN(d)} кг` : 'Без изменений';
-      hint.textContent = a.goal_weight_kg <= floor + 0.05 ? 'Ниже ИМТ 18,5 цель не ставим.' : '';
+      diff.textContent = d > 0 ? `−${fmtN(d)} ${t('unit.kg')}` : t('onb.no_change');
+      hint.textContent = a.goal_weight_kg <= floor + 0.05 ? t('onb.low_goal') : '';
     };
     paint();
     const r = ruler({ min: floor, max: r1(a.weight_kg), step: 0.1, value: a.goal_weight_kg, tick: 10, major: 1, labelEvery: 1, onChange: (v) => { a.goal_weight_kg = r1(v); save(); paint(); } });
-    return { el: h('div', null, head('target', 'Желаемый вес', 'Цель можно поменять в любой момент в профиле.'),
-      h('div', { class: 'onb-center' }, diff, h('div', { class: 'onb-big' }, val, h('span', null, 'кг'))), r.el, hint), main: NEXT };
+    return { el: h('div', null, head('target', t('onb.t_q'), t('onb.t_why')),
+      h('div', { class: 'onb-center' }, diff, h('div', { class: 'onb-big' }, val, h('span', null, t('unit.kg')))), r.el, hint), main: NEXT };
   }
 
   function buildRate() {
     if (!a.rate) a.rate = 0.5;
     const diff = Math.max(0, a.weight_kg - a.goal_weight_kg);
-    const when = (rate) => (diff > 0 ? `≈ к ${longDate(addDays(todayISO(), Math.ceil((diff / rate) * 7)))}` : null);
+    const when = (rate) => (diff > 0 ? t('onb.by', { d: longDate(addDays(todayISO(), Math.ceil((diff / rate) * 7))) }) : null);
     const items = [
-      { value: 0.25, title: 'Спокойно', sub: '0,25 кг в неделю', img: 'turtle', extra: when(0.25) },
-      { value: 0.5, title: 'Оптимально', sub: '0,5 кг в неделю', img: 'target', badge: 'рекомендуем', extra: when(0.5) },
-      { value: 0.7, title: 'Быстрее', sub: '0,7 кг в неделю', img: 'rabbit', extra: when(0.7) },
+      { value: 0.25, title: t('onb.r_calm'), sub: t('onb.r_calm_s'), img: 'turtle', extra: when(0.25) },
+      { value: 0.5, title: t('onb.r_opt'), sub: t('onb.r_opt_s'), img: 'target', badge: t('onb.recommended'), extra: when(0.5) },
+      { value: 0.7, title: t('onb.r_fast'), sub: t('onb.r_fast_s'), img: 'rabbit', extra: when(0.7) },
     ];
-    return { el: h('div', null, head(null, 'Как быстро?', 'Медленнее — проще удержать результат.'), cards(items, a.rate, (v) => { a.rate = v; save(); picked(); })), main: cardMain(true) };
+    return { el: h('div', null, head(null, t('onb.rate_q'), t('onb.rate_why')), cards(items, a.rate, (v) => { a.rate = v; save(); picked(); })), main: cardMain(true) };
   }
 
   function buildActivity() {
     const items = [
-      { value: 1, title: 'Сидячая', sub: 'Офис, мало движения', img: 'sofa' },
-      { value: 2, title: 'Лёгкая', sub: 'Прогулки, 1–3 тренировки', img: 'sneaker' },
-      { value: 3, title: 'Средняя', sub: '3–5 тренировок', img: 'bike' },
-      { value: 4, title: 'Высокая', sub: 'Каждый день, физический труд', img: 'dumbbell' },
+      { value: 1, title: t('onb.a1'), sub: t('onb.a1_s'), img: 'sofa' },
+      { value: 2, title: t('onb.a2'), sub: t('onb.a2_s'), img: 'sneaker' },
+      { value: 3, title: t('onb.a3'), sub: t('onb.a3_s'), img: 'bike' },
+      { value: 4, title: t('onb.a4'), sub: t('onb.a4_s'), img: 'dumbbell' },
     ];
-    return { el: h('div', null, head(null, 'Насколько вы активны?', 'Так я не завышу и не занижу норму.'), cards(items, a.activity, (v) => { a.activity = v; save(); picked(); })), main: cardMain(!!a.activity) };
+    return { el: h('div', null, head(null, t('onb.act_q'), t('onb.act_why')), cards(items, a.activity, (v) => { a.activity = v; save(); picked(); })), main: cardMain(!!a.activity) };
   }
 
   function buildCutoff() {
@@ -263,35 +264,35 @@ export default function onboarding(root, { me, onDone }) {
     const mins = [0, 15, 30, 45].map((m) => ({ v: m, label: pad2(m) }));
     const dh = drum(hours, hh, (v) => { hh = v; upd(); });
     const dm = drum(mins, mm, (v) => { mm = v; upd(); });
-    return { el: h('div', null, head('fridge_lock', 'Когда закрываем кухню?', 'За 15 минут напомню, а после — помогу, если потянет перекусить.'),
+    return { el: h('div', null, head('fridge_lock', t('onb.cut_q'), t('onb.cut_why')),
       h('div', { class: 'onb-drums' }, dh.el, h('span', { class: 'onb-colon' }, ':'), dm.el)), main: NEXT };
   }
 
   function buildCare() {
     const items = [
-      { value: false, title: 'С калориями', sub: 'Калории, БЖУ и вес в цифрах', img: 'salad' },
-      { value: true, title: 'Бережно, без цифр', sub: 'Если цифры тревожат или был опыт расстройства пищевого поведения', img: 'heart_check' },
+      { value: false, title: t('onb.c_num'), sub: t('onb.c_num_s'), img: 'salad' },
+      { value: true, title: t('onb.c_gentle'), sub: t('onb.c_gentle_s'), img: 'heart_check' },
     ];
-    return { el: h('div', null, head(null, 'Как показывать цифры?', 'Это можно сменить позже командой /care.'), cards(items, !!a.care, (v) => { a.care = v; if (v) { a.reminders.weigh = false; if (a.rate > 0.25) a.rate = 0.25; } save(); picked(); })), main: cardMain(true) };
+    return { el: h('div', null, head(null, t('onb.care_q'), t('onb.care_why')), cards(items, !!a.care, (v) => { a.care = v; if (v) { a.reminders.weigh = false; if (a.rate > 0.25) a.rate = 0.25; } save(); picked(); })), main: cardMain(true) };
   }
 
   function buildReminders() {
     const care = !!a.care;
     if (care) a.reminders.weigh = false;
     const rows = [
-      ['morning', 'Утро', 'План на день', '08:30'],
-      ['evening', 'Итог дня', 'Что получилось и что поправить', '21:30'],
-      ['water', 'Вода', 'Пара напоминаний в течение дня', '16:00'],
-      ['weigh', 'Взвешивание', care ? 'В бережном режиме не напоминаем' : 'Утром, до еды', '07:30'],
-      ['weekly', 'Неделя', 'Разбор по воскресеньям', '19:00'],
+      ['morning', t('onb.rm_morning'), t('onb.rm_morning_s'), '08:30'],
+      ['evening', t('onb.rm_evening'), t('onb.rm_evening_s'), '21:30'],
+      ['water', t('onb.rm_water'), t('onb.rm_water_s'), '16:00'],
+      ['weigh', t('onb.rm_weigh'), care ? t('onb.rm_weigh_care') : t('onb.rm_weigh_s'), '07:30'],
+      ['weekly', t('onb.rm_week'), t('onb.rm_week_s'), '19:00'],
     ];
     const list = h('div', { class: 'onb-list' }, rows.map(([kind, title, sub, time]) => {
       const sw = toggle(a.reminders[kind], (v) => { haptic('light'); a.reminders[kind] = v; li.classList.toggle('off', !v); save(); }, title);
       if (care && kind === 'weigh') sw.querySelector('input').disabled = true;
-      const li = h('div', { class: 'onb-li' + (a.reminders[kind] ? '' : ' off') }, h('div', { class: 'onb-li-text' }, h('span', { class: 'onb-li-title' }, title), h('span', { class: 'onb-li-sub' }, sub)), h('span', { class: 'onb-li-time' }, kind === 'weekly' ? 'вс ' + time : time), sw);
+      const li = h('div', { class: 'onb-li' + (a.reminders[kind] ? '' : ' off') }, h('div', { class: 'onb-li-text' }, h('span', { class: 'onb-li-title' }, title), h('span', { class: 'onb-li-sub' }, sub)), h('span', { class: 'onb-li-time' }, kind === 'weekly' ? t('onb.sun') + ' ' + time : time), sw);
       return li;
     }));
-    return { el: h('div', null, head('alarm', 'Напоминания', 'Время можно поменять потом в профиле.'), list), main: { text: 'Готово', fn: () => submit() } };
+    return { el: h('div', null, head('alarm', t('onb.rm_q'), t('onb.rm_why')), list), main: { text: t('common.done'), fn: () => submit() } };
   }
 
   // ------------------------------------------------------------ отправка и результат
@@ -330,7 +331,7 @@ export default function onboarding(root, { me, onDone }) {
     }).catch((e) => {
       if (!alive) return;
       if (e && e.code === 'underage') { show('stop', 'fwd'); return; }
-      toast((e && e.message) || 'Не получилось сохранить. Попробуйте ещё раз.', 'error');
+      toast((e && e.message) || t('onb.save_fail'), 'error');
       show('reminders', 'back');
     });
   }
@@ -345,7 +346,7 @@ export default function onboarding(root, { me, onDone }) {
     S.step = 'result';
     window.scrollTo(0, 0);
     setTimeout(() => rv.play(), REDUCED ? 0 : 250);
-    mainButton.show(a.care ? 'Начать' : 'Начать', finish);
+    mainButton.show(t('onb.start'), finish);
   }
 
   function finish() {

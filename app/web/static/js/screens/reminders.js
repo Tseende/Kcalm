@@ -1,6 +1,7 @@
 // Напоминания: сообщения бота (включить, выбрать время) и свои напоминания по шаблонам.
 import { api } from '../api.js';
 import { h, icon, tile, toast, haptic, pageHead, sectionTitle, toggle, errorState, skeletonCards, sheet, frow, group, field, confirmDialog } from '../ui.js';
+import { t } from '../i18n.js';
 
 // Иконки и цвета шаблонов; неизвестный ключ получает колокольчик.
 const TPL_UI = {
@@ -11,24 +12,24 @@ const TPL_UI = {
 const tplTile = (key, size = 34) => tile(...(TPL_UI[key] || TPL_UI.custom), size);
 const SKIP_NOTE = new Set(['breakfast', 'lunch', 'dinner', 'water', 'steps', 'sleep', 'weigh']);
 
-const EVERY = [[30, '30 минут', 'каждые 30 мин'], [60, '1 час', 'каждый час'], [90, '1,5 часа', 'каждые 1,5 ч'],
-  [120, '2 часа', 'каждые 2 ч'], [180, '3 часа', 'каждые 3 ч'], [240, '4 часа', 'каждые 4 ч']];
-const DAY_NAMES = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
-const DAY_LABELS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-const PRESETS = [['Каждый день', '0123456'], ['Будни', '01234'], ['Выходные', '56']];
+const EVERY = [[30, t('rem.e30'), t('rem.e30s')], [60, t('rem.e60'), t('rem.e60s')], [90, t('rem.e90'), t('rem.e90s')],
+  [120, t('rem.e120'), t('rem.e120s')], [180, t('rem.e180'), t('rem.e180s')], [240, t('rem.e240'), t('rem.e240s')]];
+const DAY_NAMES = t('rem.dn').split(',');
+const DAY_LABELS = t('stats.dow').split(',');
+const PRESETS = [[t('rem.p_all'), '0123456'], [t('rem.p_wd'), '01234'], [t('rem.p_we'), '56']];
 
 const allDays = (d) => (d || '0123456');
 function daysText(d) {
   const v = [...new Set(allDays(d).split(''))].sort().join('');
-  if (v === '0123456') return 'каждый день';
-  if (v === '01234') return 'по будням';
-  if (v === '56') return 'по выходным';
+  if (v === '0123456') return t('rem.d_all');
+  if (v === '01234') return t('rem.d_wd');
+  if (v === '56') return t('rem.d_we');
   return v.split('').map((x) => DAY_NAMES[+x]).join(', ');
 }
 function whenText(r) {
   if (r.every_min) {
     const e = EVERY.find((x) => x[0] === r.every_min);
-    return `${e ? e[2] : 'каждые ' + r.every_min + ' мин'}, ${r.time}–${r.until_time}`;
+    return `${e ? e[2] : t('rem.every_n', { n: r.every_min })}, ${r.time}–${r.until_time}`;
   }
   return r.time;
 }
@@ -46,8 +47,8 @@ function timePill(value, onChange, label, { disabled = false, fixed = false } = 
 export default async function render(root, ctx) {
   const view = h('div', { class: 'screen' });
   const box = h('div', { class: 'stack' }, skeletonCards(3, 64));
-  const plus = h('button', { class: 'icon-btn accent', type: 'button', 'aria-label': 'Добавить напоминание', onclick: () => openTemplates() }, icon('plus'));
-  view.append(pageHead('Напоминания', { parent: '/menu', right: plus }), box);
+  const plus = h('button', { class: 'icon-btn accent', type: 'button', 'aria-label': t('rem.add'), onclick: () => openTemplates() }, icon('plus'));
+  view.append(pageHead(t('rem.title'), { parent: '/menu', right: plus }), box);
   root.append(view);
   let state;
   try { state = await api.get('/reminders'); } catch (e) { if (ctx.alive()) errorState(box, e, () => { root.replaceChildren(); render(root, ctx); }); return; }
@@ -60,7 +61,7 @@ export default async function render(root, ctx) {
   }
 
   function systemRow(r) {
-    const pill = timePill(r.time, (v) => saveSystem(r.kind, { time: v }), `Время: ${r.title}`, { disabled: !r.enabled, fixed: !!r.fixed_time });
+    const pill = timePill(r.time, (v) => saveSystem(r.kind, { time: v }), t('rem.time_of', { n: r.title }), { disabled: !r.enabled, fixed: !!r.fixed_time });
     const sw = toggle(r.enabled, (on) => {
       pill.setDisabled(!on);
       saveSystem(r.kind, { enabled: on }, () => { sw.querySelector('input').checked = !on; pill.setDisabled(on); });
@@ -84,43 +85,43 @@ export default async function render(root, ctx) {
   function draw() {
     const custom = state.custom || [];
     box.replaceChildren(
-      sectionTitle('Сообщения бота'),
+      sectionTitle(t('rem.bot')),
       h('div', { class: 'list rem-list' }, state.reminders.map(systemRow)),
-      h('div', { class: 'footnote' }, 'Сообщения приходят в чат с ботом в выбранное время. «Кухня закрывается» двигается вместе с настройкой «Не есть после» в профиле.'),
-      sectionTitle('Мои напоминания'),
+      h('div', { class: 'footnote' }, t('rem.bot_note')),
+      sectionTitle(t('rem.mine')),
       custom.length
         ? h('div', { class: 'list rem-list' }, custom.map(customRow))
-        : h('div', { class: 'footnote' }, 'Пока пусто. Выберите шаблон: завтрак, вода, шаги, сон, прогулка, или создайте своё.'),
-      h('button', { class: 'btn btn-secondary btn-block', type: 'button', onclick: () => openTemplates() }, icon('plus', 20), 'Добавить напоминание'));
+        : h('div', { class: 'footnote' }, t('rem.empty')),
+      h('button', { class: 'btn btn-secondary btn-block', type: 'button', onclick: () => openTemplates() }, icon('plus', 20), t('rem.add')));
   }
 
   function openTemplates() {
-    const tpls = (state.templates || []).filter((t) => t.available);
-    const pick = (t) => { s.close(); openEditor(null, t); };
-    const rows = tpls.map((t) => h('button', { class: 'row', type: 'button', onclick: () => pick(t) },
-      tplTile(t.key), h('span', { class: 'grow' }, h('span', { class: 'row-title' }, t.title), h('span', { class: 'row-sub' }, whenText(t))), icon('next', 18)));
+    const tpls = (state.templates || []).filter((x) => x.available);
+    const pick = (x) => { s.close(); openEditor(null, x); };
+    const rows = tpls.map((x) => h('button', { class: 'row', type: 'button', onclick: () => pick(x) },
+      tplTile(x.key), h('span', { class: 'grow' }, h('span', { class: 'row-title' }, x.title), h('span', { class: 'row-sub' }, whenText(x))), icon('next', 18)));
     rows.push(h('button', { class: 'row', type: 'button', onclick: () => pick(null) },
-      tplTile('custom'), h('span', { class: 'grow' }, h('span', { class: 'row-title' }, 'Своё напоминание'), h('span', { class: 'row-sub' }, 'Название, текст и время на ваш выбор')), icon('next', 18)));
-    const s = sheet({ title: 'Новое напоминание', content: h('div', { class: 'list rem-pick' }, rows) });
+      tplTile('custom'), h('span', { class: 'grow' }, h('span', { class: 'row-title' }, t('rem.custom')), h('span', { class: 'row-sub' }, t('rem.custom_sub'))), icon('next', 18)));
+    const s = sheet({ title: t('rem.new'), content: h('div', { class: 'list rem-pick' }, rows) });
   }
 
   // Форма: из шаблона (t), правка существующего (r) или пустая «своё».
-  function openEditor(r, t) {
+  function openEditor(r, tp) {
     const isNew = !r;
-    const cur = r || { template: t ? t.key : 'custom', title: t ? t.title : '', text: t ? t.text : '', time: t ? t.time : '09:00', days: '', every_min: t ? t.every_min : null, until_time: t ? t.until_time : null };
+    const cur = r || { template: tp ? tp.key : 'custom', title: tp ? tp.title : '', text: tp ? tp.text : '', time: tp ? tp.time : '09:00', days: '', every_min: tp ? tp.every_min : null, until_time: tp ? tp.until_time : null };
     let days = new Set(allDays(cur.days).split(''));
     let repeat = !!cur.every_min;
     let busy = false;
 
-    const title = h('input', { type: 'text', value: cur.title, maxLength: 60, placeholder: 'Например: растяжка', autocomplete: 'off', 'aria-label': 'Название' });
-    const text = h('textarea', { rows: 3, maxLength: 300, placeholder: 'Что бот напишет в чат', 'aria-label': 'Текст сообщения' });
+    const title = h('input', { type: 'text', value: cur.title, maxLength: 60, placeholder: t('rem.ph_title'), autocomplete: 'off', 'aria-label': t('rem.name') });
+    const text = h('textarea', { rows: 3, maxLength: 300, placeholder: t('rem.ph_text'), 'aria-label': t('rem.text') });
     text.value = cur.text || '';
-    const time = h('input', { type: 'time', value: cur.time, 'aria-label': 'Время' });
-    const every = h('select', { 'aria-label': 'Повторять каждые' }, EVERY.map(([v, label]) => h('option', { value: String(v), selected: v === (cur.every_min || 120) }, label)));
-    const until = h('input', { type: 'time', value: cur.until_time || '20:00', 'aria-label': 'Повторять до' });
+    const time = h('input', { type: 'time', value: cur.time, 'aria-label': t('rem.time') });
+    const every = h('select', { 'aria-label': t('rem.rep_every_aria') }, EVERY.map(([v, label]) => h('option', { value: String(v), selected: v === (cur.every_min || 120) }, label)));
+    const until = h('input', { type: 'time', value: cur.until_time || '20:00', 'aria-label': t('rem.rep_until_aria') });
     const repeatBox = h('div', { class: 'fgroup' });
-    const drawRepeat = () => repeatBox.replaceChildren(...(repeat ? [group([frow('Каждые', every), frow('До', until)])] : []));
-    const sw = toggle(repeat, (on) => { repeat = on; drawRepeat(); }, 'Повторять в течение дня');
+    const drawRepeat = () => repeatBox.replaceChildren(...(repeat ? [group([frow(t('rem.rep_every'), every), frow(t('rem.rep_until'), until)])] : []));
+    const sw = toggle(repeat, (on) => { repeat = on; drawRepeat(); }, t('rem.rep_day'));
     drawRepeat();
 
     const dayBtns = DAY_LABELS.map((lab, i) => h('button', { class: 'chip', type: 'button', 'aria-pressed': 'false', onclick: () => {
@@ -138,14 +139,14 @@ export default async function render(root, ctx) {
 
     function collect() {
       const t_ = title.value.trim(), x = text.value.trim();
-      if (!t_) return ['Напишите название напоминания.', title];
-      if (!x) return ['Напишите текст сообщения.', text];
-      if (!time.value) return ['Выберите время.', time];
-      if (!days.size) return ['Выберите хотя бы один день.', null];
+      if (!t_) return [t('rem.v_title'), title];
+      if (!x) return [t('rem.v_text'), text];
+      if (!time.value) return [t('rem.v_time'), time];
+      if (!days.size) return [t('rem.v_days'), null];
       const body = { title: t_, text: x, time: time.value, days: [...days].sort().join(''), every_min: null, until_time: null };
       if (repeat) {
-        if (!until.value) return ['Укажите, до какого времени повторять.', until];
-        if (until.value <= time.value) return ['Повтор «до» должен быть позже времени начала.', until];
+        if (!until.value) return [t('rem.v_until'), until];
+        if (until.value <= time.value) return [t('rem.v_order'), until];
         body.every_min = +every.value;
         body.until_time = until.value;
       }
@@ -159,27 +160,27 @@ export default async function render(root, ctx) {
       busy = true; saveBtn.classList.add('loading');
       try {
         adopt(isNew ? await api.post('/user-reminders', body) : await api.patch('/user-reminders/' + r.id, body));
-        haptic('success'); s.close(); draw(); toast(isNew ? 'Напоминание добавлено' : 'Сохранено', 'ok');
+        haptic('success'); s.close(); draw(); toast(isNew ? t('rem.added') : t('common.saved'), 'ok');
       } catch (e) { busy = false; saveBtn.classList.remove('loading'); toast(e.message, 'error'); }
     }
     async function remove() {
-      if (busy || !(await confirmDialog(`Удалить напоминание «${r.title}»?`))) return;
+      if (busy || !(await confirmDialog(t('rem.del_q', { n: r.title })))) return;
       busy = true;
-      try { adopt(await api.del('/user-reminders/' + r.id)); haptic('success'); s.close(); draw(); toast('Напоминание удалено'); } catch (e) { busy = false; toast(e.message, 'error'); }
+      try { adopt(await api.del('/user-reminders/' + r.id)); haptic('success'); s.close(); draw(); toast(t('rem.deleted')); } catch (e) { busy = false; toast(e.message, 'error'); }
     }
 
-    const saveBtn = h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, isNew ? 'Добавить' : 'Сохранить');
+    const saveBtn = h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, isNew ? t('common.add') : t('common.save'));
     const form = h('form', { class: 'stack', novalidate: true, onsubmit: (e) => { e.preventDefault(); save(); } },
-      field('Название', title),
-      field('Текст сообщения', text, SKIP_NOTE.has(cur.template) ? 'Если сегодня уже всё записано, напоминание не придёт.' : 'Придёт в чат с ботом.'),
-      group([frow('Время', time)]),
-      h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Дни недели'),
+      field(t('rem.name'), title),
+      field(t('rem.text'), text, SKIP_NOTE.has(cur.template) ? t('rem.skip_note') : t('rem.chat_note')),
+      group([frow(t('rem.time'), time)]),
+      h('div', { class: 'field' }, h('span', { class: 'field-label' }, t('rem.weekdays')),
         h('div', { class: 'day-chips' }, dayBtns), h('div', { class: 'chips wrap' }, presetBtns)),
-      group([h('div', { class: 'frow' }, h('span', { class: 'frow-label' }, 'Повторять'), sw)]),
+      group([h('div', { class: 'frow' }, h('span', { class: 'frow-label' }, t('rem.rep')), sw)]),
       repeatBox,
       saveBtn,
-      isNew ? null : h('button', { class: 'btn btn-danger-ghost btn-block', type: 'button', onclick: remove }, 'Удалить'));
-    const s = sheet({ title: isNew ? (t ? t.title : 'Своё напоминание') : 'Напоминание', content: form });
+      isNew ? null : h('button', { class: 'btn btn-danger-ghost btn-block', type: 'button', onclick: remove }, t('common.delete')));
+    const s = sheet({ title: isNew ? (tp ? tp.title : t('rem.custom')) : t('rem.one'), content: form });
   }
 
   draw();

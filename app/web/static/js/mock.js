@@ -1,4 +1,6 @@
-const MOCK_DRINKS = [{"id": "cola_zero", "name": "Кола без сахара", "emoji": "🥤", "color": "gray", "kcal_100": 0, "sizes": [330, 500], "sugar": false, "hydrates": false}, {"id": "cola", "name": "Кола", "emoji": "🥤", "color": "red", "kcal_100": 42.4, "sizes": [330, 500], "sugar": false, "hydrates": false}, {"id": "fanta", "name": "Фанта", "emoji": "🍊", "color": "orange", "kcal_100": 40, "sizes": [330, 500], "sugar": false, "hydrates": false}, {"id": "tea", "name": "Чай", "emoji": "🍵", "color": "green", "kcal_100": 0, "sizes": [200, 300, 400], "sugar": true, "hydrates": true}, {"id": "americano", "name": "Американо", "emoji": "☕", "color": "indigo", "kcal_100": 0.4, "sizes": [200, 300], "sugar": true, "hydrates": true}, {"id": "cappuccino", "name": "Капучино", "emoji": "☕", "color": "orange", "kcal_100": 39.0, "sizes": [180, 250, 350], "sugar": true, "hydrates": true}, {"id": "flat_white", "name": "Флэт уайт", "emoji": "☕", "color": "purple", "kcal_100": 52.6, "sizes": [160, 200], "sugar": true, "hydrates": true}, {"id": "latte", "name": "Латте", "emoji": "🥛", "color": "blue", "kcal_100": 42.4, "sizes": [250, 350], "sugar": true, "hydrates": true}, {"id": "juice", "name": "Сок", "emoji": "🧃", "color": "yellow", "kcal_100": 44.9, "sizes": [200, 250], "sugar": false, "hydrates": false}, {"id": "smoothie", "name": "Смузи", "emoji": "🥤", "color": "pink", "kcal_100": 52, "sizes": [250, 350, 450], "sugar": false, "hydrates": false}, {"id": "shake", "name": "Протеиновый коктейль", "emoji": "🥛", "color": "teal", "kcal_100": 62, "sizes": [250, 300, 400], "sugar": false, "hydrates": false}, {"id": "energy", "name": "Энергетик", "emoji": "⚡", "color": "yellow", "kcal_100": 44, "sizes": [250, 330, 450], "sugar": false, "hydrates": false}, {"id": "beer", "name": "Пиво", "emoji": "🍺", "color": "orange", "kcal_100": 42.9, "sizes": [330, 500, 568], "sugar": false, "hydrates": false}, {"id": "beer0", "name": "Пиво безалкогольное", "emoji": "🍺", "color": "gray", "kcal_100": 21.2, "sizes": [330, 500], "sugar": false, "hydrates": false}, {"id": "wine", "name": "Вино", "emoji": "🍷", "color": "red", "kcal_100": 77.0, "sizes": [125, 150, 200], "sugar": false, "hydrates": false}];
+import { lang } from './i18n.js';
+const L = (ru, en) => (lang() === 'en' ? en : ru);
+const MOCK_DRINKS = [{"id": "cola_zero", "name": L("Кола без сахара", "Cola Zero"), "emoji": "🥤", "color": "gray", "kcal_100": 0, "sizes": [330, 500], "sugar": false, "hydrates": false}, {"id": "cola", "name": L("Кола", "Cola"), "emoji": "🥤", "color": "red", "kcal_100": 42.4, "sizes": [330, 500], "sugar": false, "hydrates": false}, {"id": "fanta", "name": L("Фанта", "Fanta"), "emoji": "🍊", "color": "orange", "kcal_100": 40, "sizes": [330, 500], "sugar": false, "hydrates": false}, {"id": "tea", "name": L("Чай", "Tea"), "emoji": "🍵", "color": "green", "kcal_100": 0, "sizes": [200, 300, 400], "sugar": true, "hydrates": true}, {"id": "americano", "name": L("Американо", "Americano"), "emoji": "☕", "color": "indigo", "kcal_100": 0.4, "sizes": [200, 300], "sugar": true, "hydrates": true}, {"id": "cappuccino", "name": L("Капучино", "Cappuccino"), "emoji": "☕", "color": "orange", "kcal_100": 39.0, "sizes": [180, 250, 350], "sugar": true, "hydrates": true}, {"id": "flat_white", "name": L("Флэт уайт", "Flat white"), "emoji": "☕", "color": "purple", "kcal_100": 52.6, "sizes": [160, 200], "sugar": true, "hydrates": true}, {"id": "latte", "name": L("Латте", "Latte"), "emoji": "🥛", "color": "blue", "kcal_100": 42.4, "sizes": [250, 350], "sugar": true, "hydrates": true}, {"id": "juice", "name": L("Сок", "Juice"), "emoji": "🧃", "color": "yellow", "kcal_100": 44.9, "sizes": [200, 250], "sugar": false, "hydrates": false}, {"id": "smoothie", "name": L("Смузи", "Smoothie"), "emoji": "🥤", "color": "pink", "kcal_100": 52, "sizes": [250, 350, 450], "sugar": false, "hydrates": false}, {"id": "shake", "name": L("Протеиновый коктейль", "Protein shake"), "emoji": "🥛", "color": "teal", "kcal_100": 62, "sizes": [250, 300, 400], "sugar": false, "hydrates": false}, {"id": "energy", "name": L("Энергетик", "Energy drink"), "emoji": "⚡", "color": "yellow", "kcal_100": 44, "sizes": [250, 330, 450], "sugar": false, "hydrates": false}, {"id": "beer", "name": L("Пиво", "Beer"), "emoji": "🍺", "color": "orange", "kcal_100": 42.9, "sizes": [330, 500, 568], "sugar": false, "hydrates": false}, {"id": "beer0", "name": L("Пиво безалкогольное", "Non-alcoholic beer"), "emoji": "🍺", "color": "gray", "kcal_100": 21.2, "sizes": [330, 500], "sugar": false, "hydrates": false}, {"id": "wine", "name": L("Вино", "Wine"), "emoji": "🍷", "color": "red", "kcal_100": 77.0, "sizes": [125, 150, 200], "sugar": false, "hydrates": false}];
 // Fixture data + simulated API for previewing the UI without the backend (?mock=1).
 const pad2 = (n) => String(n).padStart(2, '0');
 const iso = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -31,23 +33,23 @@ const PHOTOS = [
 
 // name -> [per100 kcal, P, F, C]
 const FOODS = {
-  oats: ['Овсяная каша на молоке', 102, 3.4, 3.4, 15],
-  egg: ['Яйцо варёное', 157, 12.7, 11.5, 0.7],
-  bread: ['Хлеб цельнозерновой', 247, 13, 3.4, 41],
-  tomato: ['Салат из огурцов и помидоров', 62, 1.2, 4.5, 4.4],
-  chicken: ['Куриная грудка запечённая', 165, 31, 3.6, 0],
-  buckwheat: ['Гречка отварная', 110, 4.1, 1.1, 21.4],
-  salmon: ['Лосось запечённый', 208, 20, 13, 0],
-  rice: ['Рис отварной', 130, 2.7, 0.3, 28],
-  cottage: ['Творог 5%', 121, 17, 5, 1.8],
-  apple: ['Яблоко', 52, 0.3, 0.2, 14],
-  banana: ['Банан', 89, 1.1, 0.3, 22.8],
-  borscht: ['Борщ', 49, 2.1, 2.4, 5],
-  oil: ['Масло оливковое', 884, 0, 100, 0],
-  americano: ['Американо', 0.4, 0.1, 0, 0],
-  juice: ['Сок', 45, 0.5, 0.1, 10.5],
-  wine: ['Вино красное', 85, 0.1, 0, 2.6],
-  sausage: ['куриные сосиски', 220, 12, 18, 2],
+  oats: [L('Овсяная каша на молоке', "Oatmeal with milk"), 102, 3.4, 3.4, 15],
+  egg: [L('Яйцо варёное', "Boiled egg"), 157, 12.7, 11.5, 0.7],
+  bread: [L('Хлеб цельнозерновой', "Whole-grain bread"), 247, 13, 3.4, 41],
+  tomato: [L('Салат из огурцов и помидоров', "Cucumber and tomato salad"), 62, 1.2, 4.5, 4.4],
+  chicken: [L('Куриная грудка запечённая', "Baked chicken breast"), 165, 31, 3.6, 0],
+  buckwheat: [L('Гречка отварная', "Boiled buckwheat"), 110, 4.1, 1.1, 21.4],
+  salmon: [L('Лосось запечённый', "Baked salmon"), 208, 20, 13, 0],
+  rice: [L('Рис отварной', "Boiled rice"), 130, 2.7, 0.3, 28],
+  cottage: [L('Творог 5%', "Cottage cheese 5%"), 121, 17, 5, 1.8],
+  apple: [L('Яблоко', "Apple"), 52, 0.3, 0.2, 14],
+  banana: [L('Банан', "Banana"), 89, 1.1, 0.3, 22.8],
+  borscht: [L('Борщ', "Borscht"), 49, 2.1, 2.4, 5],
+  oil: [L('Масло оливковое', "Olive oil"), 884, 0, 100, 0],
+  americano: [L('Американо', "Americano"), 0.4, 0.1, 0, 0],
+  juice: [L('Сок', "Juice"), 45, 0.5, 0.1, 10.5],
+  wine: [L('Вино красное', "Red wine"), 85, 0.1, 0, 2.6],
+  sausage: [L('куриные сосиски', "chicken sausages"), 220, 12, 18, 2],
 };
 const TEMPLATES = {
   breakfast: [[['oats', 250], ['banana', 120]], [['egg', 110], ['bread', 60], ['tomato', 100]], [['cottage', 200], ['apple', 150]]],
@@ -89,45 +91,45 @@ const TARGETS = { kcal: 1650, protein: 110, fat: 55, carbs: 170, water_ml: 2100 
 const prof = { sex: 'male', birth_year: 1990, height_cm: 178, goal_weight_kg: 76, activity: 2, rate_kg_week: 0.5, tz: 'Europe/Moscow', eating_cutoff: '21:00' };
 const mockProfile = () => ({ ...prof, age: new Date().getFullYear() - prof.birth_year, weight_kg: 82.4 });
 const rems = [
-  { kind: 'morning', title: 'Утро', sub: 'План на день', time: '08:30', enabled: true },
-  { kind: 'midday', title: 'День', sub: 'Как идёт питание', time: '13:30', enabled: true },
-  { kind: 'evening', title: 'Вечер', sub: 'Итоги дня', time: '21:30', enabled: true },
-  { kind: 'weekly', title: 'Итоги недели', sub: 'По воскресеньям', time: '19:00', enabled: true },
-  { kind: 'water', title: 'Вода', sub: 'Напомнить выпить воды', time: '16:00', enabled: false },
-  { kind: 'weigh', title: 'Взвешивание', sub: 'Записать вес', time: '07:30', enabled: true },
-  { kind: 'kitchen_close', title: 'Кухня закрывается', sub: 'За 15 минут до «Не есть после»', time: '20:45', enabled: true, fixed_time: true },
+  { kind: 'morning', title: L('Утро', "Morning"), sub: L('План на день', "Plan for the day"), time: '08:30', enabled: true },
+  { kind: 'midday', title: L('День', "Midday"), sub: L('Как идёт питание', "How eating is going"), time: '13:30', enabled: true },
+  { kind: 'evening', title: L('Вечер', "Evening"), sub: L('Итоги дня', "Daily summary"), time: '21:30', enabled: true },
+  { kind: 'weekly', title: L('Итоги недели', "Weekly summary"), sub: L('По воскресеньям', "On Sundays"), time: '19:00', enabled: true },
+  { kind: 'water', title: L('Вода', "Water"), sub: L('Напомнить выпить воды', "Reminder to drink water"), time: '16:00', enabled: false },
+  { kind: 'weigh', title: L('Взвешивание', "Weigh-in"), sub: L('Записать вес', "Log your weight"), time: '07:30', enabled: true },
+  { kind: 'kitchen_close', title: L('Кухня закрывается', "Kitchen closes"), sub: L('За 15 минут до «Не есть после»', "15 minutes before “Don't eat after”"), time: '20:45', enabled: true, fixed_time: true },
 ];
 const REM_TEMPLATES = [
-  { key: 'breakfast', title: 'Завтрак', time: '08:30', text: 'Время завтрака. Запиши, что на тарелке: хватит пары слов или фото.' },
-  { key: 'lunch', title: 'Обед', time: '13:00', text: 'Пора пообедать. Запиши обед: хватит пары слов или фото.' },
-  { key: 'dinner', title: 'Ужин', time: '19:00', text: 'Время ужина. Запиши, что на тарелке: пары слов хватит.' },
-  { key: 'snack', title: 'Перекус', time: '16:30', text: 'Время перекуса. Если что-то перекушено, запиши: хватит пары слов.' },
-  { key: 'water', title: 'Вода', time: '10:00', every_min: 120, until_time: '20:00', text: 'Глоток воды сейчас не помешает. Выпей стакан и отметь в приложении.' },
-  { key: 'steps', title: 'Внести шаги', time: '21:30', text: 'Загляни в счётчик шагов и внеси итог за день.' },
-  { key: 'sleep', title: 'Записать сон', time: '09:00', text: 'Запиши сон за ночь: так видно, как идёт восстановление.' },
-  { key: 'weigh', title: 'Взвеситься', time: '07:30', text: 'Утреннее взвешивание: после туалета, до еды и воды. Одна цифра ничего не значит, смотрим на тренд.' },
-  { key: 'walk', title: 'Прогулка', time: '18:00', text: 'Время прогулки. Даже 15 минут на свежем воздухе помогают.' },
-  { key: 'vitamins', title: 'Витамины / таблетки', time: '09:00', text: 'Время витаминов и таблеток.' },
-  { key: 'bedtime', title: 'Пора готовиться ко сну', time: '22:30', text: 'Пора готовиться ко сну: приглуши свет и отложи дела на завтра.' },
-  { key: 'screen_off', title: 'Отложить телефон', time: '23:00', text: 'Пора отложить телефон: так проще уснуть.' },
+  { key: 'breakfast', title: L('Завтрак', "Breakfast"), time: '08:30', text: L('Время завтрака. Запиши, что на тарелке: хватит пары слов или фото.', "Breakfast time. Log what is on your plate: a few words or a photo is enough.") },
+  { key: 'lunch', title: L('Обед', "Lunch"), time: '13:00', text: L('Пора пообедать. Запиши обед: хватит пары слов или фото.', "Time for lunch. Log it: a few words or a photo is enough.") },
+  { key: 'dinner', title: L('Ужин', "Dinner"), time: '19:00', text: L('Время ужина. Запиши, что на тарелке: пары слов хватит.', "Dinner time. Log what is on your plate: a few words are enough.") },
+  { key: 'snack', title: L('Перекус', "Snack"), time: '16:30', text: L('Время перекуса. Если что-то перекушено, запиши: хватит пары слов.', "Snack time. If you had something, log it: a few words are enough.") },
+  { key: 'water', title: L('Вода', "Water"), time: '10:00', every_min: 120, until_time: '20:00', text: L('Глоток воды сейчас не помешает. Выпей стакан и отметь в приложении.', "A sip of water would be nice right now. Have a glass and mark it in the app.") },
+  { key: 'steps', title: L('Внести шаги', "Log steps"), time: '21:30', text: L('Загляни в счётчик шагов и внеси итог за день.', "Check your step counter and log the daily total.") },
+  { key: 'sleep', title: L('Записать сон', "Log sleep"), time: '09:00', text: L('Запиши сон за ночь: так видно, как идёт восстановление.', "Log last night's sleep so you can see how recovery is going.") },
+  { key: 'weigh', title: L('Взвеситься', "Weigh in"), time: '07:30', text: L('Утреннее взвешивание: после туалета, до еды и воды. Одна цифра ничего не значит, смотрим на тренд.', "Morning weigh-in: after the bathroom, before food and water. One number means little, we look at the trend.") },
+  { key: 'walk', title: L('Прогулка', "Walk"), time: '18:00', text: L('Время прогулки. Даже 15 минут на свежем воздухе помогают.', "Time for a walk. Even 15 minutes of fresh air helps.") },
+  { key: 'vitamins', title: L('Витамины / таблетки', "Vitamins / pills"), time: '09:00', text: L('Время витаминов и таблеток.', "Time for vitamins and pills.") },
+  { key: 'bedtime', title: L('Пора готовиться ко сну', "Time to wind down"), time: '22:30', text: L('Пора готовиться ко сну: приглуши свет и отложи дела на завтра.', "Time to wind down: dim the lights and leave tomorrow's tasks for tomorrow.") },
+  { key: 'screen_off', title: L('Отложить телефон', "Put the phone away"), time: '23:00', text: L('Пора отложить телефон: так проще уснуть.', "Time to put the phone away: it makes falling asleep easier.") },
 ].map((t) => ({ every_min: null, until_time: null, available: true, ...t }));
-let customRems = [{ id: 1, template: 'water', title: 'Вода', text: 'Глоток воды сейчас не помешает.', time: '10:00', days: '', every_min: 120, until_time: '20:00', enabled: true }];
+let customRems = [{ id: 1, template: 'water', title: L('Вода', "Water"), text: L('Глоток воды сейчас не помешает.', "A sip of water would be nice right now."), time: '10:00', days: '', every_min: 120, until_time: '20:00', enabled: true }];
 let remSeq = 2;
 const remsPayload = () => ({ reminders: rems, custom: [...customRems].sort((a, b) => a.time.localeCompare(b.time) || a.id - b.id), templates: REM_TEMPLATES });
 const badField = (msg) => Object.assign(new Error(msg), { status: 400 });
 function cleanRem(cur, b) {
   const o = { ...cur };
-  if ('title' in b) { o.title = String(b.title || '').trim(); if (!o.title) throw badField('Напишите название напоминания.'); }
+  if ('title' in b) { o.title = String(b.title || '').trim(); if (!o.title) throw badField(L('Напишите название напоминания.', "Enter a title for the reminder.")); }
   if ('text' in b) { o.text = String(b.text || '').trim(); }
-  if ('time' in b) { if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(b.time || '')) throw badField('Время: нужно в формате ЧЧ:ММ.'); o.time = b.time; }
+  if ('time' in b) { if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(b.time || '')) throw badField(L('Время: нужно в формате ЧЧ:ММ.', "Time must be in HH:MM format.")); o.time = b.time; }
   if ('days' in b) { const d = [...new Set(String(b.days || '').split(''))].sort().join(''); o.days = d === '0123456' ? '' : d; }
   if ('every_min' in b) o.every_min = b.every_min || null;
   if ('until_time' in b) o.until_time = b.until_time || null;
   if ('enabled' in b) o.enabled = !!b.enabled;
   if (!o.every_min) { o.every_min = null; o.until_time = null; }
-  else if (!o.until_time) throw badField('Укажите, до какого времени повторять.');
-  else if (o.until_time <= o.time) throw badField('Повтор «до» должен быть позже времени начала.');
-  if (!o.text) throw badField('Напишите текст сообщения.');
+  else if (!o.until_time) throw badField(L('Укажите, до какого времени повторять.', "Set the time to repeat until."));
+  else if (o.until_time <= o.time) throw badField(L('Повтор «до» должен быть позже времени начала.', "The “until” time must be later than the start time."));
+  if (!o.text) throw badField(L('Напишите текст сообщения.', "Enter the message text."));
   return o;
 }
 const meals = new Map();
@@ -144,7 +146,7 @@ function makeMeal(date, type, tplIdx, withPhotos, time) {
     confidence: 0.55 + Math.round(rnd() * 4) / 10,
     photos: Array.from({ length: nPh }, (_, i) => ({ id: nid(), url: PHOTOS[(tplIdx + i + type.length) % PHOTOS.length], dish_id: i === 0 && tplIdx % 2 ? 2 : null })),
     items: tpl.map(([k, g]) => makeItem(k, Math.round(g * (0.9 + rnd() * 0.25)))),
-    comment: nPh && tplIdx === 1 ? 'на подсолнечном масле, без соуса' : null,
+    comment: nPh && tplIdx === 1 ? L('на подсолнечном масле, без соуса', "in sunflower oil, no sauce") : null,
   };
   recalcMeal(m);
   meals.set(m.id, m);
@@ -188,15 +190,15 @@ function init() {
     body.set(d, b);
   }
   products = [
-    { id: 300, name: 'Творог 5%', brand: 'Савушкин', kcal: 121, protein: 17, fat: 5, carbs: 1.8, default_grams: 200, unit_name: 'пачка', unit_grams: 180, barcode: null, times_used: 3 },
-    { id: 301, name: 'Гречка ядрица (сухая)', brand: null, kcal: 313, protein: 12.6, fat: 3.3, carbs: 62.1, default_grams: 60, unit_name: null, unit_grams: null, barcode: null, times_used: 9 },
-    { id: 302, name: 'Протеиновый батончик', brand: 'Bombbar', kcal: 340, protein: 36, fat: 10, carbs: 28, default_grams: 60, unit_name: 'батончик', unit_grams: 60, barcode: null, times_used: 1 },
-    { id: 303, name: 'Йогурт греческий 2%', brand: 'Teos', kcal: 73, protein: 9, fat: 2, carbs: 4.5, default_grams: 140, unit_name: 'баночка', unit_grams: 140, barcode: null, times_used: 5 },
+    { id: 300, name: L('Творог 5%', "Cottage cheese 5%"), brand: L('Савушкин', "Savushkin"), kcal: 121, protein: 17, fat: 5, carbs: 1.8, default_grams: 200, unit_name: L('пачка', "pack"), unit_grams: 180, barcode: null, times_used: 3 },
+    { id: 301, name: L('Гречка ядрица (сухая)', "Buckwheat groats (dry)"), brand: null, kcal: 313, protein: 12.6, fat: 3.3, carbs: 62.1, default_grams: 60, unit_name: null, unit_grams: null, barcode: null, times_used: 9 },
+    { id: 302, name: L('Протеиновый батончик', "Protein bar"), brand: 'Bombbar', kcal: 340, protein: 36, fat: 10, carbs: 28, default_grams: 60, unit_name: L('батончик', "bar"), unit_grams: 60, barcode: null, times_used: 1 },
+    { id: 303, name: L('Йогурт греческий 2%', "Greek yogurt 2%"), brand: 'Teos', kcal: 73, protein: 9, fat: 2, carbs: 4.5, default_grams: 140, unit_name: L('баночка', "jar"), unit_grams: 140, barcode: null, times_used: 5 },
   ];
   dishes = [
-    { id: 1, name: 'Тарелка 26 см', kind: 'plate', diameter_cm: 26, depth_cm: 2, volume_ml: null, photo_url: null, is_default: false },
-    { id: 2, name: 'Глубокая тарелка', kind: 'deep_plate', diameter_cm: 20, depth_cm: 5, volume_ml: 500, photo_url: PHOTOS[4], is_default: true },
-    { id: 3, name: 'Любимая кружка', kind: 'mug', diameter_cm: 8.5, depth_cm: 9.5, volume_ml: 300, photo_url: null, is_default: false },
+    { id: 1, name: L('Тарелка 26 см', "26 cm plate"), kind: 'plate', diameter_cm: 26, depth_cm: 2, volume_ml: null, photo_url: null, is_default: false },
+    { id: 2, name: L('Глубокая тарелка', "Deep plate"), kind: 'deep_plate', diameter_cm: 20, depth_cm: 5, volume_ml: 500, photo_url: PHOTOS[4], is_default: true },
+    { id: 3, name: L('Любимая кружка', "Favorite mug"), kind: 'mug', diameter_cm: 8.5, depth_cm: 9.5, volume_ml: 300, photo_url: null, is_default: false },
   ];
   void T;
 }
@@ -266,25 +268,25 @@ function periodMock(period) {
   for (let i = n - 1; i >= 0; i -= (n > 7 ? 3 : 1)) { const d = iso(addDays(today, -i)); pts.push({ date: d, v: r1(86.4 - (n - i) * (n > 7 ? 0.06 : 0.1)) }); }
   return {
     period, from: iso(addDays(today, -(n - 1))), to: iso(today), days: n, logged_days: n - 1, care: false,
-    headline: 'Есть что поправить',
-    focus: { icon: '🥩', title: 'Белок', text: 'В среднем 84 из 110 г, не хватает около 26 г в день. Добавь белок в каждый приём: яйца или творог утром, курица или рыба в обед, кефир вечером.', action: 'Завтра: творог или яйца на завтрак' },
+    headline: L('Есть что поправить', "A few things to adjust"),
+    focus: { icon: '🥩', title: L('Белок', "Protein"), text: L('В среднем 84 из 110 г, не хватает около 26 г в день. Добавь белок в каждый приём: яйца или творог утром, курица или рыба в обед, кефир вечером.', "On average 84 of 110 g, about 26 g short per day. Add protein to every meal: eggs or cottage cheese in the morning, chicken or fish at lunch, kefir in the evening."), action: L('Завтра: творог или яйца на завтрак', "Tomorrow: cottage cheese or eggs for breakfast") },
     metrics: [
-      { key: 'kcal', label: 'Калории', value: '1 720 ккал', goal: 'норма 1 650', status: 'good', note: 'в норме 5 из 6 дн.', delta: { text: '−90 к прошлому', dir: 'good' } },
-      { key: 'protein', label: 'Белок', value: '84 г', goal: 'цель 110 г', status: 'bad', note: 'цель достигнута 1 из 6 дн.', delta: { text: '+6 г к прошлому', dir: 'good' } },
-      { key: 'water', label: 'Вода', value: '1 540 мл', goal: 'цель 2 100', status: 'ok', note: 'цель достигнута 2 из 7 дн.', delta: { text: 'как раньше', dir: 'flat' } },
-      { key: 'steps', label: 'Шаги', value: '7 120', goal: 'цель 8 000', status: 'ok', note: '3 дн. с целью', delta: { text: '+1 020 к прошлому', dir: 'good' } },
-      { key: 'sleep', label: 'Сон', value: '6 ч 20 м', goal: 'цель 7+ ч', status: 'bad', note: 'меньше 6 ч: 2 дня', delta: { text: '−15 мин к прошлому', dir: 'bad' } },
-      { key: 'rhythm', label: 'Режим', value: '2,6 в день', goal: 'цель 3+ приёма', status: 'ok', note: 'первый приём ±2 ч', delta: null },
-      { key: 'logged', label: 'Дней с едой', value: `${n - 1} из ${n}`, goal: '', status: 'good', note: '', delta: null },
+      { key: 'kcal', label: L('Калории', "Calories"), value: L('1 720 ккал', "1,720 kcal"), goal: L('норма 1 650', "target 1,650"), status: 'good', note: L('в норме 5 из 6 дн.', "on target 5 of 6 days"), delta: { text: L('−90 к прошлому', "−90 vs previous"), dir: 'good' } },
+      { key: 'protein', label: L('Белок', "Protein"), value: L('84 г', "84 g"), goal: L('цель 110 г', "goal 110 g"), status: 'bad', note: L('цель достигнута 1 из 6 дн.', "goal reached 1 of 6 days"), delta: { text: L('+6 г к прошлому', "+6 g vs previous"), dir: 'good' } },
+      { key: 'water', label: L('Вода', "Water"), value: L('1 540 мл', "1,540 ml"), goal: L('цель 2 100', "goal 2,100"), status: 'ok', note: L('цель достигнута 2 из 7 дн.', "goal reached 2 of 7 days"), delta: { text: L('как раньше', "same as before"), dir: 'flat' } },
+      { key: 'steps', label: L('Шаги', "Steps"), value: L('7 120', "7,120"), goal: L('цель 8 000', "goal 8,000"), status: 'ok', note: L('3 дн. с целью', "3 days at goal"), delta: { text: L('+1 020 к прошлому', "+1,020 vs previous"), dir: 'good' } },
+      { key: 'sleep', label: L('Сон', "Sleep"), value: L('6 ч 20 м', "6 h 20 m"), goal: L('цель 7+ ч', "goal 7+ h"), status: 'bad', note: L('меньше 6 ч: 2 дня', "under 6 h: 2 days"), delta: { text: L('−15 мин к прошлому', "−15 min vs previous"), dir: 'bad' } },
+      { key: 'rhythm', label: L('Режим', "Routine"), value: L('2,6 в день', "2.6 per day"), goal: L('цель 3+ приёма', "goal 3+ meals"), status: 'ok', note: L('первый приём ±2 ч', "first meal ±2 h"), delta: null },
+      { key: 'logged', label: L('Дней с едой', "Days logged"), value: L(`${n - 1} из ${n}`, `${n - 1} of ${n}`), goal: '', status: 'good', note: '', delta: null },
     ],
     weight: { start: 86.0, now: 85.3, change: -0.7, per_week: -0.5, weighins: 5, goal: 76, remaining: 9.3, eta_weeks: 19, expected_change: -0.6, points: pts },
-    good: ['Калории в целевом коридоре', 'Шагов стало больше на 1 020 в день', 'Тренд веса −0,7 кг за период'],
-    patterns: [{ icon: '😴', title: 'Сон и аппетит', text: 'После коротких ночей (меньше 6,5 ч) ты ешь примерно на 280 ккал больше, чем после полноценных. Недосып усиливает голод: ранний отбой сработает лучше силы воли.' }],
+    good: [L('Калории в целевом коридоре', "Calories within the target range"), L('Шагов стало больше на 1 020 в день', "1,020 more steps per day"), L('Тренд веса −0,7 кг за период', "Weight trend −0.7 kg over the period")],
+    patterns: [{ icon: '😴', title: L('Сон и аппетит', "Sleep and appetite"), text: L('После коротких ночей (меньше 6,5 ч) ты ешь примерно на 280 ккал больше, чем после полноценных. Недосып усиливает голод: ранний отбой сработает лучше силы воли.', "After short nights (under 6.5 h) you eat about 280 kcal more than after full ones. Lack of sleep boosts hunger: an early bedtime works better than willpower.") }],
     tips: [
-      { icon: '🥩', title: 'Белок', text: 'В среднем 84 из 110 г, не хватает около 26 г в день.' },
-      { icon: '😴', title: 'Сон', text: 'Сон в среднем 6 ч 20 мин. Сдвинь отбой на 30 минут раньше.', action: 'Завтра: отбой на 30 минут раньше' },
-      { icon: '🕐', title: 'Режим питания', text: 'В среднем 2,6 приёма пищи в день, в 3 дня из 6 было всего 1–2. Крупные порции и длинные паузы хуже держат сытость.', action: 'Завтра: три приёма пищи, в каждом белок' },
-      { icon: '🚶', title: 'Движение', text: 'Шагов в среднем 7 120, до цели 880 в день: это около 10 минут неспешной ходьбы.', action: 'Завтра: 10 минут ходьбы после ужина' },
+      { icon: '🥩', title: L('Белок', "Protein"), text: L('В среднем 84 из 110 г, не хватает около 26 г в день.', "On average 84 of 110 g, about 26 g short per day.") },
+      { icon: '😴', title: L('Сон', "Sleep"), text: L('Сон в среднем 6 ч 20 мин. Сдвинь отбой на 30 минут раньше.', "Sleep averages 6 h 20 min. Move bedtime 30 minutes earlier."), action: L('Завтра: отбой на 30 минут раньше', "Tomorrow: bedtime 30 minutes earlier") },
+      { icon: '🕐', title: L('Режим питания', "Eating routine"), text: L('В среднем 2,6 приёма пищи в день, в 3 дня из 6 было всего 1–2. Крупные порции и длинные паузы хуже держат сытость.', "On average 2.6 meals a day, and on 3 of 6 days only 1–2. Big portions and long gaps keep you full less well."), action: L('Завтра: три приёма пищи, в каждом белок', "Tomorrow: three meals, each with protein") },
+      { icon: '🚶', title: L('Движение', "Movement"), text: L('Шагов в среднем 7 120, до цели 880 в день: это около 10 минут неспешной ходьбы.', "Steps average 7,120, 880 a day short of the goal: about 10 minutes of easy walking."), action: L('Завтра: 10 минут ходьбы после ужина', "Tomorrow: a 10-minute walk after dinner") },
     ],
   };
 }
@@ -297,7 +299,7 @@ class FormLike {
 const dishOut = (d) => ({ ...d });
 const itemMeal = (itemId) => [...meals.values()].find((m) => m.items.some((i) => i.id === itemId));
 const err = (status, error, message) => { const e = new Error(message); e.status = status; e.code = error; return Object.assign(e, { name: 'ApiError' }); };
-const notFound = () => err(404, 'not_found', 'Не найдено.');
+const notFound = () => err(404, 'not_found', L('Не найдено.', "Not found."));
 
 function guessType(time) {
   const h = parseInt((time || '12:00').slice(0, 2), 10);
@@ -307,22 +309,22 @@ function nowHHMM() { const d = new Date(); return `${pad2(d.getHours())}:${pad2(
 
 // Weekly mini-goal demo state
 const WG_KINDS = {
-  protein: { icon: '🥩', title: 'Белок в норме', hint: 'Белок в каждый приём пищи: яйца или творог, курица или рыба, кефир.' },
-  water: { icon: '💧', title: 'Вода в норме', hint: 'Стакан после пробуждения, перед едой и в 16:00. Чай и кофе тоже считаются.' },
-  late: { icon: '🌙', title: 'Без поздней еды', hint: 'Ужин на час раньше и с белком, так вечером меньше тянет.' },
+  protein: { icon: '🥩', title: L('Белок в норме', "Protein on target"), hint: L('Белок в каждый приём пищи: яйца или творог, курица или рыба, кефир.', "Protein at every meal: eggs or cottage cheese, chicken or fish, kefir.") },
+  water: { icon: '💧', title: L('Вода в норме', "Water on target"), hint: L('Стакан после пробуждения, перед едой и в 16:00. Чай и кофе тоже считаются.', "A glass after waking up, before meals and at 4 pm. Tea and coffee count too.") },
+  late: { icon: '🌙', title: L('Без поздней еды', "No late eating"), hint: L('Ужин на час раньше и с белком, так вечером меньше тянет.', "Dinner an hour earlier and with protein, so evening cravings are weaker.") },
 };
 const mockFavs = { 1: 101, 2: 102, 3: 103, 4: 104 }; // meal_id -> favorite_id (в демо избранное уже есть)
 const favUse = {};       // favorite_id -> сколько раз записали (порядок в списке)
 const customFavs = [     // избранное, созданное с нуля
-  { id: 502, meal_id: 502, title: 'Тостовый хлеб +3', note: null, kcal: 380, protein: 24, fat: 16, carbs: 34, names: ['Тостовый хлеб', 'Сыр', 'Ветчина', 'Огурец'], photo_url: '/api/favorites/502/photo' },   // фото нет: проверка запасной картинки
-  { id: 501, meal_id: 501, title: 'Мой омлет', note: 'на сливочном масле', kcal: 320, protein: 20, fat: 24, carbs: 3, names: ['Омлет'], photo_url: null },
+  { id: 502, meal_id: 502, title: L('Тостовый хлеб +3', "Toast +3"), note: null, kcal: 380, protein: 24, fat: 16, carbs: 34, names: [L('Тостовый хлеб', "Toast"), L('Сыр', "Cheese"), L('Ветчина', "Ham"), L('Огурец', "Cucumber")], photo_url: '/api/favorites/502/photo' },   // фото нет: проверка запасной картинки
+  { id: 501, meal_id: 501, title: L('Мой омлет', "My omelet"), note: L('на сливочном масле', "in butter"), kcal: 320, protein: 20, fat: 24, carbs: 3, names: [L('Омлет', "Omelet")], photo_url: null },
 ];
 const favEdits = {};     // правки полей избранного по id
 const FREQ = [
-  { meal_id: 1, title: 'Овсянка с бананом +1', names: ['Овсянка с бананом', 'Кофе с молоком'], kcal: 410, protein: 16, fat: 11, carbs: 62, count: 9 },
-  { meal_id: 2, title: 'Гречка +1', names: ['Гречка', 'Куриная грудка'], kcal: 520, protein: 41, fat: 12, carbs: 58, count: 6 },
-  { meal_id: 3, title: 'Творог 5%', names: ['Творог 5%'], kcal: 180, protein: 30, fat: 5, carbs: 3, count: 4 },
-  { meal_id: 4, title: 'Капучино', names: ['Капучино'], kcal: 98, protein: 5, fat: 5, carbs: 8, count: 3 },
+  { meal_id: 1, title: L('Овсянка с бананом +1', "Oatmeal with banana +1"), names: [L('Овсянка с бананом', "Oatmeal with banana"), L('Кофе с молоком', "Coffee with milk")], kcal: 410, protein: 16, fat: 11, carbs: 62, count: 9 },
+  { meal_id: 2, title: L('Гречка +1', "Buckwheat +1"), names: [L('Гречка', "Buckwheat"), L('Куриная грудка', "Chicken breast")], kcal: 520, protein: 41, fat: 12, carbs: 58, count: 6 },
+  { meal_id: 3, title: L('Творог 5%', "Cottage cheese 5%"), names: [L('Творог 5%', "Cottage cheese 5%")], kcal: 180, protein: 30, fat: 5, carbs: 3, count: 4 },
+  { meal_id: 4, title: L('Капучино', "Cappuccino"), names: [L('Капучино', "Cappuccino")], kcal: 98, protein: 5, fat: 5, carbs: 8, count: 3 },
 ];
 function favList() {
   const starred = FREQ.filter((f) => mockFavs[f.meal_id]).map((f) => ({ ...f, id: mockFavs[f.meal_id], note: null, photo_url: null }));
@@ -331,7 +333,7 @@ function favList() {
 }
 let weekGoal = null;
 function weekGoalMock() {
-  const recap = { week_start: '2026-10-26', good: ['Белок держится у цели', 'Воды хватает'], goal: { kind: 'water', icon: '💧', title: 'Вода в норме', done: 5, target: 4, achieved: true } };
+  const recap = { week_start: '2026-10-26', good: [L('Белок держится у цели', "Protein stays near the goal"), L('Воды хватает', "Water is enough")], goal: { kind: 'water', icon: '💧', title: L('Вода в норме', "Water on target"), done: 5, target: 4, achieved: true } };
   if (!weekGoal) {
     return { week_start: '2026-11-02', goal: null, recap, options: [
       { kind: 'protein', ...WG_KINDS.protein, target: 4, hits: 2 },
@@ -343,7 +345,7 @@ function weekGoalMock() {
   const done = Math.min(weekGoal.target, 4);
   const achieved = done >= weekGoal.target;
   return { week_start: '2026-11-02', options: [], recap, goal: { kind: weekGoal.kind, ...k, target: weekGoal.target, done, achieved, possible: true,
-    cells: states.map((state, i) => ({ date: '2026-11-0' + (2 + i), state })), message: achieved ? 'Цель недели выполнена. Это уже привычка, а не случайность.' : `Осталось ${weekGoal.target - done} дня из запланированных.` } };
+    cells: states.map((state, i) => ({ date: '2026-11-0' + (2 + i), state })), message: achieved ? L('Цель недели выполнена. Это уже привычка, а не случайность.', "Weekly goal reached. That is a habit now, not a coincidence.") : L(`Осталось ${weekGoal.target - done} дня из запланированных.`, `${weekGoal.target - done} more day(s) to go.`) } };
 }
 
 // ?onb=1: приложение открывается как у нового человека (онбординг); после POST /onboarding — обычные данные.
@@ -351,7 +353,7 @@ let onbPending = /[?&]onb=1\b/.test(location.search);
 
 function mockOnboarding(b) {
   const age = new Date().getFullYear() - b.birth_year;
-  if (age < 18) { const e = new Error('Бот считает дефицит калорий и рассчитан на взрослых (18+).'); e.name = 'ApiError'; e.status = 400; e.code = 'underage'; throw e; }
+  if (age < 18) { const e = new Error(L('Бот считает дефицит калорий и рассчитан на взрослых (18+).', "The bot works with a calorie deficit and is built for adults (18+).")); e.name = 'ApiError'; e.status = 400; e.code = 'underage'; throw e; }
   const bmr = 10 * b.weight_kg + 6.25 * b.height_cm - 5 * age + (b.sex === 'male' ? 5 : -161);
   const pal = [1.25, 1.5, 1.75, 2.2][(b.activity || 2) - 1];
   const rate = b.care_mode ? Math.min(b.rate_kg_week, 0.25) : b.rate_kg_week;
@@ -367,13 +369,13 @@ function mockOnboarding(b) {
 }
 
 const routes = [
-  ['GET', /^\/me$/, () => onbPending ? { onboarded: false, user: { first_name: 'Аня' } } : ({
+  ['GET', /^\/me$/, () => onbPending ? { onboarded: false, user: { first_name: L('Аня', "Anna") } } : ({
     onboarded: true,
-    user: { tg_id: 1, first_name: 'Жан', sex: 'm', height_cm: 178, goal_weight_kg: 76, tz: 'Europe/Moscow', eating_cutoff: '21:00' },
+    user: { tg_id: 1, first_name: L('Жан', "Jean"), sex: 'm', height_cm: 178, goal_weight_kg: 76, tz: 'Europe/Moscow', eating_cutoff: '21:00' },
     targets: TARGETS, weight: { latest: 82.4, trend: body.get(todayISO()).trend, start: 88.0 },
   })],
   ['POST', /^\/onboarding$/, (m, q, b) => mockOnboarding(b)],
-  ['GET', /^\/profile$/, () => ({ profile: mockProfile(), targets: TARGETS, first_name: 'Жан' })],
+  ['GET', /^\/profile$/, () => ({ profile: mockProfile(), targets: TARGETS, first_name: L('Жан', "Jean") })],
   ['PATCH', /^\/profile$/, (m, q, b) => {
     const old = TARGETS.kcal;
     const { recalc, ...rest } = b || {};
@@ -393,7 +395,7 @@ const routes = [
   ['GET', /^\/reminders$/, () => remsPayload()],
   ['PUT', /^\/reminders\/(\w+)$/, (m, q, b) => { const r = rems.find((x) => x.kind === m[1]); if (!r) throw notFound(); if ('enabled' in b) r.enabled = !!b.enabled; if (b.time && !r.fixed_time) r.time = b.time; return remsPayload(); }],
   ['POST', /^\/user-reminders$/, (m, q, b) => {
-    if (customRems.length >= 20) throw Object.assign(new Error('Можно создать не больше 20 напоминаний.'), { status: 409 });
+    if (customRems.length >= 20) throw Object.assign(new Error(L('Можно создать не больше 20 напоминаний.', "You can create up to 20 reminders.")), { status: 409 });
     const t = REM_TEMPLATES.find((x) => x.key === b.template);
     const base = t ? { template: t.key, title: t.title, text: t.text, time: t.time, days: '', every_min: t.every_min, until_time: t.until_time, enabled: true } : { template: 'custom', days: '', every_min: null, until_time: null, enabled: true };
     const item = { id: remSeq++, ...cleanRem(base, b) };
@@ -402,7 +404,7 @@ const routes = [
   }],
   ['PATCH', /^\/user-reminders\/(\d+)$/, (m, q, b) => { const i = customRems.findIndex((x) => x.id === +m[1]); if (i < 0) throw notFound(); customRems[i] = cleanRem(customRems[i], b); return { reminder: customRems[i], ...remsPayload() }; }],
   ['DELETE', /^\/user-reminders\/(\d+)$/, (m) => { const n = customRems.length; customRems = customRems.filter((x) => x.id !== +m[1]); if (customRems.length === n) throw notFound(); return remsPayload(); }],
-  ['DELETE', /^\/me$/, (m, q, b) => { if (!b || b.confirm !== 'УДАЛИТЬ') throw Object.assign(new Error('Для удаления нужно подтверждение.'), { status: 400 }); return { deleted: true }; }],
+  ['DELETE', /^\/me$/, (m, q, b) => { if (!b || b.confirm !== 'УДАЛИТЬ') throw Object.assign(new Error(L('Для удаления нужно подтверждение.', "Confirmation is required to delete.")), { status: 400 }); return { deleted: true }; }],
   ['GET', /^\/day$/, (m, q) => getDay(q.date || todayISO())],
   ['GET', /^\/stats$/, (m, q) => getStats(q.range || 'week')],
   ['GET', /^\/meals\/(\d+)$/, (m) => { const x = meals.get(+m[1]); if (!x) throw notFound(); x.favorite_id = mockFavs[x.id] || null; return x; }],
@@ -419,7 +421,7 @@ const routes = [
       mm.photos = files.map((file, i) => ({ id: nid(), url: URL.createObjectURL(file), dish_id: dishIds[i] ? +dishIds[i] : null }));
     }
     mm.comment = f.get('comment') || f.get('text') || null;
-    if (/масл/i.test(mm.comment || '')) { mm.items.push(makeItem('oil', 10)); recalcMeal(mm); }
+    if (/масл|butter|oil/i.test(mm.comment || '')) { mm.items.push(makeItem('oil', 10)); recalcMeal(mm); }
     return mm;
   }, 201],
   ['PATCH', /^\/meals\/(\d+)$/, (m, q, b) => { const x = meals.get(+m[1]); if (!x) throw notFound(); Object.assign(x, b); return x; }],
@@ -428,7 +430,7 @@ const routes = [
     await sleep(1200);
     const x = meals.get(+m[1]); if (!x) throw notFound();
     x.comment = b.comment;
-    if (/масл/i.test(b.comment || '') && !x.items.some((i) => i.name.includes('Масло'))) x.items.push(makeItem('oil', 10));
+    if (/масл|butter|oil/i.test(b.comment || '') && !x.items.some((i) => /масло|oil/i.test(i.name))) x.items.push(makeItem('oil', 10));
     x.items.forEach((i) => { i.edited = true; });
     return recalcMeal(x);
   }],
@@ -437,16 +439,16 @@ const routes = [
     await sleep(80 + Math.random() * (/[?&]slow=1\b/.test(location.search) ? 3000 : 1100));
     const x = itemMeal(+m[1]); if (!x) throw notFound();
     const it = x.items.find((i) => i.id === +m[1]);
-    if (!(b.grams >= 1 && b.grams <= 5000)) throw err(422, 'validation', 'Граммы: от 1 до 5000.');
+    if (!(b.grams >= 1 && b.grams <= 5000)) throw err(422, 'validation', L('Граммы: от 1 до 5000.', "Grams: from 1 to 5000."));
     it.grams = b.grams; it.edited = true; calcItem(it);
     return recalcMeal(x);
   }],
   ['POST', /^\/items\/(\d+)\/barcode$/, async (m, q, b) => {
     await sleep(400);
     const x = itemMeal(+m[1]); if (!x) throw notFound();
-    if (String(b.code).endsWith('0000')) throw err(404, 'not_found', 'В базе такого штрихкода нет');
+    if (String(b.code).endsWith('0000')) throw err(404, 'not_found', L('В базе такого штрихкода нет', "This barcode is not in the database"));
     const it = x.items.find((i) => i.id === +m[1]);
-    it.name = 'Сосиски куриные, Папа может'; it.per100 = { kcal: 214, protein: 11.5, fat: 18.3, carbs: 1.6 };
+    it.name = L('Сосиски куриные, Папа может', "Chicken sausages, Papa Can"); it.per100 = { kcal: 214, protein: 11.5, fat: 18.3, carbs: 1.6 };
     it.edited = true; calcItem(it);
     return recalcMeal(x);
   }],
@@ -469,14 +471,14 @@ const routes = [
   ['POST', /^\/products\/label$/, async () => {
     await sleep(1500);
     return {
-      draft: { name: 'Кефир 2,5%', brand: 'Простоквашино', kcal: 53, protein: 2.9, fat: 2.5, carbs: 4, default_grams: 250, unit_name: 'стакан', unit_grams: 250, barcode: null },
-      confidence: 0.86, notes: ['Значения указаны на 100 мл, принята плотность 1 г/мл.', 'Вес упаковки не найден.'],
+      draft: { name: L('Кефир 2,5%', "Kefir 2.5%"), brand: L('Простоквашино', "Prostokvashino"), kcal: 53, protein: 2.9, fat: 2.5, carbs: 4, default_grams: 250, unit_name: L('стакан', "glass"), unit_grams: 250, barcode: null },
+      confidence: 0.86, notes: [L('Значения указаны на 100 мл, принята плотность 1 г/мл.', "Values are given per 100 ml, a density of 1 g/ml is assumed."), L('Вес упаковки не найден.', "Package weight not found.")],
     };
   }],
   ['GET', /^\/products\/barcode\/(\d+)$/, async (m) => {
     await sleep(700);
     if (m[1] === '0000000000000') throw notFound();
-    return { source: 'off', existing_id: null, draft: { name: 'Кефир 2,5%', brand: 'Простоквашино', kcal: 53, protein: 2.9, fat: 2.5, carbs: 4, default_grams: 250, unit_name: 'стакан', unit_grams: 250, barcode: m[1] } };
+    return { source: 'off', existing_id: null, draft: { name: L('Кефир 2,5%', "Kefir 2.5%"), brand: L('Простоквашино', "Prostokvashino"), kcal: 53, protein: 2.9, fat: 2.5, carbs: 4, default_grams: 250, unit_name: L('стакан', "glass"), unit_grams: 250, barcode: m[1] } };
   }],
   ['GET', /^\/dishes$/, () => ({ dishes: dishes.map(dishOut) })],
   ['POST', /^\/dishes$/, (m, q, b) => {
@@ -503,7 +505,7 @@ const routes = [
   ['POST', /^\/drinks$/, (m, q, b) => {
     const T = todayISO();
     const d = MOCK_DRINKS.find((x) => x.id === b.drink);
-    if (!d) throw Object.assign(new Error('Неизвестный напиток.'), { status: 400 });
+    if (!d) throw Object.assign(new Error(L('Неизвестный напиток.', "Unknown drink.")), { status: 400 });
     if (d.hydrates) water.set(T, [...(water.get(T) || []), { id: nid(), ml: b.ml }]);
     const kcal = Math.round(d.kcal_100 * b.ml / 100 + (d.sugar ? (b.sugar_tsp || 0) * 20 : 0));
     return { id: nid(), kcal, water_ml: waterOf(T), goal_ml: TARGETS.water_ml };
@@ -519,7 +521,7 @@ const routes = [
   ['POST', /^\/screens$/, async () => {
     await sleep(1400);
     const risky = rnd() > 0.5;
-    return { id: nid(), screen: 'mifitness_sleep', date: todayISO(), metrics: { sleep_duration_min: 431, sleep_deep_min: 96, sleep_rem_min: 88, sleep_score: 78, steps: 9800, active_kcal: 410 }, confidence: risky ? 0.72 : 0.93, needs_confirm: risky, reasons: risky ? ['дата не распознана — ставлю сегодняшнюю', 'уверенность 72%'] : [], applied: risky ? null : 'sleep' };
+    return { id: nid(), screen: 'mifitness_sleep', date: todayISO(), metrics: { sleep_duration_min: 431, sleep_deep_min: 96, sleep_rem_min: 88, sleep_score: 78, steps: 9800, active_kcal: 410 }, confidence: risky ? 0.72 : 0.93, needs_confirm: risky, reasons: risky ? [L('дата не распознана — ставлю сегодняшнюю', "date not recognized, using today"), L('уверенность 72%', "confidence 72%")] : [], applied: risky ? null : 'sleep' };
   }],
   ['POST', /^\/screens\/(\d+)\/confirm$/, (m, q, b) => ({ applied: !!(b && b.apply) })],
   ['POST', /^\/sleep$/, (m, q, b) => {
@@ -559,7 +561,7 @@ const routes = [
     const f = favList().find((x) => x.id === +m[1]);
     if (!f) throw notFound();
     const k = b && b.factor !== undefined ? Number(b.factor) : 1;
-    if (!(k >= 0.25 && k <= 4)) throw err(400, 'bad_field', 'Поле factor: допустимо от 0,25 до 4.');
+    if (!(k >= 0.25 && k <= 4)) throw err(400, 'bad_field', L('Поле factor: допустимо от 0,25 до 4.', "Field factor: allowed range is 0.25 to 4."));
     favUse[f.id] = (favUse[f.id] || 0) + 1;
     return { id: 9001, kcal: Math.round(f.kcal * k) };
   }, 201],
@@ -570,19 +572,19 @@ const routes = [
   ['GET', /^\/analysis$/, (m, q) => (q.period && q.period !== 'day' ? periodMock(q.period) : {
     date: q.date || todayISO(),
     closed: true,
-    headline: 'В целом неплохо',
+    headline: L('В целом неплохо', "Pretty good overall"),
     incomplete: false,
     rows: [
-      { label: 'Калории', value: '1 580 ккал', goal: '1 650', status: 'good' },
-      { label: 'Белок', value: '92 г', goal: '120 г', status: 'ok' },
-      { label: 'Вода', value: '900 мл', goal: '2 000 мл', status: 'bad' },
-      { label: 'Шаги', value: '9 400', goal: '8 000', status: 'good' },
-      { label: 'Сон', value: '6 ч 40 мин', goal: '7+ ч', status: 'ok' },
+      { label: L('Калории', "Calories"), value: L('1 580 ккал', "1,580 kcal"), goal: L('1 650', "1,650"), status: 'good' },
+      { label: L('Белок', "Protein"), value: L('92 г', "92 g"), goal: L('120 г', "120 g"), status: 'ok' },
+      { label: L('Вода', "Water"), value: L('900 мл', "900 ml"), goal: L('2 000 мл', "2,000 ml"), status: 'bad' },
+      { label: L('Шаги', "Steps"), value: L('9 400', "9,400"), goal: L('8 000', "8,000"), status: 'good' },
+      { label: L('Сон', "Sleep"), value: L('6 ч 40 мин', "6 h 40 min"), goal: L('7+ ч', "7+ h"), status: 'ok' },
     ],
-    good: ['Калории в цели', 'Шаги в плане (9 400)'],
+    good: [L('Калории в цели', "Calories on target"), L('Шаги в плане (9 400)', "Steps on plan (9,400)")],
     tips: [
-      { icon: '💧', title: 'Вода', text: 'Воды мало: 900 из 2 000 мл. Поставьте стакан на виду и пейте по паре глотков каждый час. Часто «голод» вечером оказывается жаждой и усталостью.' },
-      { icon: '🥩', title: 'Белок', text: 'Белок держит сытость и бережёт мышцы. Сегодня 92 из 120 г: добавьте ещё около 28 г, например 150 г творога.' },
+      { icon: '💧', title: L('Вода', "Water"), text: L('Воды мало: 900 из 2 000 мл. Поставьте стакан на виду и пейте по паре глотков каждый час. Часто «голод» вечером оказывается жаждой и усталостью.', "Water is low: 900 of 2,000 ml. Keep a glass in sight and take a few sips every hour. Evening “hunger” is often thirst or tiredness.") },
+      { icon: '🥩', title: L('Белок', "Protein"), text: L('Белок держит сытость и бережёт мышцы. Сегодня 92 из 120 г: добавьте ещё около 28 г, например 150 г творога.', "Protein keeps you full and protects muscle. Today 92 of 120 g: add about 28 g more, for example 150 g of cottage cheese.") },
     ],
   })],
 ];
@@ -606,7 +608,7 @@ export async function mockRequest(method, path, query, body) {
     }
   }
   const { ApiError } = await import('./api.js');
-  throw new ApiError(404, 'not_found', 'Не найдено.');
+  throw new ApiError(404, 'not_found', L('Не найдено.', "Not found."));
 }
 
 export function mockCsv(kind) {

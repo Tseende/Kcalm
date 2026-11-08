@@ -1,46 +1,47 @@
 // Upload a screenshot (sleep / steps / scales) -> parsed metrics -> optional confirm
 import { api } from '../api.js';
 import { h, icon, toast, haptic, nav, pageHead, compressImage, busyOverlay, fmtN, fmtDur, shortDate, parseISO, todayISO } from '../ui.js';
+import { t } from '../i18n.js';
 
 // Keys follow app/services/screens.py METRIC_RANGES (the backend's flat metrics).
 const n1 = (v) => fmtN(v);
 const METRICS = {
-  steps: ['Шаги', n1],
-  distance_km: ['Дистанция, км', n1],
-  active_kcal: ['Активные ккал', n1],
-  active_minutes: ['Активные минуты', n1],
-  avg_hr: ['Средний пульс', n1],
-  resting_hr: ['Пульс покоя', n1],
-  sleep_duration_min: ['Сон', fmtDur],
-  sleep_deep_min: ['Глубокий сон', fmtDur],
-  sleep_light_min: ['Лёгкий сон', fmtDur],
-  sleep_rem_min: ['REM', fmtDur],
-  sleep_awake_min: ['Бодрствование', fmtDur],
-  sleep_score: ['Оценка сна', n1],
-  weight_kg: ['Вес, кг', n1],
-  bmi: ['ИМТ', n1],
-  body_fat_pct: ['Жир, %', n1],
-  fat_mass_kg: ['Жировая масса, кг', n1],
-  muscle_mass_kg: ['Мышцы, кг', n1],
-  muscle_mass_pct: ['Мышцы, %', n1],
-  skeletal_muscle_pct: ['Скелетные мышцы, %', n1],
-  body_water_pct: ['Вода, %', n1],
-  bone_mass_kg: ['Кости, кг', n1],
-  protein_pct: ['Белок, %', n1],
-  visceral_fat: ['Висцеральный жир', n1],
-  bmr_kcal: ['Базовый обмен, ккал', n1],
-  metabolic_age: ['Метаболический возраст', n1],
-  body_tone: ['Тонус тела', n1],
-  body_score: ['Оценка тела', n1],
+  steps: [t('ms.steps'), n1],
+  distance_km: [t('ms.distance_km'), n1],
+  active_kcal: [t('ms.active_kcal'), n1],
+  active_minutes: [t('ms.active_minutes'), n1],
+  avg_hr: [t('ms.avg_hr'), n1],
+  resting_hr: [t('ms.resting_hr'), n1],
+  sleep_duration_min: [t('ms.sleep_duration_min'), fmtDur],
+  sleep_deep_min: [t('ms.sleep_deep_min'), fmtDur],
+  sleep_light_min: [t('ms.sleep_light_min'), fmtDur],
+  sleep_rem_min: [t('ms.rem'), fmtDur],
+  sleep_awake_min: [t('ms.sleep_awake_min'), fmtDur],
+  sleep_score: [t('ms.sleep_score'), n1],
+  weight_kg: [t('ms.weight_kg'), n1],
+  bmi: [t('ms.bmi'), n1],
+  body_fat_pct: [t('ms.body_fat_pct'), n1],
+  fat_mass_kg: [t('ms.fat_mass_kg'), n1],
+  muscle_mass_kg: [t('ms.muscle_mass_kg'), n1],
+  muscle_mass_pct: [t('ms.muscle_mass_pct'), n1],
+  skeletal_muscle_pct: [t('ms.skeletal_muscle_pct'), n1],
+  body_water_pct: [t('ms.body_water_pct'), n1],
+  bone_mass_kg: [t('ms.bone_mass_kg'), n1],
+  protein_pct: [t('ms.protein_pct'), n1],
+  visceral_fat: [t('ms.visceral_fat'), n1],
+  bmr_kcal: [t('ms.bmr_kcal'), n1],
+  metabolic_age: [t('ms.metabolic_age'), n1],
+  body_tone: [t('ms.body_tone'), n1],
+  body_score: [t('ms.body_score'), n1],
 };
 
 export default async function render(root, ctx) {
   const view = h('div', { class: 'screen' });
   const out = h('div', { class: 'stack' });
   const input = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: onPick });
-  view.append(pageHead('Скриншот', { parent: '/today' }), h('div', { class: 'stack' },
-    h('div', { class: 'muted' }, 'Загрузите скриншот из Mi Fitness, Apple Health, Samsung Health, Garmin или весов: сон, шаги, вес.'),
-    h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: () => input.click() }, icon('image', 20), 'Выбрать скриншот'),
+  view.append(pageHead(t('shot.title'), { parent: '/today' }), h('div', { class: 'stack' },
+    h('div', { class: 'muted' }, t('shot.hint')),
+    h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: () => input.click() }, icon('image', 20), t('shot.pick')),
     out, input));
   root.append(view);
 
@@ -51,10 +52,10 @@ export default async function render(root, ctx) {
     let file;
     try { file = await compressImage(f, 2000, 0.9); } catch (e) { toast(e.message, 'error'); return; }
     const url = URL.createObjectURL(file);
-    out.replaceChildren(h('img', { class: 'preview', src: url, alt: 'Выбранный скриншот' }));
+    out.replaceChildren(h('img', { class: 'preview', src: url, alt: t('shot.alt') }));
     const fd = new FormData();
     fd.append('photo', file, file.name || 'screen.jpg');
-    const stop = busyOverlay('Читаю скриншот…', 'Обычно 5–15 секунд');
+    const stop = busyOverlay(t('shot.reading'), t('lbl.sub_one'));
     try {
       const r = await api.post('/screens', fd, { timeout: 90000 });
       stop();
@@ -70,19 +71,19 @@ export default async function render(root, ctx) {
     const reasons = Array.isArray(r.reasons) ? r.reasons.filter(Boolean) : [];
     const actions = h('div', { class: 'stack-sm' });
     const status = h('div', { class: 'card status' });
-    out.replaceChildren(h('img', { class: 'preview', src: url, alt: 'Выбранный скриншот' }),
-      h('div', { class: 'muted small' }, `Распознано за ${shortDate(r.date || todayISO())} · уверенность ${Math.round((r.confidence || 0) * 100)}%`),
-      rows.length ? h('div', { class: 'list' }, rows) : h('div', { class: 'card muted' }, 'Не удалось найти данные на скриншоте.'),
+    out.replaceChildren(h('img', { class: 'preview', src: url, alt: t('shot.alt') }),
+      h('div', { class: 'muted small' }, t('shot.recognized', { d: shortDate(r.date || todayISO()), p: Math.round((r.confidence || 0) * 100) })),
+      rows.length ? h('div', { class: 'list' }, rows) : h('div', { class: 'card muted' }, t('shot.none')),
       status, actions);
 
     if (r.applied) {
       api._me = null;                                   // скриншот мог записать вес
       haptic('success');
-      status.replaceChildren(icon('check', 20), 'Данные сохранены');
+      status.replaceChildren(icon('check', 20), t('shot.saved'));
       status.classList.add('ok');
-      actions.append(h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: () => nav.replace('/today') }, 'Готово'));
+      actions.append(h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: () => nav.replace('/today') }, t('common.done')));
     } else if (r.needs_confirm) {
-      status.replaceChildren('Проверьте значения. Если всё верно, подтвердите: данные запишутся в дневник.',
+      status.replaceChildren(t('shot.confirm_text'),
         reasons.length ? h('ul', { class: 'notes' }, reasons.map((x) => h('li', null, x))) : null);
       let sending = false;
       const confirm = async (apply) => {
@@ -93,15 +94,15 @@ export default async function render(root, ctx) {
           await api.post('/screens/' + r.id + '/confirm', { apply });
           api._me = null;
           haptic('success');
-          toast(apply ? 'Данные сохранены' : 'Отменено', 'ok');
+          toast(apply ? t('shot.saved') : t('shot.cancelled'), 'ok');
           nav.replace('/today');
         } catch (e) { toast(e.message, 'error'); sending = false; btnOk.disabled = btnNo.disabled = false; }
       };
-      const btnOk = h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: () => confirm(true) }, icon('check', 20), 'Подтвердить');
-      const btnNo = h('button', { class: 'btn btn-secondary btn-block', type: 'button', onclick: () => confirm(false) }, 'Отмена');
+      const btnOk = h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: () => confirm(true) }, icon('check', 20), t('common.confirm'));
+      const btnNo = h('button', { class: 'btn btn-secondary btn-block', type: 'button', onclick: () => confirm(false) }, t('common.cancel'));
       actions.append(btnOk, btnNo);
     } else {
-      status.textContent = r.screen === 'unknown' ? 'Это не похоже на экран со сном, шагами или весом.' : 'Данные не применены.';
+      status.textContent = r.screen === 'unknown' ? t('shot.unknown') : t('shot.not_applied');
     }
   }
   void parseISO;

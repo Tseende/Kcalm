@@ -4,8 +4,9 @@ import {
   h, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, numSet, fmtN, TILE, errorState, skeletonBlocks, icon, reloadRoute,
 } from '../ui.js';
 import { drinkPic } from '../pics.js';
+import { t } from '../i18n.js';
 
-const WATER = { id: 'water', name: 'Вода', emoji: '💧', color: 'teal', kcal_100: 0, sizes: [150, 200, 250, 300, 500], sugar: false, hydrates: true };
+const WATER = { id: 'water', name: t('water.title'), emoji: '💧', color: 'teal', kcal_100: 0, sizes: [150, 200, 250, 300, 500], sugar: false, hydrates: true };
 // Границы объёма за одну запись — как на сервере (domain/water.py и domain/drinks.py).
 const WATER_ML = [10, 3000];
 const DRINK_ML = [30, 1500];
@@ -14,7 +15,7 @@ const SUGAR_KCAL = 20; // one teaspoon, about 5 g
 export default async function render(root, ctx) {
   const view = h('div', { class: 'screen' });
   const body = h('div', { class: 'stack' }, skeletonBlocks([64, 180, 120]));
-  view.append(pageHead('Напитки', { parent: '/today' }), body);
+  view.append(pageHead(t('add.drinks'), { parent: '/today' }), body);
   root.append(view);
 
   let catalog;
@@ -36,15 +37,15 @@ export default async function render(root, ctx) {
   let busy = false;
 
   // Границы зависят от напитка (вода 10..3000, остальное 30..1500): поле пускает до 4 цифр, точно проверяет go().
-  const ml = numInput({ max: WATER_ML[1], value: cur.sizes[Math.min(1, cur.sizes.length - 1)], inputmode: 'numeric', 'aria-label': 'Миллилитры' });
+  const ml = numInput({ max: WATER_ML[1], value: cur.sizes[Math.min(1, cur.sizes.length - 1)], inputmode: 'numeric', 'aria-label': t('drink.a_ml') });
   const sizes = h('div', { class: 'chips wrap' });
   const sugarVal = h('b', { class: 'step-val' }, '0');
   const sugarBox = h('div', { class: 'drink-sugar card' },
-    h('div', { class: 'grow' }, h('div', { class: 'row-title' }, 'Сахар'), h('div', { class: 'muted small' }, 'чайных ложек, по 20 ккал')),
+    h('div', { class: 'grow' }, h('div', { class: 'row-title' }, t('drink.sugar')), h('div', { class: 'muted small' }, t('drink.sugar_sub'))),
     h('div', { class: 'stepper' },
-      h('button', { type: 'button', class: 'step', 'aria-label': 'Меньше сахара', onclick: () => setSugar(sugar - 1) }, icon('minus', 18)),
+      h('button', { type: 'button', class: 'step', 'aria-label': t('drink.less'), onclick: () => setSugar(sugar - 1) }, icon('minus', 18)),
       sugarVal,
-      h('button', { type: 'button', class: 'step', 'aria-label': 'Больше сахара', onclick: () => setSugar(sugar + 1) }, icon('plus', 18))));
+      h('button', { type: 'button', class: 'step', 'aria-label': t('drink.more'), onclick: () => setSugar(sugar + 1) }, icon('plus', 18))));
   const sumKcal = h('div', { class: 'drink-kcal' });
   const sumSub = h('div', { class: 'muted' });
   const sumWater = h('div', { class: 'drink-water' });
@@ -55,7 +56,7 @@ export default async function render(root, ctx) {
       drinkPic(d.id) || h('span', { class: 'drink-emo', style: { background: TILE[d.color] || TILE.blue } }, d.emoji),
       h('span', { class: 'drink-check', 'aria-hidden': 'true' }, icon('check', 12)),
       h('span', { class: 'drink-name' }, d.name),
-      h('span', { class: 'drink-sub' }, d.id === 'water' ? 'без калорий' : d.kcal_100 < 1 ? '0 ккал' : `${fmtN(Math.round(d.kcal_100))} ккал`));
+      h('span', { class: 'drink-sub' }, d.id === 'water' ? t('drink.no_kcal') : d.kcal_100 < 1 ? '0 ' + t('unit.kcal') : `${fmtN(Math.round(d.kcal_100))} ${t('unit.kcal')}`));
     b.dataset.id = d.id;
     return b;
   });
@@ -71,7 +72,7 @@ export default async function render(root, ctx) {
       b.classList.toggle('active', on);
       b.setAttribute('aria-pressed', String(on));
     });
-    sizes.replaceChildren(...cur.sizes.map((v) => h('button', { type: 'button', class: 'chip' + (numVal(ml) === v ? ' active' : ''), 'data-ml': v, onclick: () => { numSet(ml, v); haptic('light'); paintSum(); } }, v + ' мл')));
+    sizes.replaceChildren(...cur.sizes.map((v) => h('button', { type: 'button', class: 'chip' + (numVal(ml) === v ? ' active' : ''), 'data-ml': v, onclick: () => { numSet(ml, v); haptic('light'); paintSum(); } }, v + ' ' + t('unit.ml'))));
     paintSum();
   }
 
@@ -82,14 +83,14 @@ export default async function render(root, ctx) {
     sugarVal.textContent = String(sugar);
     const v = numVal(ml) || 0;
     if (cur.id === 'water') {
-      sumKcal.textContent = '0 ккал';
-      sumSub.textContent = `Вода · ${v} мл`;
+      sumKcal.textContent = '0 ' + t('unit.kcal');
+      sumSub.textContent = t('drink.sum_water', { v });
     } else {
       const k = kcalNow();
-      sumKcal.textContent = '≈ ' + k + ' ккал';
-      sumSub.textContent = `${cur.name}${cur.sugar && sugar ? ` + ${sugar} ч. л. сахара` : ''} · ${v} мл`;
+      sumKcal.textContent = '≈ ' + k + ' ' + t('unit.kcal');
+      sumSub.textContent = `${cur.name}${cur.sugar && sugar ? t('drink.plus_sugar', { n: sugar }) : ''} · ${v} ${t('unit.ml')}`;
     }
-    sumWater.textContent = cur.hydrates ? `+${v} мл в дневную норму воды` : 'В норму воды не идёт';
+    sumWater.textContent = cur.hydrates ? t('drink.counts', { v }) : t('drink.not_counted');
     sumWater.classList.toggle('off', !cur.hydrates);
   }
 
@@ -114,7 +115,7 @@ export default async function render(root, ctx) {
     if (busy) return;
     const v = numVal(ml);
     const [lo, hi] = cur.id === 'water' ? WATER_ML : DRINK_ML;
-    if (!v || v < lo || v > hi) { toast(`${cur.id === 'water' ? 'Воды' : 'Напитка'} за раз: от ${lo} до ${hi} мл`, 'error'); ml.focus(); return; }
+    if (!v || v < lo || v > hi) { toast(t(cur.id === 'water' ? 'drink.lim_water' : 'drink.lim_drink', { lo, hi }), 'error'); ml.focus(); return; }
     busy = true;
     mainButton.setLoading(true);
     try {
@@ -122,7 +123,7 @@ export default async function render(root, ctx) {
         ? await api.post('/water', { ml: Math.round(v) })
         : await api.post('/drinks', { drink: cur.id, ml: Math.round(v), sugar_tsp: cur.sugar ? sugar : 0 });
       haptic('success');
-      toast(cur.id === 'water' ? `Выпито за день: ${r.water_ml} из ${r.goal_ml} мл` : `${cur.name}: ${r.kcal} ккал`, 'ok');
+      toast(cur.id === 'water' ? t('drink.water_day', { a: r.water_ml, b: r.goal_ml }) : t('drink.drink_kcal', { n: cur.name, k: r.kcal }), 'ok');
       mainButton.hide();
       nav.replace('/today');
     } catch (e) {
@@ -134,12 +135,12 @@ export default async function render(root, ctx) {
 
   body.replaceChildren(
     h('div', { class: 'drink-grid' }, cards),
-    h('div', { class: 'drink-label' }, 'Объём'),
+    h('div', { class: 'drink-label' }, t('dish.volume')),
     sizes,
-    group([frow('Свой объём, мл', ml)]),
+    group([frow(t('drink.custom'), ml)]),
     sugarBox,
     summary,
-    h('p', { class: 'muted small drink-note' }, 'Калории напитков ориентировочные. Для точных значений добавьте продукт по этикетке. Чай и кофе засчитываются в воду.'));
+    h('p', { class: 'muted small drink-note' }, t('drink.note')));
   paint();
-  mainButton.show('Добавить', go);
+  mainButton.show(t('common.add'), go);
 }

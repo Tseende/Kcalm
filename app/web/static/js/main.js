@@ -3,6 +3,7 @@ import { api, isMock, onMockEnabled, tg, inTelegram } from './api.js';
 import { initKeyboard } from './keyboard.js';
 import { h, $, icon, tile, sheet, nav, mainButton, backButton, emptyState, errorState, sessionExpiredButton, haptic, closeAllSheets, getThemePref, staggerIn } from './ui.js';
 import { mealPic } from './pics.js';
+import { t } from './i18n.js';
 
 const R = (re, load, opts = {}) => ({ re: new RegExp('^' + re + '$'), load, ...opts });
 const routes = [
@@ -28,11 +29,11 @@ const routes = [
 ];
 
 const TABS = [
-  ['today', 'Сегодня', 'today', '/today'],
-  ['stats', 'Статистика', 'stats', '/stats'],
-  ['add', 'Добавить', 'plus', null],
-  ['analysis', 'Анализ', 'analysis', '/analysis'],
-  ['menu', 'Меню', 'menu', '/menu'],
+  ['today', t('tab.today'), 'today', '/today'],
+  ['stats', t('tab.stats'), 'stats', '/stats'],
+  ['add', t('common.add'), 'plus', null],
+  ['analysis', t('tab.analysis'), 'analysis', '/analysis'],
+  ['menu', t('tab.menu'), 'menu', '/menu'],
 ];
 
 const view = $('#view');
@@ -45,9 +46,10 @@ let curRaw = null;      // маршрут, который сейчас на эк
 let curPath = null;     // он же без query: ctx.prev для следующего экрана
 
 function buildTabbar() {
+  tabbar.setAttribute('aria-label', t('tab.sections'));
   tabbar.replaceChildren(...TABS.map(([id, label, ic, path]) => {
     if (id === 'add') {
-      return h('button', { class: 'tab tab-plus', type: 'button', 'aria-label': 'Добавить', 'aria-haspopup': 'dialog', onclick: openAddSheet }, h('span', { class: 'plus-circle' }, icon('plus', 20)));
+      return h('button', { class: 'tab tab-plus', type: 'button', 'aria-label': t('common.add'), 'aria-haspopup': 'dialog', onclick: openAddSheet }, h('span', { class: 'plus-circle' }, icon('plus', 20)));
     }
     return h('a', { class: 'tab', href: '#' + path, dataset: { tab: id }, 'aria-label': label, onclick: () => haptic('selection') }, icon(ic, 24), h('span', null, label));
   }));
@@ -71,24 +73,24 @@ function openAddSheet() {
     h('span', { class: 'add-text' }, h('span', { class: 'row-title' }, title), h('span', { class: 'row-sub muted' }, sub)));
   const hero = h('button', { class: 'add-hero', type: 'button', onclick: () => go('/add/meal') },
     h('span', { class: 'add-hero-text' },
-      h('span', { class: 'add-hero-title' }, 'Приём пищи'),
-      h('span', { class: 'add-hero-sub' }, 'Фото тарелки или описание текстом'),
-      h('span', { class: 'add-hero-cta' }, icon('camera', 16), 'Добавить')),
+      h('span', { class: 'add-hero-title' }, t('add.meal')),
+      h('span', { class: 'add-hero-sub' }, t('add.meal_sub')),
+      h('span', { class: 'add-hero-cta' }, icon('camera', 16), t('common.add'))),
     h('span', { class: 'add-hero-pics', 'aria-hidden': 'true' },
       ['dinner', 'lunch', 'breakfast'].map((t, i) => h('span', { class: 'add-hero-pic p' + i }, mealPic(t, 64)))));
   const content = h('div', { class: 'add-sheet' },
     hero,
-    h('div', { class: 'add-label' }, 'Еда'),
+    h('div', { class: 'add-label' }, t('add.food')),
     h('div', { class: 'add-grid' },
-      card('cup', 'var(--c-water)', 'Напитки', 'Вода, чай, кофе', '/add/drink'),
-      card('barcode', 'red', 'Продукт', 'Штрихкод или этикетка', '/add/label')),
-    h('div', { class: 'add-label' }, 'Здоровье'),
+      card('cup', 'var(--c-water)', t('add.drinks'), t('add.drinks_sub'), '/add/drink'),
+      card('barcode', 'red', t('add.product'), t('add.product_sub'), '/add/label')),
+    h('div', { class: 'add-label' }, t('add.health')),
     h('div', { class: 'add-grid' },
-      card('scale', 'purple', 'Вес', 'Утреннее взвешивание', '/add/weight'),
-      card('bed', 'indigo', 'Сон', 'Часы сна и оценка', '/add/sleep'),
-      card('run', 'green', 'Активность', 'Шаги и тренировка', '/add/activity'),
-      card('device-mobile', 'blue', 'Скриншот', 'Сон, шаги или весы', '/add/screen')));
-  const s = sheet({ title: 'Добавить', content });
+      card('scale', 'purple', t('add.weight'), t('add.weight_sub'), '/add/weight'),
+      card('bed', 'indigo', t('add.sleep'), t('add.sleep_sub'), '/add/sleep'),
+      card('run', 'green', t('add.activity'), t('add.activity_sub'), '/add/activity'),
+      card('device-mobile', 'blue', t('add.screen'), t('add.screen_sub'), '/add/screen')));
+  const s = sheet({ title: t('common.add'), content });
   staggerIn(content, [...content.querySelectorAll('.add-card')]);   // карточки сетки въезжают по очереди
 }
 
@@ -156,17 +158,18 @@ function showBlocking(err) {
   $('#boot')?.remove();
   tabbar.hidden = true;
   view.replaceChildren(h('div', { class: 'screen' }, emptyState(err.status === 409 ? 'mood-smile' : 'lock',
-    err.status === 409 ? 'Нужна настройка' : err.expired ? 'Сессия устарела' : err.status === 401 ? 'Нет доступа' : 'Нет связи',
-    err.message, err.expired ? sessionExpiredButton() : h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => location.reload() }, 'Обновить'))));
+    err.status === 409 ? t('block.setup') : err.expired ? t('state.expired') : err.status === 401 ? t('block.noaccess') : t('block.offline'),
+    err.message, err.expired ? sessionExpiredButton() : h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => location.reload() }, t('common.refresh')))));
 }
 
 function mockBadge() {
   if ($('#mock-badge')) return;
-  document.body.append(h('div', { id: 'mock-badge', class: 'mock-badge', title: 'Данные не настоящие' }, 'Демо-данные'));
+  document.body.append(h('div', { id: 'mock-badge', class: 'mock-badge', title: t('mock.title') }, t('mock.badge')));
 }
 
 let fsWait = Promise.resolve();
 async function boot() {
+  document.title = t('app.title');
   try { history.scrollRestoration = 'manual'; } catch (e) { /* старый браузер */ }   // прокруткой при «Назад» управляем сами (scrollMap)
   try {
     if (tg) {

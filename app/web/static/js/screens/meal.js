@@ -2,9 +2,10 @@
 import { api } from '../api.js';
 import { mealIcon, mealPic } from '../pics.js';
 import { scanBarcode, decodeFile, validBarcode } from '../scanner.js';
+import { t } from '../i18n.js';
 import {
   h, icon, toast, haptic, nav, sheet, confirmDialog, pageHead, sectionTitle, skeletonBlocks, errorState, photoImg,
-  fmtN, fmtKcal, longDate, mealType, MEAL_TYPES, dishKind, numInput, numVal, numSet, codeInput, busyOverlay, macroChips, reloadRoute,
+  fmtN, fmtKcal, macroLine, longDate, mealType, MEAL_TYPES, dishKind, numInput, numVal, numSet, codeInput, busyOverlay, macroChips, reloadRoute,
 } from '../ui.js';
 
 const G_MIN = 1;
@@ -16,7 +17,7 @@ export default async function render(root, ctx) {
   const view = h('div', { class: 'screen' });
   root.append(view);
   // скелетон повторяет раскладку: фото 4:3, итоги, список позиций
-  view.append(pageHead('Приём пищи', { parent: '/today' }),
+  view.append(pageHead(t('add.meal'), { parent: '/today' }),
     skeletonBlocks([h('div', { class: 'skel skel-card skel-photo' }), 120, 150]));
   let meal;
   let dishNames = {};
@@ -26,7 +27,7 @@ export default async function render(root, ctx) {
     meal = m;
     d.dishes.forEach((x) => { dishNames[x.id] = x; });
   } catch (e) {
-    if (ctx.alive()) { view.replaceChildren(pageHead('Приём пищи')); const b = h('div'); view.append(b); errorState(b, e, reloadRoute); }
+    if (ctx.alive()) { view.replaceChildren(pageHead(t('add.meal'))); const b = h('div'); view.append(b); errorState(b, e, reloadRoute); }
     return;
   }
   if (!ctx.alive()) return;
@@ -40,12 +41,12 @@ export default async function render(root, ctx) {
     comps.forEach((c) => { const x = c.delta(); d.kcal += x.kcal; d.protein += x.protein; d.fat += x.fat; d.carbs += x.carbs; });
     const kcal = meal.kcal + d.kcal;
     const k = meal.kcal > 0 ? kcal / meal.kcal : 1;
-    const range = meal.kcal_low != null && meal.kcal_high != null ? `диапазон ${fmtKcal(meal.kcal_low * k)}–${fmtKcal(meal.kcal_high * k)} ккал` : '';
+    const range = meal.kcal_low != null && meal.kcal_high != null ? t('meal.range', { a: fmtKcal(meal.kcal_low * k), b: fmtKcal(meal.kcal_high * k) }) : '';
     totalsEl.replaceChildren(
-      h('div', { class: 'totals-kcal' }, h('span', { class: 'big' }, fmtKcal(kcal)), ' ккал'),
+      h('div', { class: 'totals-kcal' }, h('span', { class: 'big' }, fmtKcal(kcal)), ' ' + t('unit.kcal')),
       range ? h('div', { class: 'range-hint small' }, range) : null,
       macroChips({ p: meal.protein + d.protein, f: meal.fat + d.fat, c: meal.carbs + d.carbs }, { pills: true }),
-      meal.confidence != null ? h('div', { class: 'muted small' }, `Уверенность распознавания: ${Math.round(meal.confidence * 100)}%`) : null);
+      meal.confidence != null ? h('div', { class: 'muted small' }, t('meal.conf', { p: Math.round(meal.confidence * 100) })) : null);
   }
 
   function onMeal(m, redraw) {
@@ -53,7 +54,7 @@ export default async function render(root, ctx) {
     if (redraw) { draw(); return; }
     m.items.forEach((it) => comps.get(it.id)?.update(it));
     for (const [iid, c] of comps) if (!m.items.some((i) => i.id === iid)) { c.el.remove(); comps.delete(iid); }
-    if (!m.items.length && !view.querySelector('.items-empty')) itemsBox.append(h('div', { class: 'muted items-empty pad' }, 'Позиций не осталось.'));
+    if (!m.items.length && !view.querySelector('.items-empty')) itemsBox.append(h('div', { class: 'muted items-empty pad' }, t('meal.no_left')));
     paintTotals();
   }
 
@@ -88,20 +89,20 @@ export default async function render(root, ctx) {
     let local = it.grams;  // что показываем; именно это уйдёт на сервер
     let sent = it.grams;   // что уже отправлено или стоит в очереди
     let timer = null;
-    const input = numInput({ value: it.grams, max: G_MAX, decimals: 1, class: 'g-input', 'aria-label': 'Граммы: ' + it.name });
-    const field = h('span', { class: 'g-field' }, input, h('span', { class: 'g-unit', 'aria-hidden': 'true' }, 'г'));
+    const input = numInput({ value: it.grams, max: G_MAX, decimals: 1, class: 'g-input', 'aria-label': t('meal.a_grams', { n: it.name }) });
+    const field = h('span', { class: 'g-field' }, input, h('span', { class: 'g-unit', 'aria-hidden': 'true' }, t('unit.g')));
     const nameEl = h('span', { class: 'item-title' });
     const kcalEl = h('div', { class: 'item-kcal' });
     const macEl = h('div', { class: 'muted small' });
-    const flag = h('span', { class: 'edited', title: 'Изменено вручную' }, icon('pencil', 14));
+    const flag = h('span', { class: 'edited', title: t('meal.edited') }, icon('pencil', 14));
     const ratio = () => (it.grams > 0 ? local / it.grams : 1);
     // Поле нельзя перезаписывать ответом сервера, пока пользователь его правит или правка ещё не доехала.
     const dirty = () => document.activeElement === input || timer !== null || local !== sent || queued.has(it.id) || sendingId === it.id;
     function paint() {
       const k = ratio();
       nameEl.textContent = it.name;
-      kcalEl.replaceChildren(fmtKcal(it.kcal * k), h('small', null, ' ккал'));
-      macEl.textContent = `Б ${fmtN(it.protein * k)} · Ж ${fmtN(it.fat * k)} · У ${fmtN(it.carbs * k)}`;
+      kcalEl.replaceChildren(fmtKcal(it.kcal * k), h('small', null, ' ' + t('unit.kcal')));
+      macEl.textContent = macroLine({ protein: it.protein * k, fat: it.fat * k, carbs: it.carbs * k });
       flag.hidden = !(it.edited || local !== it.grams);
     }
     function setLocal(v) { local = v; paint(); paintTotals(); }
@@ -145,8 +146,8 @@ export default async function render(root, ctx) {
     input.addEventListener('blur', () => {
       const v = numVal(input);
       if (v !== null) {
-        if (v < G_MIN) { setLocal(G_MIN); feedback(`Минимум ${G_MIN} г`); }
-        else if (v > G_MAX) { setLocal(G_MAX); feedback(`Максимум ${G_MAX} г`); }
+        if (v < G_MIN) { setLocal(G_MIN); feedback(t('meal.min_g', { v: G_MIN })); }
+        else if (v > G_MAX) { setLocal(G_MAX); feedback(t('meal.max_g', { v: G_MAX })); }
         else setLocal(r1(v));
       }
       numSet(input, local);
@@ -181,41 +182,41 @@ export default async function render(root, ctx) {
       return btn;
     }
     async function saveProduct() {
-      try { await api.post('/items/' + it.id + '/save_product', {}); haptic('success'); toast('Сохранено в «Мои продукты»', 'ok'); } catch (e) { toast(e.message, 'error'); }
+      try { await api.post('/items/' + it.id + '/save_product', {}); haptic('success'); toast(t('meal.saved_prod'), 'ok'); } catch (e) { toast(e.message, 'error'); }
     }
     // Уточнение по упаковке: штрихкод → Open Food Facts → название и КБЖУ на 100 г, граммы остаются.
     async function applyCode(raw) {
       const code = String(raw || '').replace(/\D/g, '');
-      if (!validBarcode(code)) { toast('Штрихкод не подходит: проверьте цифры', 'error'); return; }
-      const stop = busyOverlay('Ищу продукт…', 'Open Food Facts');
+      if (!validBarcode(code)) { toast(t('lbl.v_bad'), 'error'); return; }
+      const stop = busyOverlay(t('lbl.searching'), 'Open Food Facts');
       try {
         const m = await api.post('/items/' + it.id + '/barcode', { code });
         stop();
         haptic('success');
         onMeal(m);
-        toast('Уточнено по упаковке: ' + (m.items.find((i) => i.id === it.id)?.name || ''), 'ok');
+        toast(t('meal.refined') + ': ' + (m.items.find((i) => i.id === it.id)?.name || ''), 'ok');
       } catch (e) {
         stop();
-        toast(e.status === 404 ? 'В базе такого штрихкода нет. Оставил как есть' : e.message, 'error');
+        toast(e.status === 404 ? t('meal.not_in_db') : e.message, 'error');
       }
     }
     function typeCode() {
-      const inp = codeInput({ placeholder: '13 цифр под штрихкодом', 'aria-label': 'Штрихкод' });
+      const inp = codeInput({ placeholder: t('lbl.ph_code'), 'aria-label': t('pf.barcode') });
       const go = () => { const v = inp.value; s.close(); applyCode(v); };
       inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
-      const s = sheet({ title: 'Штрихкод с упаковки', content: h('div', { class: 'stack' }, inp,
-        h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: go }, 'Найти')) });
+      const s = sheet({ title: t('add.code_title'), content: h('div', { class: 'stack' }, inp,
+        h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: go }, t('lbl.find'))) });
       setTimeout(() => inp.focus(), 250);
     }
     const shot = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, onchange: async () => {
       const f = shot.files[0];
       shot.value = '';
       if (!f) return;
-      const stop = busyOverlay('Читаю штрихкод…');
+      const stop = busyOverlay(t('lbl.reading_code'));
       let code = null;
       try { code = await decodeFile(f); } catch (e) { /* скажем ниже */ }
       stop();
-      if (code) applyCode(code); else { toast('Штрихкод на фото не нашёл. Введите цифры', 'error'); typeCode(); }
+      if (code) applyCode(code); else { toast(t('add.code_not_found'), 'error'); typeCode(); }
     } });
     async function scan() {
       haptic('light');
@@ -223,11 +224,11 @@ export default async function render(root, ctx) {
       if (!r) return;
       if (r.code) { applyCode(r.code); return; }
       if (r.manual) { typeCode(); return; }
-      toast(r.error === 'load' ? 'Сканер не загрузился' : 'Нет доступа к камере. Сфотографируйте штрихкод', 'error');
+      toast(r.error === 'load' ? t('lbl.scan_load') : t('lbl.no_cam'), 'error');
       if (r.error === 'camera') shot.click();
     }
     async function remove() {
-      if (!(await confirmDialog(`Удалить «${it.name}»?`))) return;
+      if (!(await confirmDialog(t('pf.del_q', { n: it.name })))) return;
       clearTimeout(timer); timer = null; queued.delete(it.id);
       try { onMeal(await api.del('/items/' + it.id)); } catch (e) { toast(e.message, 'error'); }
     }
@@ -236,13 +237,13 @@ export default async function render(root, ctx) {
       macEl,
       h('div', { class: 'item-ctl' },
         h('div', { class: 'stepper' },
-          holdRepeat(h('button', { type: 'button', class: 'step', 'aria-label': 'Уменьшить на 10 грамм' }, icon('minus', 18)), -1),
+          holdRepeat(h('button', { type: 'button', class: 'step', 'aria-label': t('meal.dec10') }, icon('minus', 18)), -1),
           field,
-          holdRepeat(h('button', { type: 'button', class: 'step', 'aria-label': 'Увеличить на 10 грамм' }, icon('plus', 18)), 1)),
+          holdRepeat(h('button', { type: 'button', class: 'step', 'aria-label': t('meal.inc10') }, icon('plus', 18)), 1)),
         h('div', { class: 'item-actions' }, shot,
-          h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Уточнить по штрихкоду упаковки', title: 'Сканер штрихкода', onclick: scan }, icon('barcode', 20)),
-          h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Сохранить в мои продукты', title: 'В мои продукты', onclick: saveProduct }, icon('save', 20)),
-          h('button', { type: 'button', class: 'icon-btn danger', 'aria-label': 'Удалить позицию', onclick: remove }, icon('trash', 20)))));
+          h('button', { type: 'button', class: 'icon-btn', 'aria-label': t('meal.a_scan'), title: t('meal.t_scan'), onclick: scan }, icon('barcode', 20)),
+          h('button', { type: 'button', class: 'icon-btn', 'aria-label': t('meal.a_save'), title: t('meal.t_save'), onclick: saveProduct }, icon('save', 20)),
+          h('button', { type: 'button', class: 'icon-btn danger', 'aria-label': t('meal.a_del_item'), onclick: remove }, icon('trash', 20)))));
     paint();
     return {
       el,
@@ -254,11 +255,11 @@ export default async function render(root, ctx) {
 
   function carousel() {
     if (!meal.photos || !meal.photos.length) {
-      return h('div', { class: 'photo-ph', 'aria-hidden': 'true' }, (mealIcon(meal, 64) || icon(mealType(meal.type).icon, 44)), h('span', { class: 'muted small' }, meal.source === 'text' ? 'Описание текстом' : 'Без фото'));
+      return h('div', { class: 'photo-ph', 'aria-hidden': 'true' }, (mealIcon(meal, 64) || icon(mealType(meal.type).icon, 44)), h('span', { class: 'muted small' }, meal.source === 'text' ? t('meal.text_src') : t('meal.no_photo')));
     }
-    const track = h('div', { class: 'carousel', tabindex: 0, 'aria-label': 'Фото приёма' }, meal.photos.map((p, i) => {
+    const track = h('div', { class: 'carousel', tabindex: 0, 'aria-label': t('meal.photo_alt') }, meal.photos.map((p, i) => {
       const dish = p.dish_id && dishNames[p.dish_id];
-      return h('figure', { class: 'slide', 'aria-label': `Фото ${i + 1} из ${meal.photos.length}` }, photoImg(p.url, '', 'Фото приёма'),
+      return h('figure', { class: 'slide', 'aria-label': t('meal.photo_n', { i: i + 1, n: meal.photos.length }) }, photoImg(p.url, '', t('meal.photo_alt')),
         dish ? h('figcaption', { class: 'dish-tag' }, icon(dishKind(dish.kind).icon, 14), dish.name) : null);
     }));
     const dots = h('div', { class: 'dots' }, meal.photos.map((_, i) => h('i', { class: i === 0 ? 'on' : '' })));
@@ -270,64 +271,64 @@ export default async function render(root, ctx) {
   }
 
   function pickTime() {
-    const input = h('input', { type: 'time', value: meal.time, class: 'time-big', 'aria-label': 'Время приёма' });
-    const s = sheet({ title: 'Время приёма', content: h('div', { class: 'stack' }, input,
+    const input = h('input', { type: 'time', value: meal.time, class: 'time-big', 'aria-label': t('meal.time_title') });
+    const s = sheet({ title: t('meal.time_title'), content: h('div', { class: 'stack' }, input,
       h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: async () => {
         if (!input.value) return;
         try { const m = await api.patch('/meals/' + meal.id, { time: input.value }); s.close(); haptic('success'); onMeal(m, true); } catch (e) { toast(e.message, 'error'); }
-      } }, 'Сохранить')) });
+      } }, t('common.save'))) });
   }
 
   function pickType() {
-    const s = sheet({ title: 'Тип приёма', content: h('div', { class: 'chips wrap' }, Object.entries(MEAL_TYPES).map(([k, v]) =>
+    const s = sheet({ title: t('meal.type_title'), content: h('div', { class: 'chips wrap' }, Object.entries(MEAL_TYPES).map(([k, v]) =>
       h('button', { class: 'chip' + (meal.type === k ? ' active' : ''), type: 'button', onclick: async () => {
         try { const m = await api.patch('/meals/' + meal.id, { type: k }); s.close(); onMeal(m, true); } catch (e) { toast(e.message, 'error'); }
       } }, (mealPic(k, 24) || icon(v.icon, 18)), v.label))) });
   }
 
   function refine() {
-    const ta = h('textarea', { rows: 3, placeholder: 'Например: жарил на масле 1 ст. л., соус сметанный', 'aria-label': 'Уточнение' });
-    const s = sheet({ title: 'Уточнить приём', content: h('div', { class: 'stack' },
-      h('div', { class: 'muted small' }, 'Добавьте детали: бот пересчитает позиции.'), ta,
+    const ta = h('textarea', { rows: 3, placeholder: t('meal.ph_refine'), 'aria-label': t('meal.a_refine') });
+    const s = sheet({ title: t('meal.refine_title'), content: h('div', { class: 'stack' },
+      h('div', { class: 'muted small' }, t('meal.refine_hint')), ta,
       h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: async () => {
         const text = ta.value.trim();
         if (!text) return;
         s.close();
-        const stop = busyOverlay('Пересчитываю…', 'Это может занять до минуты');
+        const stop = busyOverlay(t('meal.recalc'), t('add.recognizing_sub'));
         try { const m = await api.post('/meals/' + meal.id + '/refine', { comment: text }, { timeout: 120000 }); haptic('success'); onMeal(m, true); } catch (e) { toast(e.message, 'error'); } finally { stop(); }
-      } }, 'Пересчитать')) });
+      } }, t('meal.recalc_btn'))) });
     setTimeout(() => ta.focus(), 250);
   }
 
   async function removeMeal() {
-    if (!(await confirmDialog('Удалить этот приём пищи?'))) return;
-    try { await api.del('/meals/' + meal.id); haptic('success'); toast('Приём удалён'); nav.replace('/today'); } catch (e) { toast(e.message, 'error'); }
+    if (!(await confirmDialog(t('meal.del_q')))) return;
+    try { await api.del('/meals/' + meal.id); haptic('success'); toast(t('meal.deleted')); nav.replace('/today'); } catch (e) { toast(e.message, 'error'); }
   }
 
   function draw() {
     comps = new Map();
     itemsBox.replaceChildren();
     meal.items.forEach((it) => { const c = itemCard(it); comps.set(it.id, c); itemsBox.append(c.el); });
-    if (!meal.items.length) itemsBox.append(h('div', { class: 'muted items-empty pad' }, 'Позиций нет.'));
+    if (!meal.items.length) itemsBox.append(h('div', { class: 'muted items-empty pad' }, t('meal.no_items')));
     const mt = mealType(meal.type);
     paintTotals();
     view.replaceChildren(...[
-      pageHead('Приём пищи', { parent: '/today' }),
+      pageHead(t('add.meal'), { parent: '/today' }),
       carousel(),
       h('div', { class: 'meta-row' },
-        h('button', { class: 'chip', type: 'button', onclick: pickType, 'aria-label': 'Тип приёма: ' + mt.label }, (mealPic(meal.type, 24) || icon(mt.icon, 18)), mt.label),
-        h('button', { class: 'chip', type: 'button', onclick: pickTime, 'aria-label': 'Время ' + meal.time + ', изменить' }, icon('clock', 16), meal.time),
+        h('button', { class: 'chip', type: 'button', onclick: pickType, 'aria-label': t('meal.a_type', { n: mt.label }) }, (mealPic(meal.type, 24) || icon(mt.icon, 18)), mt.label),
+        h('button', { class: 'chip', type: 'button', onclick: pickTime, 'aria-label': t('meal.a_time', { n: meal.time }) }, icon('clock', 16), meal.time),
         h('span', { class: 'muted small' }, longDate(meal.date))),
       totalsEl,
-      meal.comment ? h('div', { class: 'card comment' }, h('div', { class: 'muted small' }, 'Комментарий'), h('div', null, meal.comment)) : null,
-      sectionTitle('Позиции'),
+      meal.comment ? h('div', { class: 'card comment' }, h('div', { class: 'muted small' }, t('add.comment')), h('div', null, meal.comment)) : null,
+      sectionTitle(t('meal.items')),
       itemsBox,
       h('div', { class: 'meal-actions' },
         h('button', { class: 'act' + (meal.favorite_id ? ' star-on' : ''), type: 'button',
-          'aria-pressed': String(!!meal.favorite_id), 'aria-label': meal.favorite_id ? 'Убрать из избранного' : 'В избранное',
-          title: meal.favorite_id ? 'В избранном' : 'В избранное', onclick: (ev) => toggleFavorite(ev.currentTarget) }, icon('star', 24)),
-        h('button', { class: 'act', type: 'button', 'aria-label': 'Уточнить', title: 'Уточнить', onclick: refine }, icon('pencil', 24)),
-        h('button', { class: 'act danger', type: 'button', 'aria-label': 'Удалить приём', title: 'Удалить приём', onclick: removeMeal }, icon('trash', 24)))].filter(Boolean));
+          'aria-pressed': String(!!meal.favorite_id), 'aria-label': meal.favorite_id ? t('favf.rm') : t('add.fav_aria'),
+          title: meal.favorite_id ? t('meal.in_fav') : t('add.fav_aria'), onclick: (ev) => toggleFavorite(ev.currentTarget) }, icon('star', 24)),
+        h('button', { class: 'act', type: 'button', 'aria-label': t('meal.refine'), title: t('meal.refine'), onclick: refine }, icon('pencil', 24)),
+        h('button', { class: 'act danger', type: 'button', 'aria-label': t('meal.del_meal'), title: t('meal.del_meal'), onclick: removeMeal }, icon('trash', 24)))].filter(Boolean));
   }
 
   let favBusy = false;
@@ -339,18 +340,18 @@ export default async function render(root, ctx) {
       if (meal.favorite_id) {
         await api.del('/favorites/' + meal.favorite_id);
         meal.favorite_id = null;
-        toast('Убрано из избранного');
+        toast(t('favf.removed'));
       } else {
         meal.favorite_id = (await api.post('/favorites', { meal_id: meal.id })).id;
-        toast('Добавлено в избранное. Теперь оно под рукой при добавлении приёма', 'ok');
+        toast(t('meal.fav_added'), 'ok');
       }
       haptic('light');
       // без полной перерисовки: карусель не мигает и не возвращается на первый слайд
       const on = !!meal.favorite_id;
       btn.classList.toggle('star-on', on);
       btn.setAttribute('aria-pressed', String(on));
-      btn.setAttribute('aria-label', on ? 'Убрать из избранного' : 'В избранное');
-      btn.title = on ? 'В избранном' : 'В избранное';
+      btn.setAttribute('aria-label', on ? t('favf.rm') : t('add.fav_aria'));
+      btn.title = on ? t('meal.in_fav') : t('add.fav_aria');
     } catch (e) { toast(e.message, 'error'); } finally { favBusy = false; btn.disabled = false; }
   }
 
