@@ -2,7 +2,108 @@
 import { h } from './ui.js';
 
 // Порядок важен: сначала частные случаи («сырники» раньше «сыра»). Ключ = файл в img/food.
+const NOT_PROC = '^(?!.*(варень|джем|повидл|конфитюр|сок|сока|йогурт|пирог|торт|пирожн|мармелад|сироп|компот|сушен|вялен)).*';
+const NOT_DISH = '^(?!.*(салат|бутерброд|сэндвич|сендвич|суп|пирож|пирог|булочк|тост|ролл|завтрак|торт|шаурм)).*';
+const YG_FLAVORS = {
+  strawberry: 'клубни[кч]|земляни[кч]',
+  peach: 'персик|абрикос',
+  blueberry: 'черни[кч]|голуби[кч]',
+  cherry: 'вишн|черешн',
+  vanilla: 'ванил',
+};
+const flavoredYogurts = [
+  ...Object.entries(YG_FLAVORS).map(([k, f]) => [`drinkyogurt_${k}`, new RegExp(`(питьев[а-яё]*\\s+йогурт|йогурт[а-яё]*\\s+питьев)[^]*(${f})|(${f})[^]*питьев[а-яё]*\\s+йогурт`)]),
+  ['drinkyogurt_plain', /питьев[а-яё]*\s+йогурт\s+(натуральн|классическ|без\s+добав)|натуральн[а-яё]*\s+питьев[а-яё]*\s+йогурт/],
+  ['yogurt_strawberry', /^(?!.*питьев).*(йогурт[^]*(клубни[кч]|земляни[кч])|(клубнич|земляничн)[а-яё]*\s+йогурт)/],
+  ['yogurt_peach', /^(?!.*питьев).*(йогурт[^]*(персик|абрикос)|(персиков|абрикосов)[а-яё]*\s+йогурт)/],
+  ['yogurt_blueberry', /^(?!.*питьев).*(йогурт[^]*(черни[кч]|голуби[кч])|(черничн|голубичн)[а-яё]*\s+йогурт)/],
+  ['yogurt_vanilla', /^(?!.*питьев).*(йогурт[^]*ванил|ванильн[а-яё]*\s+йогурт)/],
+  ['yogurt_raspberry', /^(?!.*питьев).*(йогурт[^]*малин|малинов[а-яё]*\s+йогурт)/],
+  ['yogurt_banana', /^(?!.*питьев).*(йогурт[^]*банан|банановый\s+йогурт)/],
+];
+
 const FOOD = [
+  // --- новые иконки (раньше общих правил, чтобы «борщ» не стал просто супом)
+  ...flavoredYogurts,
+  ['borscht', /борщ/],
+  ['shchi', /(^|[^а-яё])щи(?![а-яё])/],
+  ['solyanka', /солянк/],
+  ['ukha', /(^|[^а-яё])уха(?![а-яё])/],
+  ['chickensoup', /кур[а-яё]*\s+(суп|бульон)|суп\s+кур|бульон\s+кур|суп-лапш|куриная\s+лапша/],
+  ['peasoup', /горохов[а-яё]*\s+суп|суп\s+горохов|суп-пюре\s+горохов/],
+  ['mushroomsoup', /грибн[а-яё]*\s+(суп|крем)|суп\s+грибн|суп-пюре\s+грибн|крем-суп\s+(из\s+)?гриб/],
+  ['olivier', /оливье/],
+  ['vinaigrette', /винегрет/],
+  ['mashed', /картоф[а-яё]*\s+пюре|пюре\s+картоф|^\s*пюре\s*$/],
+  ['stuffedpepper', /фаршированн[а-яё]*\s+пер(е|)ц|пер(е|)[цч][а-яё]*\s+фаршированн/],
+  ['zapekanka', /запеканк/],
+  ['vareniki', /вареник/],
+  ['manti', /(^|[^а-яё])мант[ыа](?![а-яё])|мантов/],
+  ['goulash', /гуляш/],
+  ['bakedfish', /запечен[а-яё]*\s+рыб|рыб[а-яё]*\s+(запечен|в\s+духовк|на\s+пару|на\s+гриле)/],
+  ['quailegg', /перепел[а-яё]*\s+яйц|яйц[а-яё]*\s+перепел/],
+  ['deviledegg', /фаршированн[а-яё]*\s+яйц|яйц[а-яё]*\s+фаршированн/],
+  ['poached', /пашот|бенедикт/],
+  ['softegg', new RegExp(NOT_DISH + 'всмятку|яйц[а-яё]*\\s+в\\s+мешочк')],
+  ['scrambled', /болтунь|скрэмбл|scramble/],
+  ['friedegg', /яичниц|глазунь|жарен[а-яё]*\s+яйц/],
+  ['boiledegg', new RegExp(NOT_DISH + '(вкрутую|варен[а-яё]*\\s+яйц|яйц[а-яё]*\\s+варен)')],
+  ['zefir', /зефир/],
+  ['pastila', /пастил/],
+  ['marmalade', /мармелад/],
+  ['halva', /халв/],
+  ['turkishdelight', /лукум/],
+  ['gingerbread', /пряник/],
+  ['condensed', /сгущ[её]н|сгущенк/],
+  ['muffin', /маффин|капкейк/],
+  ['eclair', /эклер/],
+  ['bublik', /бублик|баранк|сушки/],
+  ['ayran', /айран|(^|[^а-яё])тан(?![а-яё])/],
+  ['ryazhenka', /ряженк/],
+  ['apricot', new RegExp(NOT_PROC + 'абрикос')],
+  ['grapefruit', new RegExp(NOT_PROC + 'грейпфрут')],
+  ['mandarin', new RegExp(NOT_PROC + 'мандарин')],
+  ['fig', new RegExp(NOT_PROC + '(^|[^а-яё])инжир')],
+  ['persimmon', new RegExp(NOT_PROC + 'хурм')],
+  ['asparagus', /спарж/],
+  ['chili', /^(?!.*(соус|паст|кетчуп|кон\s*карне)).*(перец\s+чили|(^|[^а-яё])чили(?![а-яё])|жгуч[а-яё]*\s+перец)/],
+  // --- партия 2: каши, сыры, соусы, орехи, мясо, полуфабрикаты
+  ['semolina', /манн[а-яё]*\s+каш|каш[а-яё]*\s+манн|(^|[^а-яё])манка/],
+  ['millet', /пшённ[а-яё]*\s+каш|пшенн[а-яё]*\s+каш|каш[а-яё]*\s+пшенн|(^|[^а-яё])пшено/],
+  ['pearlbarley', /перлов|ячнев/],
+  ['cornporridge', /кукурузн[а-яё]*\s+(каш|крупа)|полент|мамалыг/],
+  ['couscous', /кускус|булгур/],
+  ['quinoa', /киноа/],
+  ['mozzarella', /моцарелл|буррат/],
+  ['brie', /(^|[^а-яё])бри(?![а-яё])|камамбер|дорблю|сыр\s+с\s+плесенью/],
+  ['feta', /(^|[^а-яё])фет[аы](?![а-яё])|брынз|адыгейск|сулугуни\s+рассол/],
+  ['parmesan', /пармезан|гран[аo]\s+падано|твёрд[а-яё]*\s+сыр|твердый\s+сыр|пекорино/],
+  ['boiledsausage', /(варён|варен)[а-яё]*\s+колбас|колбас[а-яё]*\s+(варён|варен)|докторск|молочн[а-яё]*\s+колбас|любительск/],
+  ['pate', /паштет|ливерн[а-яё]*\s+колбас/],
+  ['soysauce', /соев[а-яё]*\s+соус|соус\s+соев|терияки|вустерск/],
+  ['mustard', /горчиц/],
+  ['salt', /^\s*(соль|соли)(?![а-яё])|поваренн[а-яё]*\s+соль/],
+  ['pepper', /(чёрн|черн)[а-яё]*\s+перец|перец\s+(горош|молот|чёрн|черн)|специи|приправ/],
+  ['vinegar', /уксус/],
+  ['pesto', /песто/],
+  ['almond', /миндал/],
+  ['walnut', /грецк/],
+  ['peanut', /арахис(?!ов[а-яё]*\s+(паст|масл))|земляной\s+орех/],
+  ['cashew', /кешью/],
+  ['pistachio', /фисташк/],
+  ['raisins', /изюм|кишмиш/],
+  ['chickenleg', /куриная\s+(ножк|ляшк|голень|бедр)|(ножк|ляшк|голень|бедр)[а-яё]*\s+кур|окорочок|окорочк/],
+  ['chickenwings', /крыл[ыьоя]|крылышк/],
+  ['duck', /утк|утин|гус[ьяиь]|гусь/],
+  ['liver', /печен[ьи](?![а-яё])|печёнк|печенк|субпродукт|сердц[еа]\s+кур/],
+  ['lambchop', /баранин|ягнят|баранья\s+отбивн|каре\s+ягнен/],
+  ['ribs', /рёбрыш|ребрыш|свин[а-яё]*\s+рёбр|свин[а-яё]*\s+ребр/],
+  ['nuggets', /наггетс/],
+  ['instantnoodles', /(быстр[а-яё]*\s+приготов[а-яё]*\s+)?(лапш[а-яё]*\s+быстр|доширак|ролтон|роллтон|бич-?пакет)|лапш[а-яё]*\s+в\s+стакан/],
+  ['blinchiki', /блинчик|блины\s+с\s+(мяс|творог|начинк)/],
+  ['cheburek', /чебурек/],
+  ['lasagna', /лазань/],
+  ['dolma', /долм|голубц[а-яё]*\s+виноград/],
   // --- спорт-питание, перекусы, творожные формы (раньше общих правил)
   ['proteinbar', /протеинов[а-яё]*\s+батончик|батончик[а-яё]*\s+протеинов|протеин[а-яё]*\s+бар|protein\s*bar|белков[а-яё]*\s+батончик|bombbar|бомбар|snaq/],
   ['proteincookie', /(протеинов|белков)[а-яё]*\s+печень|печень[а-яё]*\s+протеинов/],
@@ -167,17 +268,17 @@ export const FOOD_ICONS = [...new Set(FOOD.map(([file]) => file))];
 
 // Группы для выбора иконки вручную. Всё, что не попало в группу, уйдёт в «Другое».
 const GROUPS = [
-  ['Молочное и яйца', ['milk', 'kefir', 'drinkyogurt', 'yogurt', 'sourcream', 'cottage', 'curdbar', 'cheese', 'smokedcheese', 'processedcheese', 'butter', 'egg', 'icecream', 'omelette', 'syrniki', 'tofu']],
-  ['Мясо и колбасы', ['meat', 'steak', 'mince', 'cutlet', 'chicken', 'chickenmeat', 'turkey', 'sausage', 'smokedsausage', 'salo', 'bacon', 'ham', 'shashlik']],
-  ['Рыба и морепродукты', ['fish', 'salmon', 'herring', 'herringjar', 'shrimp', 'canfish', 'forshmak', 'caviar']],
-  ['Крупы и паста', ['rice', 'buckwheat', 'oatmeal', 'pasta', 'beans', 'peas', 'noodles']],
-  ['Хлеб и выпечка', ['bread', 'ryebread', 'toast', 'croissant', 'pancakes', 'cookies', 'cake', 'crispbread', 'pirozhok', 'donut', 'waffles']],
-  ['Овощи и грибы', ['tomato', 'cucumber', 'carrot', 'potato', 'onion', 'broccoli', 'pumpkin', 'corn', 'mushroom', 'avocado', 'vegetables', 'cabbage', 'zucchini', 'eggplant', 'beet', 'bellpepper', 'radish', 'garlic', 'greens']],
-  ['Фрукты и ягоды', ['apple', 'banana', 'orange', 'lemon', 'grapes', 'watermelon', 'strawberry', 'peach', 'berries', 'pear', 'kiwi', 'pineapple', 'mango', 'melon', 'cherry', 'plum', 'coconut', 'driedfruit']],
-  ['Блюда и фастфуд', ['soup', 'salad', 'sandwich', 'burger', 'pizza', 'wrap', 'sushi', 'dumplings', 'khinkali', 'fries', 'chips', 'hotdog', 'tacos', 'plov', 'khachapuri']],
-  ['Соусы и заготовки', ['ketchup', 'mayo', 'adjika', 'lecho', 'oil', 'pickledcucumber', 'pickledtomato', 'pickledpepper', 'pickledmushroom', 'sauerkraut', 'olives', 'blackolives']],
-  ['Сладкое', ['chocolate', 'candy', 'honey', 'jamstrawberry', 'jamraspberry', 'jamcherry', 'jamapricot', 'jamcurrant', 'protein', 'peanutbutter', 'sugar']],
-  ['Орехи и семечки', ['nuts', 'seeds']],
+  ['Молочное и яйца', ['milk', 'kefir', 'ayran', 'ryazhenka', 'drinkyogurt', 'drinkyogurt_strawberry', 'drinkyogurt_peach', 'drinkyogurt_blueberry', 'drinkyogurt_cherry', 'drinkyogurt_vanilla', 'drinkyogurt_plain', 'yogurt', 'yogurt_strawberry', 'yogurt_peach', 'yogurt_blueberry', 'yogurt_vanilla', 'yogurt_raspberry', 'yogurt_banana', 'sourcream', 'cottage', 'curdbar', 'cheese', 'smokedcheese', 'processedcheese', 'mozzarella', 'brie', 'feta', 'parmesan', 'butter', 'egg', 'boiledegg', 'softegg', 'friedegg', 'scrambled', 'poached', 'deviledegg', 'quailegg', 'icecream', 'omelette', 'syrniki', 'tofu']],
+  ['Мясо и колбасы', ['meat', 'steak', 'mince', 'cutlet', 'chicken', 'chickenmeat', 'turkey', 'sausage', 'smokedsausage', 'salo', 'bacon', 'ham', 'shashlik', 'goulash', 'boiledsausage', 'pate', 'chickenleg', 'chickenwings', 'duck', 'liver', 'lambchop', 'ribs']],
+  ['Рыба и морепродукты', ['fish', 'salmon', 'herring', 'herringjar', 'shrimp', 'canfish', 'forshmak', 'caviar', 'bakedfish']],
+  ['Крупы и паста', ['rice', 'buckwheat', 'oatmeal', 'pasta', 'beans', 'peas', 'noodles', 'semolina', 'millet', 'pearlbarley', 'cornporridge', 'couscous', 'quinoa']],
+  ['Хлеб и выпечка', ['bread', 'ryebread', 'toast', 'croissant', 'pancakes', 'cookies', 'cake', 'crispbread', 'pirozhok', 'donut', 'waffles', 'muffin', 'eclair', 'bublik', 'gingerbread']],
+  ['Овощи и грибы', ['tomato', 'cucumber', 'carrot', 'potato', 'onion', 'broccoli', 'pumpkin', 'corn', 'mushroom', 'avocado', 'vegetables', 'cabbage', 'zucchini', 'eggplant', 'beet', 'bellpepper', 'radish', 'garlic', 'greens', 'asparagus', 'chili']],
+  ['Фрукты и ягоды', ['apple', 'banana', 'orange', 'lemon', 'grapes', 'watermelon', 'strawberry', 'peach', 'berries', 'pear', 'kiwi', 'pineapple', 'mango', 'melon', 'cherry', 'plum', 'coconut', 'driedfruit', 'apricot', 'grapefruit', 'mandarin', 'fig', 'persimmon']],
+  ['Блюда и фастфуд', ['soup', 'salad', 'sandwich', 'burger', 'pizza', 'wrap', 'sushi', 'dumplings', 'khinkali', 'fries', 'chips', 'hotdog', 'tacos', 'plov', 'khachapuri', 'borscht', 'shchi', 'solyanka', 'ukha', 'chickensoup', 'peasoup', 'mushroomsoup', 'olivier', 'vinaigrette', 'mashed', 'stuffedpepper', 'zapekanka', 'vareniki', 'manti', 'nuggets', 'instantnoodles', 'blinchiki', 'cheburek', 'lasagna', 'dolma']],
+  ['Соусы и заготовки', ['ketchup', 'mayo', 'adjika', 'lecho', 'oil', 'pickledcucumber', 'pickledtomato', 'pickledpepper', 'pickledmushroom', 'sauerkraut', 'olives', 'blackolives', 'soysauce', 'mustard', 'salt', 'pepper', 'vinegar', 'pesto']],
+  ['Сладкое', ['chocolate', 'candy', 'honey', 'jamstrawberry', 'jamraspberry', 'jamcherry', 'jamapricot', 'jamcurrant', 'protein', 'peanutbutter', 'sugar', 'zefir', 'pastila', 'marmalade', 'halva', 'turkishdelight', 'condensed']],
+  ['Орехи и семечки', ['nuts', 'seeds', 'almond', 'walnut', 'peanut', 'cashew', 'pistachio', 'raisins']],
 ];
 export const FOOD_GROUPS = (() => {
   const used = new Set(GROUPS.flatMap(([, ks]) => ks));
@@ -205,15 +306,15 @@ function pic(path, size) {
 // null, если подходящей картинки нет: вызывающий код рисует обычную плитку.
 export function foodPic(name, size = 40, icon = null) {
   const f = FOOD_ICONS.includes(icon) ? icon : foodPicName(name);
-  return f ? pic(`img/food/${f}.webp?v=6`, size) : null;
+  return f ? pic(`img/food/${f}.webp?v=8`, size) : null;
 }
 
-const DRINKS = new Set(['cola', 'cola_zero', 'fanta', 'tea', 'americano', 'cappuccino', 'flat_white', 'latte', 'juice', 'water', 'smoothie', 'beer', 'beer0', 'wine', 'energy', 'shake']);
+const DRINKS = new Set(['cola', 'cola_zero', 'fanta', 'tea', 'americano', 'cappuccino', 'flat_white', 'latte', 'juice', 'water', 'smoothie', 'beer', 'beer0', 'wine', 'energy', 'shake', 'juice_apple', 'juice_orange', 'juice_tomato', 'juice_cherry', 'juice_multi', 'juice_grape', 'sparkling', 'cocoa', 'lemonade', 'icetea', 'oatmilk', 'kvass']);
 const DRINK_ALIAS = { juice: 'juice_box', beer0: 'beer' };
 
 export function drinkPic(id, size = 48) {
   if (!DRINKS.has(id)) return null;
-  return pic(`img/drink/${DRINK_ALIAS[id] || id}.webp?v=4`, size);
+  return pic(`img/drink/${DRINK_ALIAS[id] || id}.webp?v=5`, size);
 }
 
 const DISH_PICS = { plate: 'plate', deep_plate: 'deep_plate', bowl: 'bowl', salad_bowl: 'salad_bowl', mug: 'mug', cup: 'cup', glass: 'glass', pan: 'pan', pot: 'pot', container: 'lunchbox', jar: 'jar', thermos: 'thermos' };
@@ -228,7 +329,20 @@ export function mealPic(type, size = 48) {
 }
 
 // Напитки по названию позиции. Порядок важен: частные случаи раньше общих.
+const juiceOf = (f) => new RegExp(`^(?=.*(сок|сока|соку|соком|соки|нектар|фреш))(?=.*(${f}))`);
 const DRINK_RE = [
+  ['kvass', /квас(?![а-яё])/],
+  ['oatmilk', /овсян[а-яё]*\s+молок|молок[а-яё]*\s+овсян|растительн[а-яё]*\s+молок|миндальн[а-яё]*\s+молок/],
+  ['cocoa', /какао|горяч[а-яё]*\s+шоколад/],
+  ['icetea', /холодн[а-яё]*\s+чай|чай\s+холодн|ice\s*tea|айс\s*ти|липтон|nestea/],
+  ['juice_apple', juiceOf('яблочн|яблок')],
+  ['juice_orange', juiceOf('апельсин')],
+  ['juice_tomato', juiceOf('томат')],
+  ['juice_cherry', juiceOf('вишн|черешн')],
+  ['juice_grape', juiceOf('виноград')],
+  ['juice_multi', juiceOf('мультифрукт|мультивитамин|ассорти|мультифрут')],
+  ['sparkling', /газированн[а-яё]*\s+вод|вод[аыуе]\s+газированн|вод[аыуе]\s+с\s+газом|сельтерск|содов/],
+  ['lemonade', /лимонад/],
   ['cola_zero', /кола\s+(зеро|zero|без\s+сахара)|(coca|pepsi|пепси)[^а-яё]*(zero|зеро|max)|zero\s+cola/],
   ['cola', /(^|[^а-яё])кола(?![а-яё])|кока-?кол|пепси|coca|pepsi/],
   ['fanta', /фанта|fanta|спрайт|sprite|лимонад|газировк|тархун|буратино|сода\s+вода/],
@@ -262,7 +376,7 @@ export function mealIcon(meal, size = 56) {
     const d = drinkPicName(it.name);
     if (d) return drinkPic(d, size);
     const f = foodPicName(it.name);
-    if (f) return pic(`img/food/${f}.webp?v=6`, size);
+    if (f) return pic(`img/food/${f}.webp?v=8`, size);
   }
   return mealPic(meal.type, size);
 }
