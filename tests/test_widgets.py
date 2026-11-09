@@ -152,7 +152,9 @@ def test_html_fits_telegram_limits_after_link_substitution():
         for link in ("https://t.me/SomeVeryLongBotUsername_bot/app", "https://t.me/KcalmBot", ""):
             html = pages.load(name, link)
             pages.check_limits(html)
-    assert "https://t.me/MyBot/app" in pages.load("day", pages.app_link("MyBot", "https://x/app/"))
+    # карточка дня — только информация: ни кнопок, ни ссылок, ни запросов к боту
+    day_html = pages.load("day", pages.app_link("MyBot", "https://x/app/"))
+    assert "<button" not in day_html and "request(" not in day_html and "t.me/" not in day_html
     assert pages.app_link("MyBot", "") == "https://t.me/MyBot"
 
 
