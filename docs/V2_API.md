@@ -25,7 +25,8 @@ Single source of truth for the frontend (`app/web/static/`) and the backend
 // Item (позиция приёма)
 {"id":1,"name":"Гречка отварная","grams":180.0,"kcal":198,"protein":7.4,"fat":2.0,
  "carbs":38.5,"per100":{"kcal":110,"protein":4.1,"fat":1.1,"carbs":21.4}|null,
- "confidence":0.8,"edited":false}
+ "confidence":0.8,"edited":false,
+ "source":"seed"|"llm"|"manual"|"user"|"barcode"|...}   // per100.kcal: number with a decimal when entered per portion
 
 // Meal
 {"id":10,"date":"2026-11-01","time":"13:20","type":"lunch",   // breakfast|lunch|dinner|snack
@@ -60,8 +61,11 @@ Single source of truth for the frontend (`app/web/static/`) and the backend
 | POST | /api/meals | multipart: `photo` (1–6 files, repeated), `dish_id` (repeated, same order as photos, empty string = none), `comment`, `time` (HH:MM optional), `date` optional, `text` (when no photos: text description) | `201 Meal` (recognition is synchronous, may take up to ~60 s) |
 | PATCH | /api/meals/{id} | `{"time"?:"HH:MM","type"?:...}` | `Meal` |
 | DELETE | /api/meals/{id} | — | `204` (soft delete) |
-| POST | /api/meals/{id}/refine | `{"comment":"жарил на масле 1 ст.л."}` | `Meal` |
-| PATCH | /api/items/{id} | `{"grams":150}` | `Meal` (recalculated from per100) |
+| POST | /api/meals/{id}/refine | `{"comment":"жарил на масле 1 ст.л."}` | `Meal`. Items edited by hand (`edited` and `source:"manual"`, or a database product with confidence 1) are not sent to the model for changes and come back unchanged; the model only sees them as `locked_items` context |
+| POST | /api/meals/manual | `{"items":[{"food_id"?:int \| "name":str(1..120),"grams":1..5000,"kcal","protein","fat","carbs","per"?:"100g"\|"portion","save"?:bool}] (1..30),"type"?,"date"?,"time"?}` | `201 Meal`. No LLM. `food_id` = own or shared product (foreign → 404; per100 taken from the database, portion preset is learned); otherwise manual input (`source:"manual"`, all four numbers required; 100 g: kcal 0..900, P/F/C 0..100; portion: kcal 0..10000, P/F/C 0..1000, and per-100 g derived from the portion must stay ≤ 900 / 100). `save:true` stores the input in "my products" (deduplicated). Meal `source:"manual"`, `kcal_low = kcal_high = kcal`, `confidence` = min over items |
+| POST | /api/meals/{id}/items | one item of `/api/meals/manual` | `201 Meal`. Adds a product/manual item to a saved meal (foreign meal → 404, at most 30 items). Range: if every item is exact (manual, barcode, own product or confidence ≥ 0.99) it collapses to the total, otherwise the old range is scaled by new total / old total; `confidence` = min over items |
+| GET | /api/foods/search | `?q=&limit=` (default 30, max 50) | `{"foods":[{"id","name","brand","kcal","protein","fat","carbs","default_grams","unit_name","unit_grams","own":bool,"source"}]}` per 100 g. Own products first, then the shared reference (`owner IS NULL`); other users' products never appear. `q` shorter than 2 characters: own products only (most used first). No LLM, no network |
+| PATCH | /api/items/{id} | `{"grams":150}` or manual edit: any of `{"name"?:str(1..120),"grams"?,"kcal","protein","fat","carbs" (all four together),"per"?:"100g"\|"portion" (default 100g),"food_id"?}`; empty body → 400 `empty_patch` | `Meal`. Only `grams`: recalculated from per100 (as before). Manual numbers are saved as typed (kcal to integer, P/F/C to 0.1, no rounding to 5/10) and both per100 and absolute values are written; `source:"manual"`, `confidence:1`, `food_ref_id` cleared, `edited:true`; meal range/confidence recomputed (same rule as `/items`). Name only: only the name changes. `food_id` (cannot be combined with numbers): replaces name and per100 with the product, grams stay, `food_ref_id` set |
 | DELETE | /api/items/{id} | — | `Meal` |
 | POST | /api/items/{id}/save_product | `{"name"?}` | `201 Product` |
 | GET | /api/products?q= | — | `{"products":[Product]}` |

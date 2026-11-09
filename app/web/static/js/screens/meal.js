@@ -5,8 +5,10 @@ import { scanBarcode, decodeFile, validBarcode } from '../scanner.js';
 import { t } from '../i18n.js';
 import {
   h, icon, toast, haptic, nav, sheet, confirmDialog, pageHead, sectionTitle, skeletonBlocks, errorState, photoImg,
-  fmtN, fmtKcal, macroLine, longDate, mealType, MEAL_TYPES, dishKind, numInput, numVal, numSet, codeInput, busyOverlay, macroChips, reloadRoute,
+  fmtN, fmtKcal, macroLine, longDate, mealType, MEAL_TYPES, dishKind, numInput, numVal, numSet, numCheck, codeInput, busyOverlay, macroChips, reloadRoute,
+  frow, group, segmented,
 } from '../ui.js';
+import { pickFood, toPayload } from '../food_picker.js';
 
 const G_MIN = 1;
 const G_MAX = 5000; // как на сервере (PATCH /items/:id)
@@ -82,6 +84,110 @@ export default async function render(root, ctx) {
     } finally { pumping = false; sendingId = null; }
   }
 
+  // Дождаться, пока все правки граммов дойдут до сервера (перед шторкой правки позиции).
+  async function settle() {
+    comps.forEach((c) => c.flush());
+    for (let i = 0; i < 200 && (pumping || queued.size); i++) await new Promise((r) => setTimeout(r, 30));
+  }
+
+  // Шторка «Изменить позицию»: название, граммы, К/Б/Ж/У. Числа хранятся на 100 г или на порцию (на текущие граммы).
+  function itemSheet(it) {
+    let per = '100g';
+    const base = it.per100 || { kcal: it.kcal * 100 / it.grams, protein: it.protein * 100 / it.grams, fat: it.fat * 100 / it.grams, carbs: it.carbs * 100 / it.grams };
+    const nameI = h('input', { type: 'text', maxlength: 120, value: it.name, 'aria-label': t('common.name'), autocomplete: 'off' });
+    const grams = numInput({ value: it.grams, min: G_MIN, max: G_MAX, decimals: 1, 'aria-label': t('add.grams') });
+    const mk = (v, label) => numInput({ value: Math.round(v * 10) / 10, min: 0, max: 900, decimals: 1, 'aria-label': label });
+    const kcal = mk(base.kcal, t('prof.f_kcal'));
+    const p = mk(base.protein, t('prof.f_p'));
+    const f = mk(base.fat, t('prof.f_f'));
+    const c = mk(base.carbs, t('prof.f_c'));
+    const nums = [kcal, p, f, c];
+    const hint = h('div', { class: 'hint small', hidden: true });
+    const g = () => numVal(grams) || it.grams;
+    const limits = () => { kcal._num.max = per === 'portion' ? 10000 : 900; [p, f, c].forEach((x) => { x._num.max = per === 'portion' ? 1000 : 100; }); };
+    limits();
+    let touched = false;   // числа правили руками; простое переключение «на 100 г / на порцию» ничего не меняет
+    function mismatch() {
+      const [k, pp, ff, cc] = nums.map((x) => numVal(x) || 0);
+      const calc = 4 * pp + 9 * ff + 4 * cc;
+      const d = Math.abs(k - calc);
+      hint.hidden = !(k > 0 && d > 20 && d > 0.2 * Math.max(k, calc));
+      if (!hint.hidden) hint.textContent = t('fp.mismatch', { a: fmtN(Math.round(calc)) });
+    }
+    nums.forEach((x) => x.addEventListener('input', () => { touched = true; mismatch(); }));
+    const seg = segmented([['100g', t('common.per100')], ['portion', t('fp.per_portion')]], per, (v) => {
+      if (v === per) return;
+      const k = v === 'portion' ? g() / 100 : 100 / g();
+      nums.forEach((x) => { const n = numVal(x); if (n !== null) numSet(x, Math.round(n * k * 10) / 10); });
+      per = v;
+      limits();
+      mismatch();
+    }, t('fp.basis'));
+    let busy = false;
+    const save = h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: async () => {
+      if (busy) return;
+      const n = nameI.value.trim();
+      if (!n) { toast(t('fp.v_name'), 'error'); nameI.focus(); return; }
+      for (const [el, label] of [[grams, t('add.grams')], [kcal, t('prof.f_kcal')], [p, t('prof.f_p')], [f, t('prof.f_f')], [c, t('prof.f_c')]]) {
+        const bad = numCheck(el, label);
+        if (bad) { toast(bad, 'error'); el.focus(); return; }
+        if (numVal(el) === null) { toast(t('num.enter', { label }), 'error'); el.focus(); return; }
+      }
+      const gv = numVal(grams);
+      if (gv < G_MIN || gv > G_MAX) { toast(t('meal.max_g', { v: G_MAX }), 'error'); return; }
+      const body = {};
+      if (n !== it.name) body.name = n;
+      if (gv !== it.grams) body.grams = gv;
+      const [k, pp, ff, cc] = nums.map((x) => numVal(x));
+      const changed = touched;
+      if (changed) Object.assign(body, { kcal: k, protein: pp, fat: ff, carbs: cc, per });
+      if (!Object.keys(body).length) { sh.close(); return; }
+      busy = true;
+      save.disabled = true;
+      try {
+        const mm = await api.patch('/items/' + it.id, body);
+        haptic('success');
+        sh.close();
+        onMeal(mm);
+      } catch (e) { busy = false; save.disabled = false; toast(e.message, 'error'); }
+    } }, t('common.save'));
+    const replace = h('button', { class: 'btn btn-secondary btn-block', type: 'button', onclick: async () => {
+      sh.close();
+      const e = await pickFood({ cta: t('fp.replace_cta'), grams: it.grams });
+      if (!e) return;
+      if (!ctx.alive()) return;
+      try {
+        // из базы: позиция берёт значения продукта; свободный ввод уходит как обычная ручная правка
+        const { save: _s, ...rest } = toPayload(e);
+        const body = rest;
+        const mm = await api.patch('/items/' + it.id, body);
+        haptic('success');
+        onMeal(mm);
+      } catch (er) { toast(er.message, 'error'); }
+    } }, icon('package', 18), t('fp.replace'));
+    const sh = sheet({
+      title: t('fp.edit_title'),
+      content: h('div', { class: 'stack' },
+        group([frow(t('common.name'), nameI), frow(t('add.grams'), grams)]),
+        seg,
+        group([frow(t('prof.f_kcal'), kcal), frow(t('prof.f_p'), p), frow(t('prof.f_f'), f), frow(t('prof.f_c'), c)]),
+        hint, save, replace),
+    });
+    mismatch();
+  }
+
+  async function addProduct() {
+    await settle();
+    const e = await pickFood({ cta: t('fp.add') });
+    if (!e || !ctx.alive()) return;
+    try {
+      const mm = await api.post('/meals/' + meal.id + '/items', toPayload(e));
+      haptic('success');
+      onMeal(mm, true);
+      toast(t('fp.added'), 'ok');
+    } catch (er) { toast(er.message, 'error'); }
+  }
+
   const itemsBox = h('div', { class: 'list items' });
 
   function itemCard(initial) {
@@ -91,19 +197,29 @@ export default async function render(root, ctx) {
     let timer = null;
     const input = numInput({ value: it.grams, max: G_MAX, decimals: 1, class: 'g-input', 'aria-label': t('meal.a_grams', { n: it.name }) });
     const field = h('span', { class: 'g-field' }, input, h('span', { class: 'g-unit', 'aria-hidden': 'true' }, t('unit.g')));
-    const nameEl = h('span', { class: 'item-title' });
+    const nameEl = h('button', { type: 'button', class: 'item-title item-title-btn', 'aria-label': t('fp.edit_title'), onclick: () => editItem() });
     const kcalEl = h('div', { class: 'item-kcal' });
     const macEl = h('div', { class: 'muted small' });
-    const flag = h('span', { class: 'edited', title: t('meal.edited') }, icon('pencil', 14));
+    // карандаш внутри кнопки названия: клик открывает ту же шторку, а перенос строки его не отрывает
+    const flag = h('span', { class: 'edit-btn', 'aria-hidden': 'true' }, icon('pencil', 14));
     const ratio = () => (it.grams > 0 ? local / it.grams : 1);
     // Поле нельзя перезаписывать ответом сервера, пока пользователь его правит или правка ещё не доехала.
     const dirty = () => document.activeElement === input || timer !== null || local !== sent || queued.has(it.id) || sendingId === it.id;
     function paint() {
       const k = ratio();
-      nameEl.textContent = it.name;
+      // последнее слово + карандаш в одном неразрывном куске
+      const m = /^(.*?)(\S+)\s*$/s.exec(it.name);
+      nameEl.replaceChildren(m && m[1] ? m[1] : '', h('span', { class: 'nw' }, m ? m[2] : it.name, flag));
       kcalEl.replaceChildren(fmtKcal(it.kcal * k), h('small', null, ' ' + t('unit.kcal')));
       macEl.textContent = macroLine({ protein: it.protein * k, fat: it.fat * k, carbs: it.carbs * k });
-      flag.hidden = !(it.edited || local !== it.grams);
+      const ed = !!(it.edited || local !== it.grams);
+      flag.classList.toggle('on', ed);
+      flag.title = ed ? t('meal.edited') : t('fp.edit_title');
+    }
+    async function editItem() {
+      await settle();                    // граммы, что ещё не уехали, должны быть на сервере до открытия шторки
+      if (!ctx.alive()) return;
+      itemSheet(it);
     }
     function setLocal(v) { local = v; paint(); paintTotals(); }
     function feedback(msg) {
@@ -233,7 +349,7 @@ export default async function render(root, ctx) {
       try { onMeal(await api.del('/items/' + it.id)); } catch (e) { toast(e.message, 'error'); }
     }
     const el = h('div', { class: 'item' },
-      h('div', { class: 'row-between top' }, h('div', { class: 'item-name' }, nameEl, ' ', flag), kcalEl),
+      h('div', { class: 'row-between top' }, h('div', { class: 'item-name' }, nameEl), kcalEl),
       macEl,
       h('div', { class: 'item-ctl' },
         h('div', { class: 'stepper' },
@@ -323,6 +439,7 @@ export default async function render(root, ctx) {
       meal.comment ? h('div', { class: 'card comment' }, h('div', { class: 'muted small' }, t('add.comment')), h('div', null, meal.comment)) : null,
       sectionTitle(t('meal.items')),
       itemsBox,
+      h('button', { class: 'btn btn-secondary btn-block add-item-btn', type: 'button', onclick: addProduct }, icon('plus', 18), t('fp.add_item')),
       h('div', { class: 'meal-actions' },
         h('button', { class: 'act' + (meal.favorite_id ? ' star-on' : ''), type: 'button',
           'aria-pressed': String(!!meal.favorite_id), 'aria-label': meal.favorite_id ? t('favf.rm') : t('add.fav_aria'),

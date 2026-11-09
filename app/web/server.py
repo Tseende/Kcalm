@@ -43,7 +43,7 @@ from app.web import analysis
 from app.web import period as period_analysis
 from app.web import queries as q
 from app.web.auth import InitDataError, validate_init_data
-from app.web.serializers import dish_json, meal_json, product_json, targets_json
+from app.web.serializers import dish_json, food_json, meal_json, product_json, targets_json
 
 log = logging.getLogger(__name__)
 
@@ -710,6 +710,148 @@ async def api_meal_product(request: web.Request) -> web.Response:
     return ok({"id": meal_id, "kcal": calc.kcal_total}, 201)
 
 
+# ------------------------------------------------------------------ ручной ввод
+
+MAX_MANUAL_ITEMS = 30
+_MACRO_KEYS = ("kcal", "protein", "fat", "carbs")
+_LIMITS = {"100g": {"kcal": 900, "protein": 100, "fat": 100, "carbs": 100},
+           "portion": {"kcal": 10000, "protein": 1000, "fat": 1000, "carbs": 1000}}
+
+
+def _per_of(data: dict) -> str:
+    per = data.get("per", "100g")
+    if per not in _LIMITS:
+        raise bad("per: 100g или portion.", "bad_field")
+    return per
+
+
+def _clean_name(data: dict, *, required: bool) -> str | None:
+    if "name" not in data and not required:
+        return None
+    name = str(data.get("name") or "").strip()
+    if not 1 <= len(name) <= 120:
+        raise bad("Название: от 1 до 120 символов.", "bad_field")
+    return name
+
+
+def _macros_of(data: dict, per: str, grams: float | None, *, required: bool):
+    """(ккал, Б, Ж, У) как ввёл человек или None. Нужны все четыре; на 100 г или на порцию."""
+    given = [k for k in _MACRO_KEYS if data.get(k) is not None]
+    if not given and not required:
+        return None
+    if len(given) != len(_MACRO_KEYS):
+        raise bad("Нужны все четыре значения: ккал, белки, жиры и углеводы.", "bad_field")
+    lim = _LIMITS[per]
+    values = tuple(number(data, k, 0, lim[k]) for k in _MACRO_KEYS)
+    if per == "portion" and grams:
+        # пересчёт на 100 г не должен выходить за физический предел (чистый жир ≈ 900 ккал)
+        for k, v in zip(_MACRO_KEYS, values):
+            if v * 100.0 / max(grams, 1.0) > _LIMITS["100g"][k] + 0.5:
+                raise bad(f"Поле {k}: на 100 г получается больше возможного. Проверьте граммы.",
+                          "bad_field")
+    return values
+
+
+def _food_or_404(db, user, raw):
+    food = repo.get_food_for_user(db, user["id"], bounded_int(raw, "food_id"))
+    if food is None:
+        raise ApiError(404, "not_found", "Продукт не найден.")
+    return food
+
+
+def _food_label(food) -> str:
+    name, brand = food["name_ru"], (food["brand"] or "").strip()
+    return f"{name} ({brand})" if brand and brand.lower() not in name.lower() else name
+
+
+def _manual_entry(db, user, raw):
+    """Позиция из JSON ручного ввода → (CalculatedItem, food | None, save: bool)."""
+    if not isinstance(raw, dict):
+        raise bad("Позиция должна быть объектом.", "bad_field")
+    grams = number(raw, "grams", 1, 5000, required=True)
+    if raw.get("food_id") is not None:
+        food = _food_or_404(db, user, raw["food_id"])
+        owned = food["owner_user_id"] is not None
+        item = manualdom.make_item(
+            _food_label(food), grams, food["kcal_100g"], food["protein_100g"], food["fat_100g"],
+            food["carbs_100g"], "100g", source="user" if owned else food["source"],
+            food_ref_id=food["id"], name_en=food["name_en"])
+        return item, food, False
+    name = _clean_name(raw, required=True)
+    per = _per_of(raw)
+    macros = _macros_of(raw, per, grams, required=True)
+    save = raw.get("save", False)
+    if not isinstance(save, bool):
+        raise bad("save: true или false.", "bad_field")
+    item = manualdom.make_item(name, grams, *macros, per, source="manual", edited=True)
+    return item, None, save
+
+
+def _remember(db, user, item, food, save: bool) -> None:
+    """Сохранение в «мои продукты» (с дедупом) и обучение порции для продукта из базы."""
+    if food is not None:
+        repo.touch_user_food(db, user["id"], food["id"], item.grams)
+    elif save:
+        draft = {"name": item.name_ru[:60], "kcal": round(item.kcal_100g),
+                 "protein": item.protein_100g, "fat": item.fat_100g, "carbs": item.carbs_100g,
+                 "default_grams": round(item.grams)}
+        try:
+            item.food_ref_id, _warnings = service("products", "save_product")(db, user, draft)
+        except ValueError as e:
+            raise bad(str(e), "bad_field") from None
+
+
+@routes.get("/api/foods/search")
+async def api_foods_search(request: web.Request) -> web.Response:
+    """Поиск продукта без LLM и сети: сначала свои, затем общий справочник. До 2 символов: свои частые."""
+    db, user, _ = ctx(request)
+    try:
+        limit = max(1, min(50, int(request.query.get("limit", 30))))
+    except ValueError:
+        limit = 30
+    found = repo.search_foods(db, user["id"], request.query.get("q", "").strip(), limit)
+    return ok({"foods": [food_json(f) for f in found]})
+
+
+@routes.post("/api/meals/manual")
+async def api_meal_manual(request: web.Request) -> web.Response:
+    """Приём из готовых продуктов и ручного ввода, без LLM: вилка равна итогу."""
+    db, user, _ = ctx(request)
+    data = await read_json(request)
+    raw_items = data.get("items")
+    if not isinstance(raw_items, list) or not 1 <= len(raw_items) <= MAX_MANUAL_ITEMS:
+        raise bad(f"items: от 1 до {MAX_MANUAL_ITEMS} позиций.", "bad_field")
+    meal_type = data.get("type")
+    if meal_type is not None and meal_type not in MEAL_TYPES:
+        raise bad("type: breakfast, lunch, dinner или snack.", "bad_field")
+    when = parse_when(user, str(data["date"]) if data.get("date") else None,
+                      str(data["time"]) if data.get("time") else None)
+    entries = [_manual_entry(db, user, r) for r in raw_items]
+    for item, food, save in entries:
+        _remember(db, user, item, food, save)
+    now = when or now_local(user).replace(tzinfo=None)
+    local_date, local_time = now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
+    meal_id = repo.save_meal(
+        db, user["id"], meals_svc.utc_of(user["tz"], local_date, local_time), local_date, local_time,
+        meal_type or foodsvc.guess_meal_type(None, local_time, None), "manual",
+        manualdom.combine([e[0] for e in entries]))
+    return _meal_response(db, user, meal_id, 201)
+
+
+@routes.post("/api/meals/{id}/items")
+async def api_meal_item_add(request: web.Request) -> web.Response:
+    """Добавить продукт или ручную позицию в сохранённый приём (тело как одна позиция /api/meals/manual)."""
+    db, user, _ = ctx(request)
+    meal = _meal_or_404(db, user, path_id(request))
+    data = await read_json(request)
+    if len(repo.get_meal_items(db, meal["id"])) >= MAX_MANUAL_ITEMS:
+        raise bad(f"В приёме не больше {MAX_MANUAL_ITEMS} позиций.", "too_many_items")
+    item, food, save = _manual_entry(db, user, data)
+    _remember(db, user, item, food, save)
+    repo.add_meal_item(db, meal["id"], item)
+    return _meal_response(db, user, meal["id"], 201)
+
+
 @routes.get("/api/meals/{id}")
 async def api_meal_get(request: web.Request) -> web.Response:
     db, user, _ = ctx(request)
@@ -987,19 +1129,54 @@ async def api_meal_refine(request: web.Request) -> web.Response:
         raise bad("Напишите, что уточнить.", "empty_comment")
     if len(comment) > MAX_TEXT:
         raise bad("Слишком длинное уточнение.", "text_too_long")
-    old = [dict(r) for r in repo.get_meal_items(db, meal["id"])]
+    rows = repo.get_meal_items(db, meal["id"])
+    locked = [r for r in rows if repo.is_locked_item(r)]       # ручные правки модель не трогает
+    old = [dict(r) for r in rows if not repo.is_locked_item(r)]
     llm_gate(db, user)
     try:
-        u, _changes = await foodsvc.refine_meal(old, comment, user["id"], db)
+        if locked:
+            u, _changes = await foodsvc.refine_meal(
+                old, comment, user["id"], db,
+                locked=[{"name_ru": r["name_ru"], "grams": r["grams"]} for r in locked])
+            keep = {" ".join(str(r["name_ru"]).lower().split()) for r in locked}
+            u.items = [i for i in u.items                         # дубль закреплённой позиции
+                       if " ".join(i.name_ru.lower().split()) not in keep]
+        else:
+            u, _changes = await foodsvc.refine_meal(old, comment, user["id"], db)
     except llm.LLMError as e:
         log.warning("web: refine не удался", exc_info=True)
         raise llm_failure(e, "Нет связи с моделью: запись осталась как была.") from None
     if not u.items:
         raise ApiError(422, "unclear", "Не понял, что поменять. Расскажите подробнее.")
     calc = await foodsvc.build_calc(u, db, user["id"])
-    repo.replace_meal_items(db, user["id"], meal["id"], calc)
     meals_svc.touch_foods(db, user["id"], u, calc)
+    if locked:
+        calc = _with_locked(calc, locked)
+    repo.replace_meal_items(db, user["id"], meal["id"], calc)
     return _meal_response(db, user, meal["id"])
+
+
+def _with_locked(calc, locked):
+    """К пересчитанному составу вернуть закреплённые позиции ровно как были (первыми)."""
+    from app.domain.nutrition import CalculatedItem
+    kept = [CalculatedItem(
+        name_ru=r["name_ru"], name_en=r["name_en"], grams=r["grams"], grams_min=r["grams"],
+        grams_max=r["grams"], kcal=r["kcal"], protein_g=r["protein_g"], fat_g=r["fat_g"],
+        carbs_g=r["carbs_g"], kcal_low=r["kcal"], kcal_high=r["kcal"], food_ref_id=r["food_ref_id"],
+        source=r["source"], confidence=r["confidence"], kcal_100g=r["kcal_100g"],
+        protein_100g=r["protein_100g"], fat_100g=r["fat_100g"], carbs_100g=r["carbs_100g"],
+        edited_by_user=True) for r in locked]
+    items = kept + list(calc.items)
+    kcal = sum(i.kcal for i in items)
+    fresh = len(calc.items)
+    return calc.model_copy(update={
+        "items": items, "kcal_total": kcal,
+        "kcal_low": min(kcal, sum(i.kcal for i in kept) + (calc.kcal_low if fresh else 0)),
+        "kcal_high": max(kcal, sum(i.kcal for i in kept) + (calc.kcal_high if fresh else 0)),
+        "protein_g": round(sum(i.protein_g for i in items), 1),
+        "fat_g": round(sum(i.fat_g for i in items), 1),
+        "carbs_g": round(sum(i.carbs_g for i in items), 1),
+        "confidence": round(min(i.confidence for i in items), 2)})
 
 
 # ------------------------------------------------------------------ позиции
@@ -1013,12 +1190,36 @@ def _item_or_404(db, user, item_id: int):
 
 @routes.patch("/api/items/{id}")
 async def api_item_patch(request: web.Request) -> web.Response:
+    """Правка позиции. Только grams: пересчёт от базы на 100 г (степпер). Иначе ручная правка:
+    name, grams, kcal/protein/fat/carbs (все четыре) на 100 г или на порцию (per), либо food_id
+    (заменить продуктом из базы, граммы остаются)."""
     db, user, _ = ctx(request)
     item = _item_or_404(db, user, path_id(request))
-    grams = number(await read_json(request), "grams", 1, 5000, required=True)
-    repo.edit_item_grams(db, item["id"], grams)
-    if item["food_ref_id"]:
-        repo.touch_user_food(db, user["id"], item["food_ref_id"], grams)    # учим порцию
+    data = await read_json(request)
+    if not any(k in data for k in ("grams", "name", "per", "food_id", *_MACRO_KEYS)):
+        raise bad("Нечего менять.", "empty_patch")
+    grams = number(data, "grams", 1, 5000, required=True) if "grams" in data else None
+    if set(data) <= {"grams"}:
+        repo.edit_item_grams(db, item["id"], grams)
+        if item["food_ref_id"]:
+            repo.touch_user_food(db, user["id"], item["food_ref_id"], grams)    # учим порцию
+        return _meal_response(db, user, item["meal_id"])
+    name = _clean_name(data, required=False)
+    per = _per_of(data)
+    food = None
+    if data.get("food_id") is not None:
+        if any(data.get(k) is not None for k in _MACRO_KEYS):
+            raise bad("food_id и свои значения вместе нельзя.", "bad_field")
+        food = _food_or_404(db, user, data["food_id"])
+        macros = None
+        name = name or _food_label(food)
+    else:
+        macros = _macros_of(data, per, grams or item["grams"], required=False)
+    if name is None and macros is None and food is None and grams is None:
+        raise bad("Нечего менять.", "empty_patch")
+    repo.edit_item_manual(db, item["id"], name=name, grams=grams, macros=macros, per=per, food=food)
+    if food is not None:
+        repo.touch_user_food(db, user["id"], food["id"], grams or item["grams"])
     return _meal_response(db, user, item["meal_id"])
 
 

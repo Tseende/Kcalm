@@ -243,6 +243,84 @@ def list_products(conn: sqlite3.Connection, user_id: int, q: str | None = None,
     return rows[:limit]
 
 
+def get_food_for_user(conn: sqlite3.Connection, user_id: int, food_id: int) -> sqlite3.Row | None:
+    """Продукт, доступный человеку: свой или общий справочник. Чужие и удалённые не видны."""
+    return conn.execute(
+        """SELECT * FROM foods WHERE id=? AND deleted_at IS NULL
+           AND (owner_user_id IS NULL OR owner_user_id=?)""", (food_id, user_id)).fetchone()
+
+
+def _fold(text: str | None) -> str:
+    return (text or "").lower().replace("ё", "е")
+
+
+_CAND_LIMIT = 300   # кандидатов из базы на ранжирование; limit выдачи обычно 30
+
+
+def _case_variants(word: str) -> list[str]:
+    """Варианты регистра слова для SQL: в SQLite lower()/LIKE регистронезависимы только для ASCII."""
+    seen: list[str] = []
+    for v in (word, word.lower(), word.capitalize(), word.title(), word.upper()):
+        if v not in seen:
+            seen.append(v)
+    return seen
+
+
+def _shared_candidates_sql(words: list[str]) -> tuple[str, list]:
+    """SQL-отбор кандидатов общего справочника: каждое слово запроса входит в название/бренд/en-название.
+
+    Нормализованной колонки нет, поэтому сравнение по вариантам регистра слова (instr, без LIKE,
+    чтобы не экранировать % и _), а «ё» в колонках сводится к «е» через REPLACE (слова уже свёрнуты).
+    Это надмножество: точный фильтр и ранжирование остаются в Python."""
+    cols = ("REPLACE(REPLACE(name_ru,'ё','е'),'Ё','Е')",
+            "REPLACE(REPLACE(COALESCE(brand,''),'ё','е'),'Ё','Е')",
+            "name_en")
+    where, params = [], []
+    for w in words:
+        parts = []
+        for v in _case_variants(w):
+            for c in cols:
+                parts.append(f"instr({c}, ?) > 0")
+                params.append(v)
+        where.append("(" + " OR ".join(parts) + ")")
+    sql = ("SELECT * FROM foods WHERE owner_user_id IS NULL AND deleted_at IS NULL AND "
+           + " AND ".join(where) + " ORDER BY length(name_ru), name_ru LIMIT ?")
+    params.append(_CAND_LIMIT)
+    return sql, params
+
+
+def search_foods(conn: sqlite3.Connection, user_id: int, q: str | None,
+                 limit: int = 30) -> list[dict]:
+    """Поиск продукта для ручного ввода: сначала свои, затем общий справочник (owner IS NULL).
+
+    Без LLM и сети. ``q`` короче двух символов: только свои, самые используемые.
+    Элемент: строка foods + own (bool) + times_used + default_grams с учётом личного пресета."""
+    needle = _fold((q or "").strip())
+    own_rows = list_products(conn, user_id, needle if len(needle) >= 2 else None, limit=limit)
+    out = [(r, True) for r in own_rows]
+    if len(needle) >= 2 and len(out) < limit:
+        words = needle.split()
+        ranked = []
+        sql, params = _shared_candidates_sql(words)
+        for r in conn.execute(sql, params):
+            ru = _fold(f"{r['name_ru']} {r['brand'] or ''}")
+            en = _fold(r["name_en"])
+            hay = ru + " " + en
+            if not all(w in hay for w in words):
+                continue
+            rank = 0 if ru.startswith(needle) else 1 if f" {needle}" in f" {ru}" else 2
+            ranked.append((rank, len(r["name_ru"] or ""), (r["name_ru"] or "").lower(), r))
+        ranked.sort(key=lambda t: t[:3])
+        out += [(t[3], False) for t in ranked[:limit - len(out)]]
+    result = []
+    for r, own in out[:limit]:
+        d = dict(r)
+        d["own"] = own
+        d["default_grams"] = user_default_grams(conn, user_id, r["id"]) or r["default_grams"]
+        result.append(d)
+    return result
+
+
 def owned_meal_item(conn: sqlite3.Connection, user_id: int, item_id: int) -> sqlite3.Row | None:
     """Позиция приёма, который принадлежит пользователю."""
     return conn.execute(
@@ -272,22 +350,28 @@ def day_changed(user_id: int) -> None:
         pass
 
 
+def _insert_item(conn: sqlite3.Connection, meal_id: int, it) -> int:
+    snapshot = json.dumps({
+        "kcal": it.kcal, "protein": it.protein_g, "fat": it.fat_g,
+        "carbs": it.carbs_g, "basis": "kcal_100g",
+        "kcal_100g": it.kcal_100g, "source": it.source,
+    }, ensure_ascii=False)
+    cur = conn.execute(
+        """INSERT INTO meal_items (meal_id, name_ru, name_en, grams, kcal, protein_g,
+           fat_g, carbs_g, food_ref_id, source, confidence, snapshot_json,
+           kcal_100g, protein_100g, fat_100g, carbs_100g, edited_by_user)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (meal_id, it.name_ru, it.name_en, it.grams, it.kcal, it.protein_g,
+         it.fat_g, it.carbs_g, it.food_ref_id, it.source, it.confidence, snapshot,
+         it.kcal_100g, it.protein_100g, it.fat_100g, it.carbs_100g,
+         1 if getattr(it, "edited_by_user", False) else 0),
+    )
+    return cur.lastrowid
+
+
 def _insert_items(conn: sqlite3.Connection, meal_id: int, calc: MealCalculation) -> None:
     for it in calc.items:
-        snapshot = json.dumps({
-            "kcal": it.kcal, "protein": it.protein_g, "fat": it.fat_g,
-            "carbs": it.carbs_g, "basis": "kcal_100g",
-            "kcal_100g": it.kcal_100g, "source": it.source,
-        }, ensure_ascii=False)
-        conn.execute(
-            """INSERT INTO meal_items (meal_id, name_ru, name_en, grams, kcal, protein_g,
-               fat_g, carbs_g, food_ref_id, source, confidence, snapshot_json,
-               kcal_100g, protein_100g, fat_100g, carbs_100g)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (meal_id, it.name_ru, it.name_en, it.grams, it.kcal, it.protein_g,
-             it.fat_g, it.carbs_g, it.food_ref_id, it.source, it.confidence, snapshot,
-             it.kcal_100g, it.protein_100g, it.fat_100g, it.carbs_100g),
-        )
+        _insert_item(conn, meal_id, it)
 
 
 def save_meal(conn: sqlite3.Connection, user_id: int, eaten_utc: str, local_date: str,
@@ -701,25 +785,28 @@ def get_meal(conn: sqlite3.Connection, user_id: int, meal_id: int) -> sqlite3.Ro
                         (meal_id, user_id)).fetchone()
 
 
+def _scaled_values(item: sqlite3.Row, new_grams: float) -> tuple[int, float, float, float]:
+    """Значения позиции при новых граммах: от базы на 100 г (у старых строк — пропорционально)."""
+    if item["kcal_100g"] is not None:
+        # база на 100 г известна: считаем от неё, как в calculate_item
+        scale = new_grams / 100.0
+        kcal = max(0, round(item["kcal_100g"] * scale / 5) * 5)
+        return (kcal, round((item["protein_100g"] or 0) * scale, 1),
+                round((item["fat_100g"] or 0) * scale, 1),
+                round((item["carbs_100g"] or 0) * scale, 1))
+    old = item["grams"]
+    ratio = new_grams / old if old else 0
+    return (max(0, round(item["kcal"] * ratio / 5) * 5), round(item["protein_g"] * ratio, 1),
+            round(item["fat_g"] * ratio, 1), round(item["carbs_g"] * ratio, 1))
+
+
 def edit_item_grams(conn: sqlite3.Connection, item_id: int, new_grams: float) -> None:
     """Правка граммов: пересчёт от базы на 100 г (у старых строк — пропорционально), meal_edits + audit."""
     item = conn.execute("SELECT * FROM meal_items WHERE id=?", (item_id,)).fetchone()
     if not item:
         return
     old = item["grams"]
-    if item["kcal_100g"] is not None:
-        # база на 100 г известна: считаем от неё, как в calculate_item
-        scale = new_grams / 100.0
-        kcal = max(0, round(item["kcal_100g"] * scale / 5) * 5)
-        protein = round((item["protein_100g"] or 0) * scale, 1)
-        fat = round((item["fat_100g"] or 0) * scale, 1)
-        carbs = round((item["carbs_100g"] or 0) * scale, 1)
-    else:
-        ratio = new_grams / old if old else 0
-        kcal = max(0, round(item["kcal"] * ratio / 5) * 5)
-        protein = round(item["protein_g"] * ratio, 1)
-        fat = round(item["fat_g"] * ratio, 1)
-        carbs = round(item["carbs_g"] * ratio, 1)
+    kcal, protein, fat, carbs = _scaled_values(item, new_grams)
     conn.execute(
         """UPDATE meal_items SET grams=?, kcal=?, protein_g=?, fat_g=?, carbs_g=?,
            edited_by_user=1 WHERE id=?""",
@@ -734,6 +821,119 @@ def edit_item_grams(conn: sqlite3.Connection, item_id: int, new_grams: float) ->
         (None, item_id, json.dumps({"grams": old}), json.dumps({"grams": new_grams})),
     )
     conn.commit()
+
+
+EXACT_SOURCES = ("manual", "barcode", "user")
+
+
+def is_exact_item(item) -> bool:
+    """Позиция без разброса оценки: введена руками, с упаковки или из базы с подтверждёнными граммами."""
+    return item["source"] in EXACT_SOURCES or (item["confidence"] or 0) >= 0.99
+
+
+def is_locked_item(item) -> bool:
+    """Позицию правил человек (ручные КБЖУ или продукт из базы): «Уточнить» через модель её не меняет."""
+    return bool(item["edited_by_user"]) and (item["source"] == "manual"
+                                             or (item["confidence"] or 0) >= 0.99)
+
+
+def _refresh_range(conn: sqlite3.Connection, meal_id: int, old_total: float) -> None:
+    """Вилка и уверенность приёма после ручной правки состава.
+
+    Все позиции точные (ручные, с упаковки, из базы): вилка схлопывается в итог.
+    Иначе вилка прежней оценки масштабируется пропорционально изменению итога.
+    Уверенность приёма — минимум по позициям."""
+    meal = conn.execute("SELECT * FROM meals WHERE id=?", (meal_id,)).fetchone()
+    items = get_meal_items(conn, meal_id)
+    total = int(meal["kcal_total"])
+    if not items or all(is_exact_item(i) for i in items) or old_total <= 0:
+        low = high = total
+    else:
+        old_low = min(meal["kcal_low"], old_total)
+        old_high = max(meal["kcal_high"], old_total)
+        ratio = total / old_total
+        low, high = min(total, round(old_low * ratio)), max(total, round(old_high * ratio))
+    confidence = round(min(i["confidence"] for i in items), 2) if items else meal["confidence"]
+    conn.execute("UPDATE meals SET kcal_low=?, kcal_high=?, confidence=? WHERE id=?",
+                 (low, high, confidence, meal_id))
+
+
+def edit_item_manual(conn: sqlite3.Connection, item_id: int, *, name: str | None = None,
+                     grams: float | None = None, macros: tuple | None = None,
+                     per: str = "100g", food=None) -> bool:
+    """Ручная правка позиции одной транзакцией: название, граммы, КБЖУ (на 100 г или на порцию).
+
+    macros — (ккал, белки, жиры, углеводы) ровно как ввёл человек. food — строка foods
+    (продукт из базы): берётся её название (если name не задано) и КБЖУ на 100 г, ставится food_ref_id.
+    Макросы (или food) → source='manual' (у продукта из базы — его источник), уверенность 1,
+    food_ref_id сбрасывается; пересчитываются и per100, и абсолютные значения, вилка и
+    уверенность приёма. Только название → только название и флаг правки."""
+    from app.domain import manual
+    item = conn.execute("SELECT * FROM meal_items WHERE id=?", (item_id,)).fetchone()
+    if not item:
+        return False
+    meal_id = item["meal_id"]
+    old_total = conn.execute("SELECT kcal_total FROM meals WHERE id=?", (meal_id,)).fetchone()[0]
+    if food is not None:
+        macros = (food["kcal_100g"], food["protein_100g"], food["fat_100g"], food["carbs_100g"])
+        per = "100g"
+        if name is None:
+            name = food["name_ru"]
+    new_grams = float(grams) if grams is not None else item["grams"]
+    cols: dict = {"edited_by_user": 1}
+    if name is not None and name != item["name_ru"]:
+        cols["name_ru"], cols["name_en"] = name, name
+    if grams is not None:
+        cols["grams"] = new_grams
+    if macros is not None:
+        (kcal, protein, fat, carbs), (k100, p100, f100, c100) = manual.derive(
+            new_grams, *macros, per=per)
+        owned = food is not None and food["owner_user_id"] is not None
+        cols.update(
+            kcal=kcal, protein_g=protein, fat_g=fat, carbs_g=carbs, kcal_100g=k100,
+            protein_100g=p100, fat_100g=f100, carbs_100g=c100, confidence=1.0,
+            food_ref_id=food["id"] if food is not None else None,
+            source=("user" if owned else food["source"]) if food is not None else "manual")
+    elif grams is not None:
+        kcal, protein, fat, carbs = _scaled_values(item, new_grams)
+        cols.update(kcal=kcal, protein_g=protein, fat_g=fat, carbs_g=carbs)
+    conn.execute(f"UPDATE meal_items SET {', '.join(f'{k}=?' for k in cols)} WHERE id=?",
+                 (*cols.values(), item_id))
+    field_names = {"name_ru": "name", "grams": "grams", "kcal": "kcal", "protein_g": "protein",
+                   "fat_g": "fat", "carbs_g": "carbs", "kcal_100g": "kcal_100g",
+                   "protein_100g": "protein_100g", "fat_100g": "fat_100g",
+                   "carbs_100g": "carbs_100g", "source": "source"}
+    before, after = {}, {}
+    for col, field in field_names.items():
+        if col in cols and cols[col] != item[col]:
+            before[field], after[field] = item[col], cols[col]
+            conn.execute("INSERT INTO meal_edits (meal_item_id, field, old_value, new_value) "
+                         "VALUES (?,?,?,?)", (item_id, field, str(item[col]), str(cols[col])))
+    _resum_meal(conn, meal_id)
+    if macros is not None:
+        _refresh_range(conn, meal_id, old_total)
+    conn.execute(
+        """INSERT INTO audit_events (user_id, entity_type, entity_id, event_type,
+           before_json, after_json) VALUES (?, 'meal_item', ?, 'edit_manual', ?, ?)""",
+        (None, item_id, json.dumps(before, ensure_ascii=False),
+         json.dumps(after, ensure_ascii=False)))
+    conn.commit()
+    return True
+
+
+def add_meal_item(conn: sqlite3.Connection, meal_id: int, it) -> int:
+    """Добавить точную позицию (CalculatedItem из app.domain.manual) в готовый приём."""
+    old_total = conn.execute("SELECT kcal_total FROM meals WHERE id=?", (meal_id,)).fetchone()[0]
+    item_id = _insert_item(conn, meal_id, it)
+    _resum_meal(conn, meal_id)
+    _refresh_range(conn, meal_id, old_total)
+    conn.execute(
+        """INSERT INTO audit_events (user_id, entity_type, entity_id, event_type,
+           before_json, after_json) VALUES (?, 'meal', ?, 'add_item', ?, ?)""",
+        (None, meal_id, json.dumps({}), json.dumps({"item_id": item_id, "name": it.name_ru,
+                                                     "kcal": it.kcal}, ensure_ascii=False)))
+    conn.commit()
+    return item_id
 
 
 def apply_product_to_item(conn: sqlite3.Connection, item_id: int, name: str, kcal_100g: float,

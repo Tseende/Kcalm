@@ -377,7 +377,7 @@ async def test_meal_upload_photo(client, db, user_id, fake_food):
     assert all(p["url"] == f"/api/photos/{p['id']}" for p in meal["photos"])
     item = meal["items"][0]
     assert set(item) == {"id", "name", "grams", "kcal", "protein", "fat", "carbs", "per100",
-                         "confidence", "edited"}
+                         "confidence", "edited", "source"}
     assert item["name"] == "гречка" and item["grams"] == 300.0 and item["edited"] is False
     assert set(item["per100"]) == {"kcal", "protein", "fat", "carbs"} and item["per100"]["kcal"] > 0
 
@@ -496,6 +496,8 @@ async def test_item_patch_recalculates_and_delete(client, fake_food):
     for bad_grams in (0, -5, "много", 99999, None):
         assert (await client.patch(f"/api/items/{item_id}", json={"grams": bad_grams},
                                    headers=H)).status == 400
+    assert (await client.patch(f"/api/items/{item_id}", json={}, headers=H)).status == 400
+    assert (await client.patch(f"/api/items/{item_id}", json={"per": "100g"}, headers=H)).status == 400
     gone = await client.delete(f"/api/items/{item_id}", headers=H)
     assert gone.status == 200 and (await gone.json())["items"] == []
     assert (await client.delete(f"/api/items/{item_id}", headers=H)).status == 404
@@ -1254,3 +1256,270 @@ async def test_favorite_repeat_rejects_bad_params(client, db):
     assert (await client.post(url, headers=auth(1002), json={"factor": 1})).status == 404
     assert (await client.get("/api/day?date=2026-05-20", headers=H)).status == 200
     assert (await (await client.get("/api/day?date=2026-05-20", headers=H)).json())["meals"] == []   # ничего не записалось
+
+
+# ------------------------------------------------------------------ ручная правка позиции и ввод
+
+MANUAL = {"name": "Мой творог", "grams": 200, "kcal": 120, "protein": 18, "fat": 5, "carbs": 3}
+
+
+async def _first_item(client):
+    meal = await (await post_meal(client, jpeg())).json()
+    return meal, meal["items"][0]
+
+
+async def test_item_patch_manual_per100_writes_both(client, db, fake_food):
+    meal, item = await _first_item(client)
+    resp = await client.patch(f"/api/items/{item['id']}", headers=H, json={
+        "name": " Мой творог ", "grams": 250, "kcal": 117, "protein": 17.3, "fat": 4.4, "carbs": 3.1})
+    assert resp.status == 200
+    got = (await resp.json())["items"][0]
+    assert got["name"] == "Мой творог" and got["grams"] == 250
+    assert got["kcal"] == 292 and got["protein"] == 43.2     # 117*2.5=292.5 -> 292 (банковское), без шага 5
+    assert got["per100"] == {"kcal": 117.0, "protein": 17.3, "fat": 4.4, "carbs": 3.1}
+    assert got["edited"] is True and got["source"] == "manual" and got["confidence"] == 1.0
+    row = db.execute("SELECT * FROM meal_items WHERE id=?", (item["id"],)).fetchone()
+    assert row["food_ref_id"] is None and row["kcal_100g"] == 117 and row["kcal"] == 292
+    fields = {r["field"] for r in db.execute("SELECT field FROM meal_edits WHERE meal_item_id=?", (item["id"],))}
+    assert {"name", "grams", "kcal", "protein"} <= fields
+    assert db.execute("SELECT COUNT(*) FROM audit_events WHERE event_type='edit_manual'").fetchone()[0] == 1
+    # степпер после ручной правки считает от ручных per100
+    after = (await (await client.patch(f"/api/items/{item['id']}", json={"grams": 100}, headers=H)).json())
+    assert after["items"][0]["per100"]["protein"] == 17.3 and after["items"][0]["kcal"] == 115
+    assert after["items"][0]["source"] == "manual"
+
+
+async def test_item_patch_manual_per_portion(client, db, fake_food):
+    meal, item = await _first_item(client)
+    resp = await client.patch(f"/api/items/{item['id']}", headers=H, json={
+        "per": "portion", "grams": 200, "kcal": 333, "protein": 20, "fat": 10, "carbs": 40})
+    got = (await resp.json())["items"][0]
+    assert got["kcal"] == 333 and got["protein"] == 20 and got["carbs"] == 40
+    assert got["per100"] == {"kcal": 166.5, "protein": 10.0, "fat": 5.0, "carbs": 20.0}
+
+
+async def test_item_patch_manual_validation(client, fake_food):
+    meal, item = await _first_item(client)
+    url = f"/api/items/{item['id']}"
+    full = {"kcal": 100, "protein": 5, "fat": 5, "carbs": 5}
+    for body in (
+        {"name": "  "}, {"name": "x" * 121}, {"per": "kg", **full},
+        {"kcal": 100, "protein": 5},                                   # нужны все четыре
+        {**full, "kcal": 901}, {**full, "protein": 101}, {**full, "fat": -1}, {**full, "carbs": "много"},
+        {**full, "per": "portion", "kcal": 10001}, {**full, "per": "portion", "protein": 1001},
+        {**full, "per": "portion", "grams": 10, "kcal": 500},          # >900 ккал на 100 г
+        {**full, "grams": 0}, {**full, "food_id": 1},
+    ):
+        resp = await client.patch(url, json=body, headers=H)
+        assert resp.status == 400, body
+    assert (await client.patch("/api/items/424242", json=full, headers=H)).status == 404
+    assert (await client.patch(url, json={"food_id": 424242}, headers=H)).status == 404
+
+
+async def test_item_patch_name_only_keeps_numbers(client, db, fake_food):
+    meal, item = await _first_item(client)
+    got = (await (await client.patch(f"/api/items/{item['id']}", json={"name": "Каша"}, headers=H)).json())
+    new = got["items"][0]
+    assert new["name"] == "Каша" and new["edited"] is True
+    assert (new["kcal"], new["grams"], new["source"], new["per100"]) == (
+        item["kcal"], item["grams"], item["source"], item["per100"])
+    assert got["kcal"] == meal["kcal"]
+
+
+async def test_item_patch_foreign_item_404(client, db, make_client, fake_food):
+    meal, item = await _first_item(client)
+    add_user(db, 1002)
+    other = await make_client()
+    resp = await other.patch(f"/api/items/{item['id']}", json={"name": "x"}, headers=auth(1002))
+    assert resp.status == 404
+    assert db.execute("SELECT name_ru FROM meal_items WHERE id=?", (item["id"],)).fetchone()[0] == "гречка"
+
+
+async def test_manual_edit_range_and_confidence(client, db, fake_food):
+    meal, item = await _first_item(client)                       # одна позиция из «модели»: вилка шире итога
+    assert meal["kcal_low"] < meal["kcal"] < meal["kcal_high"] or meal["kcal_low"] <= meal["kcal_high"]
+    resp = await client.patch(f"/api/items/{item['id']}", headers=H, json={
+        "grams": 100, "kcal": 200, "protein": 10, "fat": 10, "carbs": 20})
+    got = await resp.json()
+    # все позиции точные: вилка схлопнулась в итог, уверенность 1
+    assert got["kcal"] == 200 and got["kcal_low"] == got["kcal_high"] == 200 and got["confidence"] == 1.0
+    # добавили оценочную позицию: правило «не все точные» масштабирует вилку, уверенность = min
+    row = db.execute("SELECT id FROM meals WHERE id=?", (got["id"],)).fetchone()
+    db.execute("""INSERT INTO meal_items (meal_id, name_ru, name_en, grams, kcal, source, confidence)
+                  VALUES (?, 'суп', 'soup', 300, 200, 'llm', 0.5)""", (row["id"],))
+    db.execute("UPDATE meals SET kcal_total=400, kcal_low=360, kcal_high=440, confidence=0.5 WHERE id=?", (row["id"],))
+    db.commit()
+    item2 = db.execute("SELECT id FROM meal_items WHERE meal_id=? AND name_ru!='суп'", (row["id"],)).fetchone()[0]
+    got = await (await client.patch(f"/api/items/{item2}", headers=H, json={
+        "kcal": 300, "protein": 10, "fat": 10, "carbs": 20})).json()      # 100 г -> 300 ккал, итог 500
+    assert got["kcal"] == 500 and got["kcal_low"] == 450 and got["kcal_high"] == 550
+    assert got["confidence"] == 0.5
+
+
+async def test_refine_keeps_manual_items(client, db, monkeypatch, fake_food):
+    meal, item = await _first_item(client)
+    await client.patch(f"/api/items/{item['id']}", headers=H, json={
+        "name": "Мой творог", "grams": 200, "kcal": 120, "protein": 18, "fat": 5, "carbs": 3})
+    seen = {}
+
+    async def fake_refine(items, comment, user_id, conn, locked=None):  # noqa: ANN001
+        seen["items"], seen["locked"] = items, locked
+        return _food("масло подсолнечное", 10), ["масло"]
+
+    monkeypatch.setattr(foodsvc, "refine_meal", fake_refine)
+    resp = await client.post(f"/api/meals/{meal['id']}/refine", json={"comment": "на масле"}, headers=H)
+    assert resp.status == 200
+    body = await resp.json()
+    assert seen["items"] == [] and seen["locked"] == [{"name_ru": "Мой творог", "grams": 200.0}]
+    names = [i["name"] for i in body["items"]]
+    assert names[0] == "Мой творог" and "масло подсолнечное" in names
+    kept = body["items"][0]
+    assert (kept["grams"], kept["kcal"], kept["protein"], kept["source"], kept["edited"]) == (
+        200.0, 240, 36.0, "manual", True)
+    assert kept["per100"] == {"kcal": 120.0, "protein": 18.0, "fat": 5.0, "carbs": 3.0}
+    assert body["kcal"] == sum(i["kcal"] for i in body["items"])
+
+
+async def test_foods_search_own_then_shared_no_foreign(client, db, user_id):
+    mine = repo.create_product(db, user_id, "Гречневая лепёшка", 300, 10, 5, 50, default_grams=80)
+    other = add_user(db, 1002)
+    repo.create_product(db, other, "Гречишный мёд чужой", 320, 0, 0, 80)
+    resp = await client.get("/api/foods/search", params={"q": "греч"}, headers=H)
+    assert resp.status == 200
+    foods = (await resp.json())["foods"]
+    names = [f["name"] for f in foods]
+    assert foods[0]["id"] == mine and foods[0]["own"] is True and foods[0]["default_grams"] == 80
+    assert "Гречка варёная" in names and "Гречишный мёд чужой" not in names
+    shared = next(f for f in foods if f["name"] == "Гречка варёная")
+    assert shared["own"] is False and shared["source"] == "seed"
+    assert set(shared) == {"id", "name", "brand", "kcal", "protein", "fat", "carbs", "default_grams",
+                           "unit_name", "unit_grams", "own", "source"}
+    assert (await (await client.get("/api/foods/search", params={"q": "греч", "limit": 1}, headers=H)).json()
+            )["foods"][0]["id"] == mine
+    # короткий запрос: только свои
+    short = (await (await client.get("/api/foods/search", params={"q": "г"}, headers=H)).json())["foods"]
+    assert [f["id"] for f in short] == [mine]
+    # удалённый свой продукт не находится
+    repo.delete_product(db, user_id, mine)
+    gone = (await (await client.get("/api/foods/search", params={"q": "лепёшка"}, headers=H)).json())["foods"]
+    assert gone == []
+
+
+async def test_meal_manual_food_id_and_free_input(client, db, user_id):
+    seed = db.execute("SELECT * FROM foods WHERE name_ru='Гречка варёная'").fetchone()
+    mine = repo.create_product(db, user_id, "Сырок", 400, 8, 25, 35)
+    foreign = repo.create_product(db, add_user(db, 1002), "Чужой", 100, 1, 1, 1)
+    body = {"type": "snack", "items": [
+        {"food_id": seed["id"], "grams": 200},
+        {"food_id": mine, "grams": 50},
+        {**MANUAL, "save": True},
+        {"name": "Пирог", "grams": 100, "per": "portion", "kcal": 333, "protein": 5, "fat": 10, "carbs": 50}]}
+    resp = await client.post("/api/meals/manual", json=body, headers=H)
+    assert resp.status == 201
+    meal = await resp.json()
+    assert meal["source"] == "manual" and meal["type"] == "snack"
+    assert meal["kcal_low"] == meal["kcal_high"] == meal["kcal"] and meal["confidence"] == 1.0
+    items = meal["items"]
+    assert [i["name"] for i in items] == ["Гречка варёная", "Сырок", "Мой творог", "Пирог"]
+    assert items[0]["kcal"] == round(seed["kcal_100g"] * 2) and items[0]["source"] == "seed"
+    assert items[1]["kcal"] == 200 and items[1]["source"] == "user"
+    assert items[2]["kcal"] == 240 and items[2]["source"] == "manual" and items[2]["edited"] is True
+    assert items[3]["kcal"] == 333 and items[3]["per100"]["kcal"] == 333.0
+    assert meal["kcal"] == sum(i["kcal"] for i in items)
+    refs = {r["name_ru"]: r["food_ref_id"] for r in db.execute("SELECT name_ru, food_ref_id FROM meal_items")}
+    assert refs["Гречка варёная"] == seed["id"] and refs["Сырок"] == mine and refs["Пирог"] is None
+    # save: true создал свой продукт (на 100 г) и привязал позицию; без save продукта нет
+    saved = db.execute("SELECT * FROM foods WHERE owner_user_id=? AND name_ru='Мой творог'", (user_id,)).fetchone()
+    assert saved is not None and saved["kcal_100g"] == 120 and refs["Мой творог"] == saved["id"]
+    assert db.execute("SELECT COUNT(*) FROM foods WHERE name_ru='Пирог'").fetchone()[0] == 0
+    # пресет порции выучен
+    assert repo.user_default_grams(db, user_id, seed["id"]) == 200
+    # повтор save не плодит дубли
+    await client.post("/api/meals/manual", json={"items": [{**MANUAL, "save": True}]}, headers=H)
+    assert db.execute("SELECT COUNT(*) FROM foods WHERE owner_user_id=? AND name_ru='Мой творог'",
+                      (user_id,)).fetchone()[0] == 1
+    day = await (await client.get("/api/day", headers=H)).json()
+    assert len(day["meals"]) == 2
+    # чужой продукт недоступен
+    r = await client.post("/api/meals/manual", json={"items": [{"food_id": foreign, "grams": 10}]}, headers=H)
+    assert r.status == 404
+
+
+async def test_meal_manual_validation(client):
+    ok_item = dict(MANUAL)
+    bad_bodies = [
+        {}, {"items": []}, {"items": "x"}, {"items": [ok_item] * 31}, {"items": [5]},
+        {"items": [{**ok_item, "grams": 0}]}, {"items": [{**ok_item, "name": ""}]},
+        {"items": [{**ok_item, "kcal": None}]}, {"items": [{**ok_item, "kcal": 901}]},
+        {"items": [{**ok_item, "save": "yes"}]}, {"items": [{**ok_item, "per": "x"}]},
+        {"items": [ok_item], "type": "brunch"}, {"items": [ok_item], "time": "25:00"},
+        {"items": [ok_item], "date": "2999-01-01"}, {"items": [{"grams": 10, "food_id": "abc"}]},
+    ]
+    for body in bad_bodies:
+        assert (await client.post("/api/meals/manual", json=body, headers=H)).status == 400, body
+    when = await client.post("/api/meals/manual", headers=H, json={"items": [ok_item], "time": "08:10"})
+    assert when.status == 201 and (await when.json())["time"] == "08:10"
+
+
+async def test_meal_manual_tea_adds_water(client, db, user_id):
+    tea = db.execute("SELECT id FROM foods WHERE name_ru LIKE 'Чай%' LIMIT 1").fetchone()
+    if tea is None:
+        pytest.skip("в справочнике нет чая")
+    meal = await (await client.post("/api/meals/manual", headers=H,
+                                    json={"items": [{"food_id": tea["id"], "grams": 250}]})).json()
+    assert db.execute("SELECT COALESCE(SUM(ml),0) FROM water_log WHERE meal_id=?", (meal["id"],)).fetchone()[0] > 0
+
+
+async def test_meal_add_item(client, db, user_id, fake_food):
+    meal = await (await post_meal(client, jpeg())).json()
+    seed = db.execute("SELECT * FROM foods WHERE name_ru='Гречка варёная'").fetchone()
+    resp = await client.post(f"/api/meals/{meal['id']}/items", json={"food_id": seed["id"], "grams": 100}, headers=H)
+    assert resp.status == 201
+    got = await resp.json()
+    assert got["id"] == meal["id"] and len(got["items"]) == 2 and len(got["photos"]) == 1
+    added = got["items"][1]
+    assert added["name"] == "Гречка варёная" and added["source"] == "seed"
+    assert got["kcal"] == meal["kcal"] + added["kcal"]
+    assert got["kcal_low"] <= got["kcal"] <= got["kcal_high"] and got["confidence"] <= meal["confidence"]
+    # ручной ввод в существующий приём
+    got2 = await (await client.post(f"/api/meals/{meal['id']}/items", json=MANUAL, headers=H)).json()
+    assert got2["items"][2]["name"] == "Мой творог" and got2["kcal"] == got["kcal"] + 240
+    # валидация и доступ
+    url = f"/api/meals/{meal['id']}/items"
+    for body in ({}, {"name": "x", "grams": 10}, {**MANUAL, "grams": 0}, {"food_id": 424242, "grams": 5}):
+        assert (await client.post(url, json=body, headers=H)).status in (400, 404)
+    assert (await client.post(url, json={}, headers=H)).status == 400
+    assert (await client.post("/api/meals/424242/items", json=MANUAL, headers=H)).status == 404
+    add_user(db, 1002)
+    assert (await client.post(url, json=MANUAL, headers=auth(1002))).status == 404
+
+
+async def test_meal_add_item_all_exact_collapses_range(client, db):
+    meal = await (await client.post("/api/meals/manual", json={"items": [MANUAL]}, headers=H)).json()
+    got = await (await client.post(f"/api/meals/{meal['id']}/items", json=MANUAL, headers=H)).json()
+    assert got["kcal"] == 480 and got["kcal_low"] == got["kcal_high"] == 480
+
+
+async def test_replace_item_with_food(client, db, user_id, fake_food):
+    meal, item = await _first_item(client)
+    seed = db.execute("SELECT * FROM foods WHERE name_ru='Гречка сухая'").fetchone()
+    got = (await (await client.patch(f"/api/items/{item['id']}", json={"food_id": seed["id"]}, headers=H)).json())
+    new = got["items"][0]
+    assert new["name"] == "Гречка сухая" and new["grams"] == item["grams"]    # граммы остались
+    assert new["per100"]["kcal"] == seed["kcal_100g"] and new["source"] == "seed"
+    assert db.execute("SELECT food_ref_id FROM meal_items WHERE id=?", (item["id"],)).fetchone()[0] == seed["id"]
+
+
+async def test_foods_search_cyrillic_case_and_own_first(client, db, user_id):
+    # SQL-отбор кандидатов: регистр кириллицы не должен мешать (LOWER/LIKE в SQLite — только ASCII)
+    mine = repo.create_product(db, user_id, "Куриные котлеты домашние", 200, 15, 10, 8)
+
+    def names(q):
+        return [f["name_ru"] for f in repo.search_foods(db, user_id, q)]
+
+    assert any(n.startswith("Куриная грудка") for n in names("кур"))
+    assert "Гречка варёная" in names("ГРЕЧ")
+    assert "Гречка варёная" in names("гречка вареная")        # ё/е и несколько слов
+    found = repo.search_foods(db, user_id, "кур")
+    assert found[0]["id"] == mine and found[0]["own"] is True   # свои выше общих
+    assert all(f["own"] for f in repo.search_foods(db, user_id, ""))   # пустой запрос: только свои

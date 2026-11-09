@@ -897,7 +897,7 @@ body.kb-open .screen.compose textarea { min-height: 34vh; }
 /* карточка добавления: три плитки действий */
 .capture { padding: 18px 14px 14px; gap: 4px; }
 .capture.compact { padding: 10px; }
-.cap-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%; margin-top: 14px; }
+.cap-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: 100%; margin-top: 14px; }
 .cap-tile { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 14px 6px 12px; border: 0; border-radius: 16px; font: inherit; color: var(--c-text); background: color-mix(in srgb, var(--c-btn) 10%, transparent); cursor: pointer; }
 .cap-tile:active { transform: scale(.97); }
 .cap-tile .cap-ico { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; margin-bottom: 6px; background: color-mix(in srgb, var(--c-btn) 16%, transparent); color: var(--c-btn); }
@@ -1430,3 +1430,18 @@ img.broken { display: none; }
 .fav-sheet .fav-sheet-name { text-align: center; color: var(--c-hint); font-size: 14px; margin-top: -6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fav-sheet .seg-label { font-size: 13px; color: var(--c-hint); text-transform: uppercase; letter-spacing: .02em; margin: 4px 4px -4px; }
 .fav-sheet .btn { margin-top: 6px; }
+
+/* Продукт из базы / ручной ввод: «В этом приёме», шторки выбора и правки позиции */
+.item-title-btn { border: 0; background: none; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; max-width: 100%; }
+.item-title-btn .nw { white-space: nowrap; }
+.item-title-btn:active { opacity: .6; }
+.edit-btn { border: 0; background: none; padding: 4px; margin: -4px 0 -4px 2px; color: var(--c-hint); display: inline-flex; vertical-align: -4px; border-radius: 8px; cursor: pointer; opacity: .55; }
+.edit-btn.on { opacity: 1; color: var(--c-btn); }
+.edit-btn:active { transform: scale(.9); }
+.own-tag { margin-left: 8px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--c-btn); background: color-mix(in srgb, var(--c-btn) 14%, transparent); vertical-align: 1px; }
+.fp-list { max-height: 46vh; overflow-y: auto; }
+.prod-row .row-btn { text-align: left; border: 0; background: none; font: inherit; color: inherit; padding: 0; display: flex; }
+.prod-sum { padding: 4px 2px; }
+.add-item-btn { margin-top: 10px; }
+.check-row { display: flex; align-items: center; gap: 10px; padding: 4px 2px; font-size: 15px; }
+.check-row input { width: 20px; height: 20px; }

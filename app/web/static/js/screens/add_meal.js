@@ -1,10 +1,11 @@
 // Add meal: dishes (each = several photos + one plate) and/or a text description. Time and meal type are set by the server (now).
 import { api } from '../api.js';
 import {
-  h, icon, tile, toast, haptic, nav, mainButton, draft, pageHead, compressImage, busyOverlay, dishKind, sheet, fmtN, numInput, numVal, numCheck, codeInput, frow, macroLine,
+  h, icon, tile, toast, haptic, nav, mainButton, draft, pageHead, compressImage, busyOverlay, dishKind, sheet, fmtN, numInput, numVal, numCheck, codeInput, frow, macroLine, sectionTitle,
 } from '../ui.js';
 import { scanBarcode, decodeFile, validBarcode } from '../scanner.js';
 import { dishInfo } from './dishes.js';
+import { pickFood, editEntryGrams, entryAbs, entryTotal, toPayload } from '../food_picker.js';
 import { dishPic } from '../pics.js';
 import { t, tn } from '../i18n.js';
 
@@ -33,6 +34,9 @@ export default async function render(root, ctx) {
   const dishList = h('div', { class: 'stack' });
   const capture = h('div', { class: 'capture' });
   const quick = h('div', { class: 'stack-sm', hidden: true });
+  // Продукты из базы или введённые вручную: отдельный список позиций приёма (см. food_picker.js).
+  const prods = [];
+  const prodBox = h('div', { class: 'stack-sm prod-box', hidden: true });
 
   // Избранное и частые: один тап записывает приём заново, звезда добавляет/убирает из избранного.
   async function loadQuick() {
@@ -40,7 +44,7 @@ export default async function render(root, ctx) {
     try { items = (await api.get('/frequent', { limit: 20 })).items || []; } catch (e) { return; }
     if (!ctx.alive()) return;
     let starBusy = false;
-    quickVisibility = () => { quick.hidden = !items.length || allPhotos().length > 0 || !!textTa.value.trim(); };
+    quickVisibility = () => { quick.hidden = !items.length || allPhotos().length > 0 || !!textTa.value.trim() || prods.length > 0; };
     const paintQuick = () => {
       quickVisibility();
       const rows = items.map((f) => {
@@ -313,6 +317,42 @@ export default async function render(root, ctx) {
       ingBlock(g, n));
   }
 
+  async function addProd() {
+    haptic('light');
+    const e = await pickFood();
+    if (!e || !ctx.alive()) return;
+    prods.push(e);
+    haptic('success');
+    paintProds();
+  }
+  async function editProd(i) {
+    const e = await editEntryGrams(prods[i]);
+    if (!e || !ctx.alive()) return;
+    prods[i] = e;
+    paintProds();
+  }
+  function paintProds() {
+    prodBox.hidden = !prods.length;
+    if (prods.length) {
+      const sum = entryTotal(prods);
+      prodBox.replaceChildren(
+        sectionTitle(t('fp.in_meal')),
+        h('div', { class: 'list prod-list' }, prods.map((e, i) => {
+          const a = entryAbs(e);
+          return h('div', { class: 'row prod-row' },
+            h('button', { class: 'row-btn grow', type: 'button', 'aria-label': t('fp.edit_grams', { n: e.name }), onclick: () => editProd(i) },
+              h('span', { class: 'grow' }, h('span', { class: 'row-title' }, e.name),
+                h('span', { class: 'row-sub' }, `${fmtN(e.grams)} ${t('unit.g')} · ${fmtN(a.kcal)} ${t('unit.kcal')}`))),
+            h('button', { class: 'icon-btn danger', type: 'button', 'aria-label': t('add.remove_item', { n: e.name }), onclick: () => { prods.splice(i, 1); paintProds(); } }, icon('trash', 18)));
+        })),
+        h('div', { class: 'prod-sum row-between' }, h('span', { class: 'muted' }, t('fp.total')),
+          h('span', { class: 'row-title' }, `${fmtN(sum.kcal)} ${t('unit.kcal')} · ${macroLine(sum)}`)),
+        h('button', { class: 'btn btn-secondary btn-block', type: 'button', onclick: addProd }, icon('plus', 18), t('fp.add_item')));
+    } else prodBox.replaceChildren();
+    quickVisibility();
+    sync();
+  }
+
   function paint() {
     // Перерисовка (фото досжалось, добавили ингредиент) не должна выбивать фокус из поля уточнения.
     const a = document.activeElement;
@@ -342,7 +382,8 @@ export default async function render(root, ctx) {
         h('div', { class: 'cap-grid' },
           act('camera', t('add.shoot'), t('add.shoot_sub'), () => pick(camera, groups[0]), true),
           act('image', t('lbl.gallery'), t('add.from_photos'), () => pick(gallery, groups[0])),
-          act('barcode', t('pf.barcode'), t('add.product_word'), () => scanIng(null))));
+          act('barcode', t('pf.barcode'), t('add.product_word'), () => scanIng(null)),
+          act('package', t('fp.tile'), t('fp.tile_sub'), addProd)));
     } else {
       capture.replaceChildren(
         h('button', {
@@ -360,7 +401,7 @@ export default async function render(root, ctx) {
     textTa.placeholder = has ? t('add.ph_comment') : t('add.ph_text');
   }
 
-  function valid() { return allPhotos().length > 0 || textTa.value.trim().length > 0; }
+  function valid() { return allPhotos().length > 0 || textTa.value.trim().length > 0 || prods.length > 0; }
   let lastDisabled = null;
   function sync() {
     // Не дёргаем кнопку на каждую букву: в Telegram каждое enable/disable пересчитывает окно.
@@ -390,25 +431,38 @@ export default async function render(root, ctx) {
     busy = true;
     sync();
     mainButton.setLoading(true);
-    const fd = new FormData();
     const filled = groups.filter((g) => g.photos.length);
-    if (filled.length) {
-      // Фото идут блюдо за блюдом; groups — номер блюда для каждого фото.
-      const owner = [];
-      filled.forEach((g, gi) => g.photos.forEach((p) => {
-        fd.append('photo', p.file, p.file.name || 'photo.jpg');
-        owner.push(gi);
-      }));
-      filled.forEach((g) => g.photos.forEach(() => fd.append('dish_id', g.dishId == null ? '' : String(g.dishId))));
-      fd.append('groups', owner.join(','));
-      const note = composeNote(filled);
-      if (note) fd.append('comment', note);
-    } else {
-      fd.append('text', textTa.value.trim());
-    }
-    const stop = busyOverlay(t('add.recognizing'), t('add.recognizing_sub'));
+    const withAI = filled.length > 0 || !!textTa.value.trim();
+    const stop = withAI ? busyOverlay(t('add.recognizing'), t('add.recognizing_sub')) : busyOverlay(t('add.processing'));
     try {
-      const meal = await api.post('/meals', fd, { timeout: 150000 });
+      let meal;
+      if (!withAI) {
+        // только продукты: без модели, один запрос
+        meal = await api.post('/meals/manual', { items: prods.map(toPayload) });
+      } else {
+        const fd = new FormData();
+        if (filled.length) {
+          // Фото идут блюдо за блюдом; groups — номер блюда для каждого фото.
+          const owner = [];
+          filled.forEach((g, gi) => g.photos.forEach((p) => {
+            fd.append('photo', p.file, p.file.name || 'photo.jpg');
+            owner.push(gi);
+          }));
+          filled.forEach((g) => g.photos.forEach(() => fd.append('dish_id', g.dishId == null ? '' : String(g.dishId))));
+          fd.append('groups', owner.join(','));
+          const note = composeNote(filled);
+          if (note) fd.append('comment', note);
+        } else {
+          fd.append('text', textTa.value.trim());
+        }
+        meal = await api.post('/meals', fd, { timeout: 150000 });
+        // продукты добавляются в созданный приём по одному; сбой одного не теряет сам приём
+        let failed = 0;
+        for (const e of prods) {
+          try { await api.post('/meals/' + meal.id + '/items', toPayload(e)); } catch (er) { failed++; }
+        }
+        if (failed) toast(t('fp.add_failed', { n: failed }), 'error');
+      }
       haptic('success');
       stop();
       clearDraft();
@@ -439,7 +493,7 @@ export default async function render(root, ctx) {
   view.append(
     pageHead(t('add.meal'), { parent: '/today' }),
     h('div', { class: 'stack' },
-      capture, dishList, noDishHint,
+      capture, dishList, prodBox, noDishHint,
       h('label', { class: 'field compose-keep' }, textLabel, textTa),
       quick,
       camera, gallery, codeShot));

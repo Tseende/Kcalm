@@ -92,6 +92,8 @@ class CalculatedItem(BaseModel):
     protein_100g: float | None = None
     fat_100g: float | None = None
     carbs_100g: float | None = None
+    # позиция введена или подтверждена человеком: «Уточнить» через модель её не трогает
+    edited_by_user: bool = False
 
 
 class MealCalculation(BaseModel):

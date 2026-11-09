@@ -79,8 +79,10 @@ function calcItem(it) {
 function recalcMeal(m) {
   const t = m.items.reduce((a, i) => ({ kcal: a.kcal + i.kcal, protein: a.protein + i.protein, fat: a.fat + i.fat, carbs: a.carbs + i.carbs }), { kcal: 0, protein: 0, fat: 0, carbs: 0 });
   m.kcal = Math.round(t.kcal);
-  m.kcal_low = Math.round(t.kcal * 0.85);
-  m.kcal_high = Math.round(t.kcal * 1.15);
+  const exact = m.items.length > 0 && m.items.every((i) => i.source === 'manual' || i.source === 'user' || i.source === 'seed' && i.confidence >= 0.99);
+  m.kcal_low = Math.round(t.kcal * (exact ? 1 : 0.85));
+  m.kcal_high = Math.round(t.kcal * (exact ? 1 : 1.15));
+  if (m.items.length) m.confidence = Math.min(...m.items.map((i) => i.confidence));
   m.protein = r1(t.protein);
   m.fat = r1(t.fat);
   m.carbs = r1(t.carbs);
@@ -297,6 +299,29 @@ class FormLike {
   all(k) { return this.fd.getAll(k); }
 }
 const dishOut = (d) => ({ ...d });
+// Общий справочник в моке: еда из FOODS + свои продукты.
+function mockFoods() {
+  const own = products.map((p) => ({ id: p.id, name: p.name, brand: p.brand || null, kcal: p.kcal, protein: p.protein, fat: p.fat, carbs: p.carbs, default_grams: p.default_grams || null, unit_name: p.unit_name || null, unit_grams: p.unit_grams || null, own: true, source: 'user' }));
+  const shared = Object.values(FOODS).map((f, i) => ({ id: 9000 + i, name: f[0], brand: null, kcal: f[1], protein: f[2], fat: f[3], carbs: f[4], default_grams: null, unit_name: null, unit_grams: null, own: false, source: 'seed' }));
+  return [...own, ...shared];
+}
+// Позиция ручного ввода или продукта из базы (как POST /meals/manual и /meals/{id}/items).
+function mockManualItem(x) {
+  if (!(x.grams >= 1 && x.grams <= 5000)) throw err(400, 'bad_field', L('Граммы: от 1 до 5000.', "Grams: from 1 to 5000."));
+  let per100; let name; let source = 'manual';
+  if (x.food_id != null) {
+    const f = mockFoods().find((y) => y.id === +x.food_id); if (!f) throw notFound();
+    per100 = { kcal: f.kcal, protein: f.protein, fat: f.fat, carbs: f.carbs }; name = f.name; source = f.own ? 'user' : 'seed';
+  } else {
+    name = String(x.name || '').trim();
+    if (!name || name.length > 120) throw err(400, 'bad_field', L('Название: от 1 до 120 символов.', "Name: 1 to 120 characters."));
+    if (!['kcal', 'protein', 'fat', 'carbs'].every((k) => x[k] != null)) throw err(400, 'bad_field', L('Нужны все четыре значения.', "All four values are required."));
+    const k = x.per === 'portion' ? 100 / x.grams : 1;
+    per100 = { kcal: r1(x.kcal * k), protein: r1(x.protein * k), fat: r1(x.fat * k), carbs: r1(x.carbs * k) };
+    if (x.save) products.unshift({ id: nid(), name, brand: null, ...per100, default_grams: x.grams, unit_name: null, unit_grams: null, barcode: null, times_used: 1 });
+  }
+  return calcItem({ id: nid(), name, grams: x.grams, per100, confidence: 1, edited: source === 'manual', source });
+}
 const itemMeal = (itemId) => [...meals.values()].find((m) => m.items.some((i) => i.id === itemId));
 const err = (status, error, message) => { const e = new Error(message); e.status = status; e.code = error; return Object.assign(e, { name: 'ApiError' }); };
 const notFound = () => err(404, 'not_found', L('Не найдено.', "Not found."));
@@ -439,8 +464,22 @@ const routes = [
     await sleep(80 + Math.random() * (/[?&]slow=1\b/.test(location.search) ? 3000 : 1100));
     const x = itemMeal(+m[1]); if (!x) throw notFound();
     const it = x.items.find((i) => i.id === +m[1]);
-    if (!(b.grams >= 1 && b.grams <= 5000)) throw err(422, 'validation', L('Граммы: от 1 до 5000.', "Grams: from 1 to 5000."));
-    it.grams = b.grams; it.edited = true; calcItem(it);
+    const keys = ['grams', 'name', 'per', 'food_id', 'kcal', 'protein', 'fat', 'carbs'];
+    if (!keys.some((k) => k in b)) throw err(400, 'empty_patch', L('Нечего менять.', "Nothing to change."));
+    if ('grams' in b && !(b.grams >= 1 && b.grams <= 5000)) throw err(422, 'validation', L('Граммы: от 1 до 5000.', "Grams: from 1 to 5000."));
+    if (Object.keys(b).every((k) => k === 'grams')) { it.grams = b.grams; it.edited = true; calcItem(it); return recalcMeal(x); }
+    if ('name' in b) { const n = String(b.name || '').trim(); if (!n || n.length > 120) throw err(400, 'bad_field', L('Название: от 1 до 120 символов.', "Name: 1 to 120 characters.")); it.name = n; }
+    if ('grams' in b) it.grams = b.grams;
+    if (b.food_id != null) {
+      const f = mockFoods().find((y) => y.id === +b.food_id); if (!f) throw notFound();
+      it.name = f.name; it.per100 = { kcal: f.kcal, protein: f.protein, fat: f.fat, carbs: f.carbs }; it.source = f.own ? 'user' : 'seed'; it.confidence = 1;
+    } else if (['kcal', 'protein', 'fat', 'carbs'].some((k) => b[k] != null)) {
+      if (!['kcal', 'protein', 'fat', 'carbs'].every((k) => b[k] != null)) throw err(400, 'bad_field', L('Нужны все четыре значения.', "All four values are required."));
+      const k = b.per === 'portion' ? 100 / it.grams : 1;
+      it.per100 = { kcal: r1(b.kcal * k), protein: r1(b.protein * k), fat: r1(b.fat * k), carbs: r1(b.carbs * k) };
+      it.source = 'manual'; it.confidence = 1;
+    }
+    it.edited = true; calcItem(it);
     return recalcMeal(x);
   }],
   ['POST', /^\/items\/(\d+)\/barcode$/, async (m, q, b) => {
@@ -463,6 +502,25 @@ const routes = [
     const p = { id: nid(), name: (b && b.name) || it.name, brand: null, ...it.per100, default_grams: it.grams, unit_name: null, unit_grams: null, barcode: null, times_used: 1 };
     products.unshift(p);
     return p;
+  }, 201],
+  ['GET', /^\/foods\/search$/, (m, q) => {
+    const needle = String(q.q || '').trim().toLowerCase();
+    const all = mockFoods();
+    const list = needle.length < 2 ? all.filter((f) => f.own) : all.filter((f) => (f.name + ' ' + (f.brand || '')).toLowerCase().includes(needle));
+    return { foods: list.slice(0, +q.limit || 30) };
+  }],
+  ['POST', /^\/meals\/manual$/, (m, q, b) => {
+    if (!Array.isArray(b.items) || !b.items.length || b.items.length > 30) throw err(400, 'bad_field', L('Нужна хотя бы одна позиция.', "At least one item is required."));
+    const time = b.time || nowHHMM();
+    const mm = { id: nid(), date: b.date || todayISO(), time, type: b.type || guessType(time), source: 'manual', confidence: 1, photos: [], items: [], comment: null };
+    b.items.forEach((x) => mm.items.push(mockManualItem(x)));
+    meals.set(mm.id, mm);
+    return recalcMeal(mm);
+  }, 201],
+  ['POST', /^\/meals\/(\d+)\/items$/, (m, q, b) => {
+    const x = meals.get(+m[1]); if (!x) throw notFound();
+    x.items.push(mockManualItem(b));
+    return recalcMeal(x);
   }, 201],
   ['GET', /^\/products$/, (m, q) => ({ products: products.filter((p) => !q.q || (p.name + ' ' + (p.brand || '')).toLowerCase().includes(q.q.toLowerCase())) })],
   ['POST', /^\/products$/, (m, q, b) => { const p = { id: nid(), brand: null, default_grams: null, unit_name: null, unit_grams: null, barcode: null, times_used: 0, ...b }; products.unshift(p); return p; }, 201],

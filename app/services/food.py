@@ -203,11 +203,14 @@ async def parse_text(text: str, user_id: int | None, db: sqlite3.Connection) -> 
 
 
 async def refine_meal(items: list[dict], comment: str, user_id: int | None,
-                      db: sqlite3.Connection) -> tuple[MealUnderstanding, list[str]]:
+                      db: sqlite3.Connection, locked: list[dict] | None = None
+                      ) -> tuple[MealUnderstanding, list[str]]:
     """Уточнение готовой записи рассказом о приготовлении (масло, соус, вес).
 
     Модель получает текущий состав и возвращает полный новый список; калории считает код.
     Прежние граммы сохраняются, если модель их не вернула.
+    locked — позиции, исправленные человеком вручную: модель видит их как контекст
+    (`locked_items`), но не меняет и не возвращает; код оставляет их как были.
     """
     current = [{"name_ru": it["name_ru"], "name_en": it.get("name_en") or "",
                 "grams": it["grams"]} for it in items]
@@ -217,6 +220,7 @@ async def refine_meal(items: list[dict], comment: str, user_id: int | None,
         [{"role": "system", "content": load_prompt("refine")},
          {"role": "user", "content": json.dumps(
              {"current_items": current, "comment": comment,
+              **({"locked_items": locked} if locked else {}),
               **({"my_products": mine} if mine else {})}, ensure_ascii=False)}],
         temperature=0.1, user_id=user_id, db=db,
     )

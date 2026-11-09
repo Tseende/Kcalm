@@ -29,13 +29,13 @@ def _get(row, *keys):
 def item_json(row: sqlite3.Row) -> dict:
     per100 = None
     if row["kcal_100g"] is not None:
-        per100 = {"kcal": _int(row["kcal_100g"]), "protein": _num(row["protein_100g"] or 0),
+        per100 = {"kcal": _num(row["kcal_100g"]), "protein": _num(row["protein_100g"] or 0),
                   "fat": _num(row["fat_100g"] or 0), "carbs": _num(row["carbs_100g"] or 0)}
     return {"id": row["id"], "name": row["name_ru"], "grams": _num(row["grams"]),
             "kcal": int(row["kcal"]), "protein": _num(row["protein_g"]),
             "fat": _num(row["fat_g"]), "carbs": _num(row["carbs_g"]),
             "per100": per100, "confidence": _num(row["confidence"], 2),
-            "edited": bool(row["edited_by_user"])}
+            "edited": bool(row["edited_by_user"]), "source": row["source"]}
 
 
 def meal_json(db: sqlite3.Connection, meal: sqlite3.Row) -> dict:
@@ -90,3 +90,13 @@ def targets_json(db: sqlite3.Connection, user: sqlite3.Row) -> dict:
             "fat": _int(tgt["fat_g"] or 0) if tgt else 0,
             "carbs": _int(tgt["carbs_g"] or 0) if tgt else 0,
             "water_ml": watersvc.goal_for(db, user)}
+
+
+def food_json(food: dict) -> dict:
+    """Результат поиска /api/foods/search: свой продукт или общий справочник, КБЖУ на 100 г."""
+    return {"id": food["id"], "name": food["name_ru"], "brand": food["brand"],
+            "kcal": _num(food["kcal_100g"]), "protein": _num(food["protein_100g"]),
+            "fat": _num(food["fat_100g"]), "carbs": _num(food["carbs_100g"]),
+            "default_grams": _int(food["default_grams"]), "unit_name": food["unit_name"],
+            "unit_grams": _int(food["unit_grams"]), "own": bool(food["own"]),
+            "source": food["source"]}
