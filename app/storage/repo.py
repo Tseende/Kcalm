@@ -252,6 +252,26 @@ def owned_meal_item(conn: sqlite3.Connection, user_id: int, item_id: int) -> sql
 
 # ------------------------------------------------------------------- meals
 
+# Единая точка «день пользователя изменился» (приём пищи или вода): карточка дня в виджете
+# обновляется отсюда (app.widgets.day подставляет сюда свою функцию). Без подписчика — пусто.
+_day_listener = None
+
+
+def set_day_listener(fn) -> None:
+    global _day_listener
+    _day_listener = fn
+
+
+def day_changed(user_id: int) -> None:
+    fn = _day_listener
+    if fn is None:
+        return
+    try:
+        fn(user_id)
+    except Exception:  # noqa: BLE001 — запись в дневник важнее карточки
+        pass
+
+
 def _insert_items(conn: sqlite3.Connection, meal_id: int, calc: MealCalculation) -> None:
     for it in calc.items:
         snapshot = json.dumps({
@@ -636,8 +656,10 @@ def sync_meal_water(conn: sqlite3.Connection, meal_id: int) -> int:
     записи исчезает. Возвращает мл, засчитанные в воду."""
     from app.domain.water import hydration_ml
     conn.execute("DELETE FROM water_log WHERE meal_id=?", (meal_id,))
-    meal = conn.execute("SELECT * FROM meals WHERE id=? AND deleted_at IS NULL",
-                        (meal_id,)).fetchone()
+    row = conn.execute("SELECT * FROM meals WHERE id=?", (meal_id,)).fetchone()
+    if row:
+        day_changed(row["user_id"])        # любая правка приёма проходит здесь (в том числе удаление)
+    meal = row if row and row["deleted_at"] is None else None
     if not meal:
         return 0
     ml = sum(hydration_ml(i["name_ru"], i["name_en"], i["grams"])
@@ -1165,6 +1187,7 @@ def add_water(conn: sqlite3.Connection, user_id: int, local_date: str, local_tim
         (user_id, utcnow_iso(), local_date, local_time, ml, source, raw_text),
     )
     conn.commit()
+    day_changed(user_id)
     return cur.lastrowid
 
 
@@ -1196,7 +1219,53 @@ def last_water(conn: sqlite3.Connection, user_id: int, local_date: str) -> sqlit
 def delete_water(conn: sqlite3.Connection, user_id: int, water_id: int) -> bool:
     cur = conn.execute("DELETE FROM water_log WHERE id=? AND user_id=?", (water_id, user_id))
     conn.commit()
+    if cur.rowcount > 0:
+        day_changed(user_id)
     return cur.rowcount > 0
+
+
+def last_manual_water(conn: sqlite3.Connection, user_id: int, local_date: str) -> sqlite3.Row | None:
+    """Последняя записанная вручную вода дня: чай и кофе из приёма пищи (meal_id) не в счёт."""
+    return conn.execute(
+        """SELECT * FROM water_log WHERE user_id=? AND local_date=? AND meal_id IS NULL
+           ORDER BY id DESC LIMIT 1""", (user_id, local_date)).fetchone()
+
+
+# ------------------------------------------------------------ сообщения-виджеты
+
+def get_user_by_id(conn: sqlite3.Connection, user_id: int) -> sqlite3.Row | None:
+    return conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+
+
+def add_widget_message(conn: sqlite3.Connection, user_id: int, kind: str, local_date: str,
+                       chat_id: int, message_id: int, ref_id: int | None = None) -> int:
+    cur = conn.execute(
+        """INSERT INTO widget_messages (user_id, kind, local_date, chat_id, message_id, ref_id)
+           VALUES (?,?,?,?,?,?)""", (user_id, kind, local_date, chat_id, message_id, ref_id))
+    conn.commit()
+    return cur.lastrowid
+
+
+def widget_by_message(conn: sqlite3.Connection, chat_id: int, message_id: int) -> sqlite3.Row | None:
+    return conn.execute("SELECT * FROM widget_messages WHERE chat_id=? AND message_id=?",
+                        (chat_id, message_id)).fetchone()
+
+
+def widget_for_day(conn: sqlite3.Connection, user_id: int, kind: str,
+                   local_date: str) -> sqlite3.Row | None:
+    return conn.execute(
+        """SELECT * FROM widget_messages WHERE user_id=? AND kind=? AND local_date=?
+           ORDER BY id DESC LIMIT 1""", (user_id, kind, local_date)).fetchone()
+
+
+def widget_for_ref(conn: sqlite3.Connection, kind: str, ref_id: int) -> sqlite3.Row | None:
+    return conn.execute("SELECT * FROM widget_messages WHERE kind=? AND ref_id=? LIMIT 1",
+                        (kind, ref_id)).fetchone()
+
+
+def delete_widget_message(conn: sqlite3.Connection, widget_id: int) -> None:
+    conn.execute("DELETE FROM widget_messages WHERE id=?", (widget_id,))
+    conn.commit()
 
 
 def latest_weight_kg(conn: sqlite3.Connection, user_id: int) -> float | None:

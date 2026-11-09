@@ -20,6 +20,8 @@ from app.routers import (commands, craving, dishes, intake, menu, onboarding, pr
                          support, tracking)
 from app.scheduler import build_scheduler
 from app.web.server import WEBHOOK_PATH, start_web
+from app.widgets import runtime as widgets_runtime
+from app.widgets.dispatcher import WidgetDispatcher
 
 log = logging.getLogger(__name__)
 
@@ -72,7 +74,7 @@ def create_dispatcher(db) -> Dispatcher:
     for router in ROUTERS:
         router._parent_router = None
 
-    dp = Dispatcher(storage=MemoryStorage())
+    dp = WidgetDispatcher(storage=MemoryStorage())
     dp["db"] = db
     # outer: один раз на апдейт, а не на каждый роутер, куда сообщение «проваливается»
     dp.message.outer_middleware(AccessMiddleware())
@@ -109,6 +111,7 @@ async def main() -> None:
               default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     bot.session.middleware(rich.RichMiddleware())
     dp = create_dispatcher(db)
+    widgets_runtime.setup(bot, db, cfg)       # карточка дня и пауза; выключатель WIDGETS_ENABLED
 
     try:                                   # сбой Telegram при старте не должен ронять бота
         await bot.set_my_commands(BOT_COMMANDS)
@@ -159,6 +162,7 @@ async def main() -> None:
             webhook_task.cancel()
         if web_runner:
             await web_runner.cleanup()
+        widgets_runtime.teardown()
         sched.shutdown(wait=False)
         db.close()
         await bot.session.close()

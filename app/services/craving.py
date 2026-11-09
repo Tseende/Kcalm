@@ -187,13 +187,26 @@ async def open_episode(db: sqlite3.Connection, user, trigger_text: str | None,
         if data["outcome"] == "overate":
             repo.update_craving(db, event_id, category="overate")
         extra = await _apply_turn(db, user, event_id, data, allow_outcome=False)
+        _offer_pause(user, event_id, mode)
         return event_id, esc(data["reply"]) + extra, kb
     if mode == "talk":
         text = "Я здесь 🤍 Рассказывай, что на душе: про еду, про день, про что угодно."
     else:
         text = _opening_fallback(facts)
     repo.add_craving_message(db, event_id, "assistant", text)
+    _offer_pause(user, event_id, mode)
     return event_id, text, kb
+
+
+def _offer_pause(user, event_id: int, mode: str) -> None:
+    """Виджет «Пауза» уходит вслед за первым ответом (только при тяге, не в обычном разговоре)."""
+    if mode != "craving":
+        return
+    try:
+        from app.widgets import pause
+        pause.on_episode_opened(user, event_id)
+    except Exception:  # noqa: BLE001 — виджет не должен мешать разговору
+        log.warning("craving: пауза-виджет не запущен", exc_info=True)
 
 
 # ------------------------------------------------------------ планы по категориям

@@ -34,6 +34,8 @@ services:
         sync: false
       - key: WEBHOOK_BASE_URL     # https://<имя-сервиса>.onrender.com, заполнить после первого деплоя
         sync: false
+      - key: WIDGETS_ENABLED      # виджеты Bot API 10.4 (карточка дня, пауза при тяге); false = выключить
+        value: "true"
       - key: WEBAPP_URL           # https://<имя-сервиса>.onrender.com/app/
         sync: false
       - key: TZ
