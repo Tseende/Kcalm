@@ -613,10 +613,16 @@ def weekly_report(db: sqlite3.Connection, uid: int, today: date | None = None,
             # адаптация не должна уводить цель ниже безопасного минимума
             new_kcal, raised = kcal_floor_check(res.new_target, user["sex"], age,
                                                 weight_kg, height_cm)
-            repo.insert_target(db, uid, to, int(new_kcal), t.protein_g, t.fat_g,
-                               t.carbs_g, res.tdee_est,
-                               res.reason + ("_floor" if raised else ""))
-            lines.append(f"🎯 Пересчитал цель по факту: {target} → {int(new_kcal)} ккал/день")
+            new_kcal = int(round(new_kcal))
+            # углеводы добираем до новой нормы, иначе БЖУ расходятся с ккал
+            carbs = max(50.0, round((new_kcal - 4 * t.protein_g - 9 * t.fat_g) / 4, 1))
+            if new_kcal == int(target):
+                lines.append("🎯 Цель по факту сходится с текущей, оставляю как есть.")
+            else:
+                repo.insert_target(db, uid, to, new_kcal, t.protein_g, t.fat_g,
+                                   carbs, res.tdee_est,
+                                   res.reason + ("_floor" if raised else ""))
+                lines.append(f"🎯 Пересчитал цель по факту: {int(target)} → {new_kcal} ккал/день")
             if raised:
                 lines.append("⚠️ По данным цель получалась ниже безопасного минимума — "
                              "оставил минимум. Если вес не идёт вниз, лучше обсудить питание с врачом.")

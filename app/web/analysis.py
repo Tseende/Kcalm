@@ -6,7 +6,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import date, datetime
 
-from app.services import insights
+from app.services import insights, motivation
 
 CLOSE_HOUR = 20          # после этого часа сегодняшний день уже можно оценивать целиком
 STATUS = {"✅": "good", "🟡": "ok", "⚠️": "bad", "—": "none"}
@@ -31,9 +31,11 @@ def build(db: sqlite3.Connection, user, day: date, now: datetime) -> dict:
     closed = day < now.date() or now.hour >= CLOSE_HOUR
     good, tips = insights.day_tips(facts, closed=closed)
     incomplete = closed and insights.maybe_incomplete(facts)
+    mot = motivation.build(db, user, day)
     return {
         "date": key,
         "closed": closed,
+        "motivation": mot["lines"],
         "headline": _headline(facts, good, tips, incomplete),
         "incomplete": incomplete,
         "rows": [{"label": r[0], "value": r[1], "goal": r[2], "status": STATUS.get(r[3], "none")}

@@ -459,6 +459,8 @@ async def api_profile_patch(request: web.Request) -> web.Response:
         v = number(data, key, lo, hi)
         if v is not None:
             clean[key] = v
+    if user["care_mode"] and clean.get("rate_kg_week"):
+        clean["rate_kg_week"] = 0.0       # режим заботы: дефицит через API не включить
     act = number(data, "activity", 1, 4)
     if act is not None:
         clean["activity"] = int(act)

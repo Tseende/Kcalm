@@ -14,6 +14,8 @@ def is_late(local_time: str, cutoff: str) -> bool:
     """Поздняя еда. Ровно в cutoff — ещё не поздно (golden-кейс §6 формул)."""
     t = _parse_hhmm(local_time)
     c = _parse_hhmm(cutoff)
+    if t < _parse_hhmm("04:00") <= c:
+        return True                       # ночной перекус (00:00–03:59) — тоже поздняя еда
     return t > c
 
 

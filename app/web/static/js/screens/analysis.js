@@ -213,6 +213,7 @@ export default async function render(root, ctx) {
           h('span', { class: 'an2-val' }, r.value, r.status === 'none' ? null : h('span', { class: 'muted small' }, t('an.of') + r.goal))),
         metricBar(r.value, r.goal, r.status, i)))));
     }
+    if ((a.motivation || []).length) kids.push(h('div', { class: 'card' }, a.motivation.map((m) => h('div', { class: 'small', style: 'padding:4px 0' }, m))));
     if (a.good.length) kids.push(sectionTitle(t('an.good')), pills(a.good));
     if (a.tips.length) {
       kids.push(focusCard(t('an.focus_tomorrow'), a.tips[0]));
