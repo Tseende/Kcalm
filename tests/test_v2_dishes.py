@@ -237,17 +237,19 @@ def test_band_15_percent_with_dish():
     u = foodsvc.understanding_from_json(_item(dish_fill=0.7), {1})
     it = u.items[0]
     assert (it.grams_min, it.grams_max) == pytest.approx((212.5, 287.5))
+    # только volume_ml без dish_fill — посуду модель не использовала: диапазон не сужается
     u = foodsvc.understanding_from_json(_item(volume_ml=300), {1})
-    assert u.items[0].grams_min == pytest.approx(212.5)
+    assert u.items[0].grams_min == pytest.approx(150)
 
 
-def test_band_stays_25_without_dish_or_without_reference():
+def test_band_is_40_without_dish_or_without_reference():
+    """Нет граммов и диапазона, посуда не использована: средняя порция ±40 %, не ±15 и не ±25."""
     plain = foodsvc.understanding_from_json(_item(dish_fill=0.7), None).items[0]
-    assert (plain.grams_min, plain.grams_max) == pytest.approx((187.5, 312.5))
+    assert (plain.grams_min, plain.grams_max) == pytest.approx((150, 350))
     no_ref = foodsvc.understanding_from_json(_item(), {1}).items[0]     # модель посуду не использовала
-    assert (no_ref.grams_min, no_ref.grams_max) == pytest.approx((187.5, 312.5))
+    assert (no_ref.grams_min, no_ref.grams_max) == pytest.approx((150, 350))
     other_photo = foodsvc.understanding_from_json(_item(dish_fill=0.5, photo_index=2), {1}).items[0]
-    assert other_photo.grams_min == pytest.approx(187.5)
+    assert other_photo.grams_min == pytest.approx(150)
 
 
 def test_explicit_grams_keep_10_percent_with_dish():
@@ -259,12 +261,17 @@ def test_explicit_grams_keep_10_percent_with_dish():
 
 
 def test_wide_model_range_is_narrowed_and_garbage_fields_tolerated():
-    raw = _item(dish_fill="много", volume_ml=400)
+    raw = _item(dish_fill=0.8, volume_ml=400)
     raw["items"][0]["amount"] = {"kind": "portion", "grams_range": [200, 400]}
     it = foodsvc.understanding_from_json(raw, {1}).items[0]
     assert (it.grams_min, it.grams_max) == pytest.approx((255, 345))
+    # мусор в dish_fill: посуда не использована, диапазон модели остаётся как есть
+    raw = _item(dish_fill="много", volume_ml=400)
+    raw["items"][0]["amount"] = {"kind": "portion", "grams_range": [200, 400]}
+    it = foodsvc.understanding_from_json(raw, {1}).items[0]
+    assert (it.grams_min, it.grams_max) == pytest.approx((200, 400))
     junk = foodsvc.understanding_from_json(_item(dish_fill="?", volume_ml=None), {1}).items[0]
-    assert junk.grams_min == pytest.approx(187.5)
+    assert junk.grams_min == pytest.approx(150)
 
 
 # ------------------------------------------------------------------ чат: кнопка «🍽 Посуда»

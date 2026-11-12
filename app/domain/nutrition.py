@@ -94,6 +94,10 @@ class CalculatedItem(BaseModel):
     carbs_100g: float | None = None
     # позиция введена или подтверждена человеком: «Уточнить» через модель её не трогает
     edited_by_user: bool = False
+    # как позицию оценила модель: «Уточнить» возвращает неизменённой позиции прежние диапазон и уверенность
+    preparation: str | None = None
+    brand: str | None = None
+    est_confidence: Confidence | None = None
 
 
 class MealCalculation(BaseModel):
@@ -158,6 +162,7 @@ def calculate_item(item: IngredientEstimate, ref: FoodRef) -> CalculatedItem:
         protein_100g=ref.protein_100g,
         fat_100g=ref.fat_100g,
         carbs_100g=ref.carbs_100g,
+        preparation=item.preparation, brand=item.brand, est_confidence=item.confidence,
     )
 
 

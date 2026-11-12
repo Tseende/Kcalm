@@ -36,6 +36,7 @@ limit_hook: contextvars.ContextVar[Callable[[], None] | None] = contextvars.Cont
 
 MAX_CONCURRENT_REQUESTS = 6   # одновременных исходящих запросов к модели на процесс (память и сеть)
 RETRY_PAUSE_S = 0.7           # пауза перед повтором
+LENGTH_RETRY_FACTOR = 1.6     # ответ оборван по длине (finish_reason=length): один повтор с max_tokens × 1.6
 _client: httpx.AsyncClient | None = None
 _client_loop: asyncio.AbstractEventLoop | None = None
 _sem: asyncio.Semaphore | None = None
@@ -108,6 +109,18 @@ async def close_client() -> None:
 
 def _timeout(cfg) -> httpx.Timeout:
     return httpx.Timeout(cfg.llm_timeout_s, connect=5.0)
+
+
+def _merge_usage(first: dict, second: dict) -> dict:
+    """Расход двух запросов (повтор при обрыве по длине) в одну запись лога: токены и стоимость суммируются."""
+    if not first:
+        return second
+    merged = dict(second)
+    for key in ("prompt_tokens", "completion_tokens", "cost"):
+        a, b = first.get(key), second.get(key)
+        if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+            merged[key] = a + b
+    return merged
 
 
 def _retryable(e: Exception) -> bool:
@@ -219,26 +232,45 @@ async def chat_json(purpose: str, messages: list[dict], model: str | None = None
     }
     start = time.monotonic()
     ok, error, usage, last_content = False, None, {}, ""
+    finish = None
     client = _get_client()
-    for attempt in (1, 2):                          # 1 retry
-        try:
-            async with _get_sem():
-                resp = await client.post(f"{cfg.openrouter_base_url}/chat/completions",
-                                         headers=headers, json=body, timeout=_timeout(cfg))
-            resp.raise_for_status()
-            data = resp.json()
-            usage = data.get("usage", {})
-            last_content = data["choices"][0]["message"]["content"] or ""
-            model_used = data.get("model", model)
-            ok = True
-            break
-        except Exception as e:                      # noqa: BLE001 — честный лог любой ошибки
-            error = f"{type(e).__name__}: {e}"
-            log.warning("LLM %s попытка %s ошибка: %s", purpose, attempt, error)
-            if attempt == 1 and _retryable(e):
-                await asyncio.sleep(RETRY_PAUSE_S)
-                continue
-            break
+
+    async def _request(payload: dict) -> bool:
+        """Один запрос с одним повтором на сетевую ошибку; заполняет usage, last_content, finish."""
+        nonlocal usage, last_content, finish, model_used, error
+        for attempt in (1, 2):                      # 1 retry
+            try:
+                async with _get_sem():
+                    resp = await client.post(f"{cfg.openrouter_base_url}/chat/completions",
+                                             headers=headers, json=payload, timeout=_timeout(cfg))
+                resp.raise_for_status()
+                data = resp.json()
+                usage = _merge_usage(usage, data.get("usage") or {})
+                choice = data["choices"][0]
+                last_content = choice["message"]["content"] or ""
+                finish = choice.get("finish_reason")
+                model_used = data.get("model", model)
+                return True
+            except Exception as e:                  # noqa: BLE001 — честный лог любой ошибки
+                error = f"{type(e).__name__}: {e}"
+                log.warning("LLM %s попытка %s ошибка: %s", purpose, attempt, error)
+                if attempt == 1 and _retryable(e):
+                    await asyncio.sleep(RETRY_PAUSE_S)
+                    continue
+                return False
+        return False
+
+    model_used = model
+    ok = await _request(body)
+    if ok and finish == "length" and response_json and max_tokens:
+        # ответ оборван по длине: JSON, подчинённый молча, потерял бы позиции. Повторяем один раз с запасом
+        bigger = int(max_tokens * LENGTH_RETRY_FACTOR)
+        log.warning("LLM %s: ответ оборван по длине (max_tokens=%s), повтор с %s",
+                    purpose, max_tokens, bigger)
+        first_ok = (last_content, finish)
+        if not await _request({**body, "max_tokens": bigger}):
+            last_content, finish = first_ok             # повтор не удался: остаётся оборванный первый ответ
+            error = None
     if not ok:
         await _log_call(cfg, user_id, purpose, model, usage, start, ok, error, db)
         raise LLMError("LLM недоступен после повтора")

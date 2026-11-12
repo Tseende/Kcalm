@@ -26,6 +26,7 @@ class Config(BaseSettings):
     openrouter_api_key: str = ""
     model_vision: str = "deepseek/deepseek-v4.1-flash-1017"
     model_vision_escalation: str = "deepseek/deepseek-v4.1-flash"
+    vision_prompt: str = "vision"     # имя файла app/prompts/<имя>.md для распознавания фото; боевой «vision», кандидат «vision_v3»
     model_text: str = "deepseek/deepseek-v4.1-flash-1017"   # по умолчанию DeepSeek, а не Google: в облаке .env нет
     model_text_provider: str = "DeepSeek"   # закрепить провайдера (без тихого перехода к другому); пусто — не закреплять
     model_text_reasoning: bool = False   # «думающий» режим текстовой модели: медленнее и дороже

@@ -4,8 +4,9 @@
 боевой разбор фото foodsvc.parse_photo и сравнивает суммарный вес позиций с эталонными граммами.
 Эталон: сумма шестых колонок label-файла (вес в граммах).
 
-Запуск: .venv/bin/python tools/eval_portions.py [число_фото] [модель] [--prompt vision|vision_v2] [--set A|B]
-Без модели берётся боевая (gemma-3-27b с эскалацией на gemini-2.5-flash).
+Запуск: .venv/bin/python tools/eval_portions.py [число_фото] [модель] [--prompt vision|vision_v2|vision_v3] [--set A|B]
+Без модели берётся боевая MODEL_VISION из конфига (с эскалацией на MODEL_VISION_ESCALATION).
+--prompt: имя любого файла из app/prompts (без .md); по умолчанию vision.
 Набор A: первые фото выборки; набор B: следующие, не пересекающиеся с A (проверка на невиденных кадрах).
 """
 from __future__ import annotations

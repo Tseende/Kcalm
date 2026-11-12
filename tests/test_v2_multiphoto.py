@@ -95,7 +95,7 @@ async def test_parse_photos_dish_narrows_band_only_for_dish_photo(monkeypatch, d
     u = await foodsvc.parse_photos(["QQ==", "Qg=="], None, 1, db, dishes=[dish, None])
     soup, salad = u.items
     assert (soup.grams_min, soup.grams_max) == pytest.approx((212.5, 287.5))
-    assert (salad.grams_min, salad.grams_max) == pytest.approx((187.5, 312.5))
+    assert (salad.grams_min, salad.grams_max) == pytest.approx((150, 350))      # вес не определён: ±40 %
 
 
 @pytest.mark.asyncio

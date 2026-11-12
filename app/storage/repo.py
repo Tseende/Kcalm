@@ -355,6 +355,10 @@ def _insert_item(conn: sqlite3.Connection, meal_id: int, it) -> int:
         "kcal": it.kcal, "protein": it.protein_g, "fat": it.fat_g,
         "carbs": it.carbs_g, "basis": "kcal_100g",
         "kcal_100g": it.kcal_100g, "source": it.source,
+        # оценка модели: нужна «Уточнить», чтобы неизменённая позиция не теряла диапазон и уверенность
+        "grams": it.grams, "grams_min": it.grams_min, "grams_max": it.grams_max,
+        "preparation": getattr(it, "preparation", None), "brand": getattr(it, "brand", None),
+        "est_confidence": getattr(it, "est_confidence", None),
     }, ensure_ascii=False)
     cur = conn.execute(
         """INSERT INTO meal_items (meal_id, name_ru, name_en, grams, kcal, protein_g,

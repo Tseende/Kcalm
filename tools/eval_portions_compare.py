@@ -10,6 +10,8 @@ CACHE = Path(__file__).resolve().parent.parent / "data" / "eval_fpb"
 NAMES = {"default": "боевая gemma-3-27b+эск.", "deepseek_deepseek-v4.1-flash-1017": "DeepSeek v4.1 flash",
          "openai_gpt-6-luna": "GPT-6 Luna", "google_gemini-3.8-flash": "Gemini 3.8 Flash", "openai_gpt-6.1-sol": "GPT-6.1 Sol"}
 
+PROMPT_LABELS = {"vision": "старый", "vision_v2": "v2", "vision_v3": "v3"}
+
 
 def stats(rows: list[dict]) -> dict:
     ok = [r for r in rows if r["est"] is not None and r["truth"] > 0]
@@ -26,7 +28,7 @@ def stats(rows: list[dict]) -> dict:
 def main() -> None:
     data: dict[tuple[str, str, str], list[dict]] = {}
     for f in CACHE.glob("rows_*.json"):
-        model, prompt, which = re.match(r"rows_(.+)__(vision(?:_v2)?)__([AB])\.json", f.name).groups()
+        model, prompt, which = re.match(r"rows_(.+)__(vision(?:_v[23])?)__([AB])\.json", f.name).groups()
         data[(model, prompt, which)] = json.loads(f.read_text())
     head = (f"{'модель':26} {'промпт':9} {'MAPE':>5} {'мед.':>5} {'±20%':>5} {'±35%':>5} "
             f"{'отн.':>5} {'мал.':>5} {'сред.':>5} {'бол.':>5} {'сек':>5}")
@@ -35,13 +37,13 @@ def main() -> None:
         print(f"\n=== {title}")
         print(head)
         for model, label in NAMES.items():
-            for prompt in ("vision", "vision_v2"):
+            for prompt in ("vision", "vision_v2", "vision_v3"):
                 rows = (data.get((model, prompt, "A"), []) + data.get((model, prompt, "B"), [])
                         if which == "AB" else data.get((model, prompt, which), []))
                 if not rows:
                     continue
                 s = stats(rows)
-                print(f"{label:26} {'старый' if prompt == 'vision' else 'новый':9} {s['mape']:>5.0%} "
+                print(f"{label:26} {PROMPT_LABELS[prompt]:9} {s['mape']:>5.0%} "
                       f"{s['med']:>5.0%} {s['w20']:>5.0%} {s['w35']:>5.0%} {s['ratio']:>5.2f} "
                       f"{s['small']:>5.2f} {s['avg']:>5.2f} {s['big']:>5.2f} {s['sec']:>5.1f}"
                       + (f"  сбоев {s['fail']}" if s["fail"] else ""))

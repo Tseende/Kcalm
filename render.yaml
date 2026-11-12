@@ -50,5 +50,7 @@ services:
         value: deepseek/deepseek-v4.1-flash-1017
       - key: MODEL_VISION_ESCALATION
         value: deepseek/deepseek-v4.1-flash
+      # - key: VISION_PROMPT       # промт распознавания фото; по умолчанию vision, кандидат на замену: vision_v3
+      #   value: vision
       - key: MODEL_ASR            # только голос: DeepSeek аудио не принимает
         value: google/gemini-2.5-flash
