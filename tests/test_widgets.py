@@ -131,7 +131,6 @@ async def test_care_mode_hides_kcal_keeps_macros(env):
     assert data["c"] == 1 and data["k"] == [0, 0] and "777" not in raw
     assert all(m[1] == 0 for m in data["m"])
     assert data["p"][0] == 25 and data["u"][0] == 40 and data["f"][0] == 9
-    assert "ккал" not in chatdata.caption(today)
 
 
 async def test_lw_only_for_manual_water(env):
@@ -152,9 +151,11 @@ def test_html_fits_telegram_limits_after_link_substitution():
         for link in ("https://t.me/SomeVeryLongBotUsername_bot/app", "https://t.me/KcalmBot", ""):
             html = pages.load(name, link)
             pages.check_limits(html)
-    # карточка дня — только информация: ни кнопок, ни ссылок, ни запросов к боту
+    # карточка дня: нажимаются сами элементы (запросы к боту за водой), без <button>; «+» открывает Mini App
     day_html = pages.load("day", pages.app_link("MyBot", "https://x/app/"))
-    assert "<button" not in day_html and "request(" not in day_html and "t.me/" not in day_html
+    assert "request(" in day_html and "w:+250" in day_html and "w:undo" in day_html
+    assert "<button" not in day_html and "openTelegramLink" in day_html
+    assert "https://t.me/MyBot/app" in day_html and pages.APP_PLACEHOLDER not in day_html
     assert pages.app_link("MyBot", "") == "https://t.me/MyBot"
 
 
@@ -282,7 +283,7 @@ async def test_first_record_sends_second_only_edits(env):
     await day.wait_idle()
     sends = session.of(api.SendWidget)
     assert len(sends) == 1 and sends[0].allow_queries and sends[0].disable_notification
-    assert sends[0].caption.startswith("Карточка дня · ") and sends[0].width is None
+    assert sends[0].caption is None and sends[0].width is None
     eat(rt.db, uid, 200, "13:00", "lunch")
     await day.wait_idle()
     assert len(session.of(api.SendWidget)) == 1

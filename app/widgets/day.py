@@ -185,7 +185,7 @@ async def _send(rt, user, today: str, hhmm: str) -> str:
         html = pages.load("day", link)
         data = chatdata.day_data(rt.db, user, today, hhmm)
         msg = await rt.bot(SendWidget(
-            chat_id=user["tg_id"], html=html, chat_data=data, caption=chatdata.caption(today),
+            chat_id=user["tg_id"], html=html, chat_data=data,
             allow_queries=True, disable_notification=True))
     except TelegramAPIError as e:
         log.info("widgets: sendWidget отклонён (%s), сегодня карточку не повторяю", e)

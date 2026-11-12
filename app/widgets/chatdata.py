@@ -1,7 +1,7 @@
-"""Данные виджетов (chatData, до 1024 байт) и подпись карточки.
+"""Данные виджетов (chatData, до 1024 байт).
 
 Цифры берутся из insights.day_facts: те же, что в дневнике, отчётах и Mini App. В режиме
-заботы (care) калорий нет ни в данных, ни в подписи.
+заботы (care) калорий нет в данных.
 """
 from __future__ import annotations
 
@@ -25,10 +25,6 @@ def date_label(local_date: str) -> str:
     """«2026-11-09» → «9 ноя»."""
     y, m, d = local_date.split("-")
     return f"{int(d)} {MONTHS[int(m) - 1]}"
-
-
-def caption(local_date: str) -> str:
-    return f"Карточка дня · {date_label(local_date)}"
 
 
 def _dump(data: dict) -> str:

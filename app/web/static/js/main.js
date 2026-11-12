@@ -273,14 +273,18 @@ function startApp() {
   if (appStarted) return;
   appStarted = true;
   // Кнопка из напоминания открывает нужный экран: ?screen=analysis. Хеш занят данными Telegram.
-  const screen = new URLSearchParams(location.search).get('screen');
+  // Ссылка t.me/<bot>/app?startapp=add_meal (кнопка «+» в карточке дня) приходит как tgWebAppStartParam / start_param.
+  const DEEP = { analysis: '#/analysis', stats: '#/stats', today: '#/today', add_meal: '#/add/meal', add_activity: '#/add/activity',
+    add_sleep: '#/add/sleep', add_weight: '#/add/weight', drinks: '#/add/drink' };
+  const qs = new URLSearchParams(location.search);
+  const screen = [qs.get('screen'), qs.get('tgWebAppStartParam'), window.Telegram?.WebApp?.initDataUnsafe?.start_param]
+    .find(v => typeof v === 'string' && Object.prototype.hasOwnProperty.call(DEEP, v));
   if (screen) {
     const rest = new URLSearchParams(location.search);
     rest.delete('screen');                            // one-shot: a later reload keeps the user's tab
+    rest.delete('tgWebAppStartParam');
     const q = rest.toString();
-    const DEEP = { analysis: '#/analysis', stats: '#/stats', today: '#/today', add_meal: '#/add/meal', add_activity: '#/add/activity',
-      add_sleep: '#/add/sleep', add_weight: '#/add/weight', drinks: '#/add/drink' };
-    const hash = DEEP[screen] || location.hash;
+    const hash = DEEP[screen];
     history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + hash);
   }
   window.addEventListener('hashchange', () => { nav._track(); render(); });
