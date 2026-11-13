@@ -1490,3 +1490,31 @@ img.broken { display: none; }
 .act-hint .row-title { font-weight: 600; }
 .act-hint-actions { display: flex; justify-content: flex-end; gap: 20px; }
 .act-hint-actions .strong { font-weight: 600; }
+
+/* статистика и анализ: перебор по «чем больше, тем лучше» зелёный, статус «в процессе», подписи к строкам */
+.pb-over.good { background: color-mix(in srgb, var(--c-green) 55%, var(--c-teal, var(--c-green))); }
+.pb-fill.progress { background: var(--c-btn); }
+.an-ico.progress::after { background: var(--c-btn); }
+.an-chip.progress { background: color-mix(in srgb, var(--c-btn) 16%, transparent); } .an-chip.progress::before { background: var(--c-btn); }
+.an2-hint { margin: -2px 0 0 42px; font-size: 13px; color: var(--c-hint); }
+.an2-hint.good { color: var(--c-green); } .an2-hint.bad { color: var(--c-warn); }
+.an-mot { display: flex; flex-direction: column; gap: 6px; font-size: 15px; }
+.an-hero-sub .an-hero-range { display: block; }
+.st-vs { text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--c-hint); white-space: nowrap; }
+.st-src { display: flex; flex-direction: column; gap: 12px; }
+.st-src-bar { display: flex; gap: 2px; height: 12px; border-radius: 99px; overflow: hidden; }
+.st-src-bar i { display: block; height: 100%; min-width: 4px; }
+.st-src-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--c-hint); }
+.st-src-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.st-src-legend b { color: var(--c-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.st-src-legend .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.st-src-sub { font-size: 13px; color: var(--c-hint); text-transform: uppercase; letter-spacing: .02em; margin-top: 4px; }
+.st-src-list { display: flex; flex-direction: column; gap: 12px; }
+.st-src-row { display: flex; flex-direction: column; gap: 5px; }
+.st-src-line { display: flex; align-items: baseline; gap: 10px; }
+.st-src-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.st-src-val { flex: none; font-size: 13px; color: var(--c-hint); font-variant-numeric: tabular-nums; }
+.st-src-val b { color: var(--c-text); font-weight: 600; }
+.st-src-track { height: 6px; border-radius: 99px; background: var(--c-fill); overflow: hidden; }
+.st-src-track i { display: block; height: 100%; border-radius: 99px; background: var(--t-orange); }
+.st-src-times { font-size: 12px; color: var(--c-hint); }

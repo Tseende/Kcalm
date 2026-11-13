@@ -265,8 +265,10 @@ def build(db: sqlite3.Connection, user, today: date, period: str) -> dict:
     if not logged:
         headline, focus = "Данных пока мало", None
     else:
-        urgent = [t for t in tips if t["prio"] <= 2]
-        headline = ("Есть что поправить" if urgent else "Хороший период" if len(good) >= 4 else "В целом неплохо")
+        # заголовок согласован с оценкой на экране: доля показателей в норме, «почти» за половину
+        rated = [m["status"] for m in metrics if m["status"] in ("good", "ok", "bad")]
+        score = (rated.count("good") + 0.5 * rated.count("ok")) / len(rated) if rated else 0.5
+        headline = "Хороший период" if score >= 0.75 else "В целом неплохо" if score >= 0.5 else "Есть что поправить"
         focus = ({"title": tips[0]["title"], "text": tips[0]["text"], "icon": tips[0]["icon"],
                   **({"action": tips[0]["action"]} if tips[0].get("action") else {})} if tips
                  else {"title": "Держи темп", "text": "Критичных проблем не видно. Следи, чтобы белок и сон не просели.", "icon": "✅"})

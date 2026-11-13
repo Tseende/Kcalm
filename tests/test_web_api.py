@@ -753,7 +753,7 @@ async def test_analysis_empty_day_asks_to_log(client):
     data = await (await client.get(f"/api/analysis?date={TODAY}", headers=H)).json()
     assert data["date"] == TODAY and data["headline"]
     assert {r["label"] for r in data["rows"]} >= {"Белок", "Вода", "Шаги", "Сон"}
-    assert all(r["status"] in ("good", "ok", "bad", "none") for r in data["rows"])
+    assert all(r["status"] in ("good", "ok", "bad", "none", "progress") for r in data["rows"])
 
 
 async def test_analysis_reflects_logged_day(client, db, user_id, fake_food):
@@ -1553,3 +1553,47 @@ async def test_day_steps_goal_and_activity_hint(client, db, user_id):
     assert day["activity_hint"] == {"avg_steps": 12000, "days": 12, "current": 1, "suggested": 3}
     past = await (await client.get(f"/api/day?date={(today - timedelta(days=1)).isoformat()}", headers=H)).json()
     assert past["activity_hint"] is None                   # только для сегодняшнего дня
+
+
+# ------------------------------------------------------------------ анализ: оценка, подсказки, источники калорий
+
+def _facts(**over):
+    f = {"care": False, "meals": 3, "kcal": 2242, "kcal_target": 2490, "protein": 79, "protein_target": 169,
+         "water": 2000, "water_goal": 3000, "steps": 9590, "sleep_min": 394}
+    f.update(over)
+    return f
+
+
+def test_analysis_rows_closed_day_score_and_hints():
+    from app.web import analysis
+    rows = {r["key"]: r for r in analysis._rows(_facts(), closed=True)}
+    assert rows["kcal"]["status"] == "good" and rows["kcal"]["hint"] == "в норме"
+    assert rows["protein"]["status"] == "bad" and rows["protein"]["hint"] == "не хватило 90 г"
+    assert rows["steps"]["hint"] == "цель выполнена" and rows["steps"]["more_is_better"]
+    assert rows["sleep"]["hint"] == "меньше нормы на 26 мин"
+    assert (rows["water"]["num"], rows["water"]["max"]) == (2000, 3000)
+    score = analysis.score_of(list(rows.values()))
+    assert score == 60                                        # 2 в норме, 2 почти, 1 поправить
+    assert analysis._headline(_facts(), score, True, False) == "В целом неплохо"
+    assert analysis._headline(_facts(), 40, True, False) == "Есть что поправить"
+    assert analysis._headline(_facts(), 80, True, False) == "Хороший день"
+
+
+def test_analysis_rows_open_day_shortfall_is_progress():
+    from app.web import analysis
+    rows = {r["key"]: r for r in analysis._rows(_facts(), closed=False)}
+    assert rows["protein"]["status"] == "progress" and rows["protein"]["hint"] == "ещё 90 г"
+    assert rows["water"]["status"] == "progress"
+    assert rows["sleep"]["status"] == "ok"                    # сон уже случился: оцениваем сразу
+    assert analysis._headline(_facts(), 75, False, False) == "День ещё идёт"
+    over = {r["key"]: r for r in analysis._rows(_facts(kcal=3200), closed=False)}
+    assert over["kcal"]["status"] == "bad" and over["kcal"]["hint"] == "на 710 ккал выше нормы"
+
+
+async def test_stats_kcal_sources(client, db, user_id, fake_food):
+    empty = (await (await client.get("/api/stats?range=week", headers=H)).json())["sources"]
+    assert empty == {"total": 0, "by_type": [], "top": []}
+    await post_meal(client, jpeg())
+    src = (await (await client.get("/api/stats?range=week", headers=H)).json())["sources"]
+    assert src["total"] > 0 and sum(x["share"] for x in src["by_type"]) == 100
+    assert src["top"] and src["top"][0]["times"] >= 1 and src["top"][0]["kcal"] >= src["top"][-1]["kcal"]

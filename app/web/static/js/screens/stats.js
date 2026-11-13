@@ -1,7 +1,7 @@
 // Screen 2: "Статистика" — «как я иду»: герой «Вес», календарь дней в норме, показатели, динамика, ссылка на разбор
 import { api } from '../api.js';
 import { lineChart, barChart, stackedBars, makeTip } from '../charts.js';
-import { h, icon, tile, nav, segmented, skeletonCards, holdHeight, errorState, emptyState, heroCard, progressBar, statTile, countUp, fmtN, fmtKcal, fmtDur, shortDate, longDate, parseISO, addDays, todayISO, reducedMotion, staggerIn, haptic } from '../ui.js';
+import { h, icon, tile, nav, segmented, sectionTitle, mealType, skeletonCards, holdHeight, errorState, emptyState, heroCard, progressBar, statTile, countUp, fmtN, fmtKcal, fmtDur, shortDate, longDate, parseISO, addDays, todayISO, reducedMotion, staggerIn, haptic } from '../ui.js';
 import { t, tn, locale } from '../i18n.js';
 
 const RANGES = [['week', t('stats.r_week')], ['month', t('stats.r_month')], ['90d', t('stats.r_90')]];
@@ -93,7 +93,7 @@ export default async function render(root, ctx) {
     }
   }
 
-  function draw({ days, summary: s, prev_summary: ps, goals }, me, animate) {
+  function draw({ days, summary: s, prev_summary: ps, goals, sources }, me, animate) {
     if (!days.length || (!s.days_logged && s.avg_sleep_min == null && s.avg_steps == null && s.weight_change == null)) {
       body.replaceChildren(emptyState('chart-bar', t('stats.empty_title'), t('stats.empty_text')));
       return;
@@ -129,9 +129,10 @@ export default async function render(root, ctx) {
         chart] });
       // старт → цель и прогноз
       if (goalW != null) {
-        if (startW != null && Math.abs(startW - goalW) > 0.05) {
-          const total = Math.abs(startW - goalW);
-          const done = Math.max(0, Math.min(total, goalW < startW ? startW - lastW : lastW - startW));
+        const total = startW != null ? Math.abs(startW - goalW) : 0;
+        const done = total ? Math.max(0, Math.min(total, goalW < startW ? startW - lastW : lastW - startW)) : 0;
+        // полоску «старт → цель» показываем, когда на ней уже что-то есть: пустая выглядит как поломка
+        if (total > 0.05 && done / total >= 0.02) {
           hero.append(h('div', { class: 'st-goal' },
             progressBar(done, total, { status: 'good', label: t('stats.goal_progress') }),
             h('div', { class: 'st-goal-ends muted small' }, h('span', null, fmtN(startW) + ' ' + t('unit.kg')), h('span', null, fmtN(goalW) + ' ' + t('unit.kg')))));
@@ -144,7 +145,7 @@ export default async function render(root, ctx) {
           if (goalW < lastW && rate < 0) {
             const need = Math.ceil((lastW - goalW) / -rate);
             if (need <= 730) line += t('stats.pace', { d: longDate(addDays(todayISO(), need)) });
-          }
+          } else if (goalW < lastW && idx.length > 2) line += t('stats.pace_flat');
         }
         hero.append(h('div', { class: 'st-hero-foot' }, line));
       }
@@ -170,7 +171,7 @@ export default async function render(root, ctx) {
       const diff = cur - prev;
       if (Math.abs(diff) / Math.abs(prev) < 0.03) return h('span', { class: 'chip-delta flat' }, t('stats.same'));
       const good = better === 'near' ? Math.abs(cur - ref) < Math.abs(prev - ref) : (diff > 0) === (better === 'up');
-      return h('span', { class: 'chip-delta ' + (good ? 'good' : 'flat') }, (diff > 0 ? '+' : '−') + fmtKcal(Math.abs(diff)) + unit);
+      return h('span', { class: 'chip-delta ' + (good ? 'good' : 'flat') }, (diff > 0 ? '↑ ' : '↓ ') + fmtKcal(Math.abs(diff)) + unit);
     };
     const share = (v, g) => (v != null && g ? v / g : null);
     const stOf = (r) => (r == null ? 'none' : r >= 0.9 ? 'good' : r >= 0.6 ? 'ok' : 'bad');
@@ -185,17 +186,40 @@ export default async function render(root, ctx) {
       statTile({ icon: 'tools-kitchen', color: 'orange', title: t('stats.t_kcal'), value: val(s.avg_kcal, fmtKcal, { u: t('unit.kcal') }), bar: target && s.avg_kcal != null ? [s.avg_kcal, target] : null,
         status: kr == null ? 'none' : kr > 1.2 ? 'bad' : kr >= 0.8 ? 'good' : 'ok', delta: chip(s.avg_kcal, ps.avg_kcal, ' ' + t('unit.kcal'), 'near', target), caption: target ? t('stats.norm', { v: fmtKcal(target) }) : null }),
       statTile({ icon: 'egg-fried', color: 'blue', title: t('stats.t_protein'), value: val(s.avg_protein, fmtN, { u: t('unit.g') }), bar: goals.protein_g && s.avg_protein != null ? [s.avg_protein, goals.protein_g] : null,
-        status: stOf(share(s.avg_protein, goals.protein_g)), delta: chip(s.avg_protein, ps.avg_protein, ' ' + t('unit.g'), 'up'), caption: goals.protein_g ? t('stats.goal', { v: goals.protein_g }) : null }),
+        overGood: true, status: stOf(share(s.avg_protein, goals.protein_g)), delta: chip(s.avg_protein, ps.avg_protein, ' ' + t('unit.g'), 'up'), caption: goals.protein_g ? t('stats.goal', { v: goals.protein_g }) : null }),
       statTile({ icon: 'droplet', color: 'teal', title: t('stats.t_water'), value: val(s.avg_water, fmtKcal, { u: t('unit.ml') }), bar: goals.water_ml && s.avg_water != null ? [s.avg_water, goals.water_ml] : null,
-        status: stOf(share(s.avg_water, goals.water_ml)), delta: chip(s.avg_water, ps.avg_water, ' ' + t('unit.ml'), 'up'), caption: goals.water_ml ? t('stats.goal', { v: fmtKcal(goals.water_ml) }) : null }),
+        overGood: true, status: stOf(share(s.avg_water, goals.water_ml)), delta: chip(s.avg_water, ps.avg_water, ' ' + t('unit.ml'), 'up'), caption: goals.water_ml ? t('stats.goal', { v: fmtKcal(goals.water_ml) }) : null }),
       statTile({ icon: 'bed', color: 'indigo', title: t('stats.t_sleep'), value: val(s.avg_sleep_min, (v) => fmtDur(v), { u: '', fmtOnly: true }), bar: s.avg_sleep_min != null ? [s.avg_sleep_min, goals.sleep_min || 420] : null,
-        status: stOf(share(s.avg_sleep_min, goals.sleep_min || 420)), delta: chip(s.avg_sleep_min, ps.avg_sleep_min, ' ' + t('unit.min'), 'up'), caption: t('stats.goal_7h') }),
+        overGood: true, status: stOf(share(s.avg_sleep_min, goals.sleep_min || 420)), delta: chip(s.avg_sleep_min, ps.avg_sleep_min, ' ' + t('unit.min'), 'up'), caption: t('stats.goal_7h') }),
       statTile({ icon: 'walk', color: 'green', title: t('stats.t_steps'), value: val(s.avg_steps, fmtKcal, { u: '' }), bar: s.avg_steps != null ? [s.avg_steps, goals.steps || 8000] : null,
-        status: stOf(share(s.avg_steps, goals.steps || 8000)), delta: chip(s.avg_steps, ps.avg_steps, '', 'up'), caption: t('stats.goal', { v: fmtKcal(goals.steps || 8000) }) }),
+        overGood: true, status: stOf(share(s.avg_steps, goals.steps || 8000)), delta: chip(s.avg_steps, ps.avg_steps, '', 'up'), caption: t('stats.goal', { v: fmtKcal(goals.steps || 8000) }) }),
       statTile({ icon: 'calendar', color: 'purple', title: t('stats.t_days'), value: h('span', null, String(s.days_logged), h('span', { class: 'stat-unit' }, t('stats.of_n', { n }))), bar: [s.days_logged, n],
         status: stOf(s.days_logged / n), delta: null, caption: null }),
     ];
-    kids.push(h('div', { class: 'stat-grid' }, tiles));
+    const prevWord = { week: t('stats.vs_week'), month: t('stats.vs_month'), '90d': t('stats.vs_90') }[range];
+    kids.push(sectionTitle(t('stats.avg_title'), ps.days_logged ? h('span', { class: 'st-vs' }, '↑↓ ' + prevWord) : null),
+      h('div', { class: 'stat-grid' }, tiles));
+
+    // ---- 3b. Откуда калории: доли по приёмам и продукты, давшие больше всего
+    if (sources && sources.total > 0 && (sources.by_type.length || sources.top.length)) {
+      const TYPE_COLOR = { breakfast: 'var(--t-orange)', lunch: 'var(--t-green)', dinner: 'var(--t-purple)', snack: 'var(--t-red)' };
+      const typeName = (k) => (k === 'snack' ? t('meal.snacks') : mealType(k).label);
+      const maxTop = Math.max(1, ...sources.top.map((x) => x.kcal));
+      kids.push(h('section', { class: 'card st-src' },
+        h('div', { class: 'card-head' }, h('div', { class: 'card-title' }, t('stats.src_title')), h('span', { class: 'card-head-note muted small' }, perWord)),
+        sources.by_type.length ? [
+          h('div', { class: 'st-src-bar', role: 'img', 'aria-label': sources.by_type.map((x) => `${typeName(x.type)} ${x.share}%`).join(', ') },
+            sources.by_type.map((x) => h('i', { style: { width: Math.max(2, x.share) + '%', background: TYPE_COLOR[x.type] } }))),
+          h('div', { class: 'st-src-legend' }, sources.by_type.map((x) => h('span', null, h('i', { class: 'dot', style: { background: TYPE_COLOR[x.type] } }), typeName(x.type), h('b', null, x.share + '%'))))] : null,
+        sources.top.length ? [
+          h('div', { class: 'st-src-sub' }, t('stats.src_top')),
+          h('div', { class: 'st-src-list' }, sources.top.map((x) => h('div', { class: 'st-src-row' },
+            h('div', { class: 'st-src-line' },
+              h('span', { class: 'st-src-name' }, x.name),
+              h('span', { class: 'st-src-val' }, h('b', null, x.share + '%'), ` · ${fmtKcal(x.kcal)} ${t('unit.kcal')}`)),
+            h('div', { class: 'st-src-track' }, h('i', { style: { width: Math.max(3, Math.round(x.kcal / maxTop * 100)) + '%' } })),
+            h('div', { class: 'st-src-times' }, tn('stats.src_times', x.times)))))] : null));
+    }
 
     // ---- 4. Динамика: один график с переключателем
     const noteEl = h('span', { class: 'card-head-note muted small' });

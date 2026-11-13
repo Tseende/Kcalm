@@ -204,6 +204,42 @@ def summarize(days: list[dict]) -> dict:
     }
 
 
+MEAL_ORDER = ("breakfast", "lunch", "dinner", "snack")
+TOP_FOODS = 5
+
+
+def kcal_sources(db: sqlite3.Connection, user_id: int, start: date, end: date) -> dict:
+    """Откуда калории за период: доли по приёмам и продукты, давшие больше всего ккал."""
+    f, t = start.isoformat(), end.isoformat()
+    by_type = {k: 0 for k in MEAL_ORDER}
+    for row in db.execute(
+            "SELECT meal_type, SUM(kcal_total) FROM meals WHERE user_id=? AND local_date BETWEEN ? AND ? "
+            "AND deleted_at IS NULL GROUP BY meal_type", (user_id, f, t)).fetchall():
+        if row[0] in by_type:
+            by_type[row[0]] = int(row[1] or 0)
+    total = sum(by_type.values())
+    foods: dict[str, dict] = {}
+    for row in db.execute(
+            "SELECT i.name_ru, i.kcal FROM meal_items i JOIN meals m ON m.id = i.meal_id "
+            "WHERE m.user_id=? AND m.local_date BETWEEN ? AND ? AND m.deleted_at IS NULL",
+            (user_id, f, t)).fetchall():
+        name = (row[0] or "").strip()
+        if not name:
+            continue
+        item = foods.setdefault(name.lower().replace("ё", "е"), {"name": name, "kcal": 0, "times": 0})
+        item["kcal"] += int(row[1] or 0)
+        item["times"] += 1
+    items_total = sum(x["kcal"] for x in foods.values())
+    top = sorted((x for x in foods.values() if x["kcal"] > 0), key=lambda x: -x["kcal"])[:TOP_FOODS]
+
+    def share(v: int, whole: int) -> int:
+        return round(100 * v / whole) if whole else 0
+
+    return {"total": total,
+            "by_type": [{"type": k, "kcal": v, "share": share(v, total)} for k, v in by_type.items() if v],
+            "top": [{**x, "share": share(x["kcal"], items_total)} for x in top]}
+
+
 def stats(db: sqlite3.Connection, user: sqlite3.Row, range_name: str, today: date) -> dict:
     """Ряды по дням за range_name (последние N дней включая сегодня), сводка и сводка прошлого периода."""
     n = RANGE_DAYS[range_name]
@@ -211,6 +247,7 @@ def stats(db: sqlite3.Connection, user: sqlite3.Row, range_name: str, today: dat
     prev = series(db, user, today - timedelta(days=2 * n - 1), n)
     tgt = repo.current_target(db, user["id"])
     return {"range": range_name, "days": days, "summary": summarize(days), "prev_summary": summarize(prev),
+            "sources": kcal_sources(db, user["id"], today - timedelta(days=n - 1), today),
             "goals": {"protein_g": int(tgt["protein_g"]) if tgt and tgt["protein_g"] else None,
                       "water_ml": watersvc.goal_for(db, user), "steps": STEPS_GOAL, "sleep_min": 420}}
 

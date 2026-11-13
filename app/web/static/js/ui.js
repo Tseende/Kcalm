@@ -81,21 +81,21 @@ export function heroCard({ tone = 'accent', cls = '', children = [] } = {}) {
 }
 
 /** Одна полоска прогресса для Анализа и Статистики: status = good | ok | bad | none. Перебор: полная полоска + оранжевый хвост. */
-export function progressBar(value, target, { status = 'good', label = null } = {}) {
+export function progressBar(value, target, { status = 'good', label = null, overGood = false } = {}) {
   const t = target > 0 ? target : 0;
   const v = Math.max(0, value || 0);
   const max = Math.max(v, t) || 1;
   const kids = [h('i', { class: 'pb-fill ' + status, style: { width: ((t ? Math.min(v, t) : v) / max) * 100 + '%' } })];
-  if (t && v > t * 1.0001) kids.push(h('i', { class: 'pb-over', style: { left: (t / max) * 100 + '%', width: ((v - t) / max) * 100 + '%' } }));
+  if (t && v > t * 1.0001) kids.push(h('i', { class: 'pb-over' + (overGood ? ' good' : ''), style: { left: (t / max) * 100 + '%', width: ((v - t) / max) * 100 + '%' } }));
   return h('div', { class: 'pb', role: 'progressbar', 'aria-label': label, 'aria-valuemin': 0, 'aria-valuemax': Math.round(max), 'aria-valuenow': Math.round(v) }, kids);
 }
 
 /** Плитка показателя: цветная иконка, название, значение, полоска «к цели», чип изменения и подпись. Все плитки в сетке одной высоты. */
-export function statTile({ icon: ic, color = 'blue', title, value, bar = null, status = 'good', delta = null, caption = null } = {}) {
+export function statTile({ icon: ic, color = 'blue', title, value, bar = null, status = 'good', delta = null, caption = null, overGood = false } = {}) {
   return h('div', { class: 'stat-tile' },
     h('div', { class: 'stat-tile-top' }, tile(ic, color, 28), h('span', { class: 'stat-tile-title' }, title)),
     h('div', { class: 'stat-tile-val' }, value),
-    bar && bar[1] > 0 ? progressBar(bar[0], bar[1], { status, label: title }) : null,
+    bar && bar[1] > 0 ? progressBar(bar[0], bar[1], { status, label: title, overGood }) : null,
     h('div', { class: 'stat-tile-foot' }, delta || null, caption ? h('span', { class: 'muted small' }, caption) : null));
 }
 

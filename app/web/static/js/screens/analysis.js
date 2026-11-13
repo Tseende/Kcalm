@@ -13,9 +13,9 @@ function savePeriod(v) { try { localStorage.setItem('an_period', v); } catch (e)
 
 // Сводка статусов под заголовком: сколько показателей в норме, около нормы и требуют внимания
 function statusChips(items) {
-  const n = { good: 0, ok: 0, bad: 0 };
+  const n = { good: 0, ok: 0, bad: 0, progress: 0 };
   items.forEach((m) => { if (n[m.status] !== undefined) n[m.status] += 1; });
-  const defs = [['good', t('stats.lg_ok')], ['ok', t('an.chip_ok')], ['bad', t('an.chip_bad')]].filter(([k]) => n[k]);
+  const defs = [['good', t('stats.lg_ok')], ['ok', t('an.chip_ok')], ['bad', t('an.chip_bad')], ['progress', t('an.chip_progress')]].filter(([k]) => n[k]);
   if (!defs.length) return null;
   return h('div', { class: 'an-chips' }, defs.map(([k, t]) => h('span', { class: 'an-chip ' + k }, h('b', null, String(n[k])), t)));
 }
@@ -59,11 +59,12 @@ function numOf(str) {
   const m = t.replace(/(\d)\s+(?=\d)/g, '$1').replace(',', '.').match(/\d+(\.\d+)?/);
   return m ? parseFloat(m[0]) : null;
 }
-const BAR_STATUS = { good: 'good', ok: 'ok', bad: 'bad' };
-function metricBar(value, goal, status, i) {
-  const v = numOf(value); const g = numOf(goal);
+const BAR_STATUS = { good: 'good', ok: 'ok', bad: 'bad', progress: 'progress' };
+// num/max — числа с сервера; строки разбираем только как запасной путь (старые ответы, период)
+function metricBar(value, goal, status, i, { num = null, max = null, overGood = false } = {}) {
+  const v = num != null ? num : numOf(value); const g = max != null ? max : numOf(goal);
   if (v == null || !g || !BAR_STATUS[status]) return null;
-  const el = progressBar(v, g, { status: BAR_STATUS[status] });
+  const el = progressBar(v, g, { status: BAR_STATUS[status], overGood });
   if (!reducedMotion()) { el.classList.add('bar-scale'); el.style.setProperty('--i', i); }
   return el;
 }
@@ -163,7 +164,7 @@ export default async function render(root, ctx) {
           const cap = [goalTxt, m.note && m.note.replace(/^(цель достигнута|в норме|goal reached|on target)\s+/, '')].filter(Boolean).join(' · ') || null;
           const t = statTile({ icon: ic, color: col, title: m.label, value: m.value, status: BAR_STATUS[st] || 'none',
             delta: m.delta ? h('span', { class: 'chip-delta ' + m.delta.dir }, m.delta.text.replace(' к прошлому', '').replace(' vs previous', '')) : null, caption: cap });
-          if (m.key === 'logged') { const mm = String(m.value).match(/(\d+)\D+(\d+)/); if (mm) bar = progressBar(+mm[1], +mm[2], { status: BAR_STATUS[st] || 'good' }); } else if (m.key !== 'rhythm') bar = metricBar(m.value, m.goal, st, i);
+          if (m.key === 'logged') { const mm = String(m.value).match(/(\d+)\D+(\d+)/); if (mm) bar = progressBar(+mm[1], +mm[2], { status: BAR_STATUS[st] || 'good' }); } else if (m.key !== 'rhythm') bar = metricBar(m.value, m.goal, st, i, { overGood: m.key !== 'kcal' });
           if (bar) t.insertBefore(bar, t.querySelector('.stat-tile-foot'));
           return t;
         })));
@@ -203,7 +204,11 @@ export default async function render(root, ctx) {
   }
 
   function draw(a) {
-    const kids = [heroVerdict(a.rows, a.headline, a.closed ? t('an.closed') : t('an.open'))];
+    const rated = a.rows.filter((r) => ['good', 'ok', 'bad'].includes(r.status));
+    const sub = rated.length
+      ? [t('an.in_norm', { a: rated.filter((r) => r.status === 'good').length, b: rated.length }), a.closed ? null : h('span', { class: 'an-hero-range' }, t('an.open'))]
+      : (a.closed ? t('an.closed') : t('an.open'));
+    const kids = [heroVerdict(a.rows, a.headline, sub)];
 
     if (a.rows.length) {
       kids.push(h('div', { class: 'card an-rows2' }, a.rows.map((r, i) => h('div', { class: 'an2-row' },
@@ -211,12 +216,13 @@ export default async function render(root, ctx) {
           h('span', { class: 'an-ico ' + r.status }, glyph(r.label, 30)),
           h('span', { class: 'an-label' }, r.label),
           h('span', { class: 'an2-val' }, r.value, r.status === 'none' ? null : h('span', { class: 'muted small' }, t('an.of') + r.goal))),
-        metricBar(r.value, r.goal, r.status, i)))));
+        metricBar(r.value, r.goal, r.status, i, { num: r.num, max: r.max, overGood: !!r.more_is_better }),
+        r.hint ? h('div', { class: 'an2-hint ' + r.status }, r.hint) : null))));
     }
-    if ((a.motivation || []).length) kids.push(h('div', { class: 'card' }, a.motivation.map((m) => h('div', { class: 'small', style: 'padding:4px 0' }, m))));
+    if ((a.motivation || []).length) kids.push(h('div', { class: 'card an-mot' }, a.motivation.map((m) => h('div', null, m))));
     if (a.good.length) kids.push(sectionTitle(t('an.good')), pills(a.good));
     if (a.tips.length) {
-      kids.push(focusCard(t('an.focus_tomorrow'), a.tips[0]));
+      kids.push(focusCard(a.closed ? t('an.focus_tomorrow') : t('an.focus_today'), a.tips[0]));
       if (a.tips.length > 1) kids.push(sectionTitle(t('an.more_fix')), moreTips(a.tips.slice(1)));
     }
     if (!a.good.length && !a.tips.length) {

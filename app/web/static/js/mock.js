@@ -251,6 +251,16 @@ function getStats(range) {
   const trends = days.map((d) => d.weight_trend).filter((x) => x !== null);
   return {
     range, days,
+    sources: {
+      total: 11900,
+      by_type: [{ type: 'breakfast', kcal: 3100, share: 26 }, { type: 'lunch', kcal: 4400, share: 37 }, { type: 'dinner', kcal: 3300, share: 28 }, { type: 'snack', kcal: 1100, share: 9 }],
+      top: [
+        { name: L('Куриная грудка', "Chicken breast"), kcal: 1650, times: 6, share: 14 },
+        { name: L('Гречка', "Buckwheat"), kcal: 1320, times: 5, share: 11 },
+        { name: L('Хлеб цельнозерновой', "Whole-grain bread"), kcal: 980, times: 7, share: 8 },
+        { name: L('Овсянка с бананом', "Oatmeal with banana"), kcal: 910, times: 4, share: 8 },
+        { name: L('Сыр', "Cheese"), kcal: 640, times: 5, share: 5 }],
+    },
     summary: {
       avg_kcal: avg('kcal') === null ? null : Math.round(avg('kcal')), avg_protein: avg('protein') === null ? null : r1(avg('protein')),
       days_logged: logged.length,
@@ -272,7 +282,7 @@ function periodMock(period) {
   for (let i = n - 1; i >= 0; i -= (n > 7 ? 3 : 1)) { const d = iso(addDays(today, -i)); pts.push({ date: d, v: r1(86.4 - (n - i) * (n > 7 ? 0.06 : 0.1)) }); }
   return {
     period, from: iso(addDays(today, -(n - 1))), to: iso(today), days: n, logged_days: n - 1, care: false,
-    headline: L('Есть что поправить', "A few things to adjust"),
+    headline: L('В целом неплохо', "Pretty good overall"),
     focus: { icon: '🥩', title: L('Белок', "Protein"), text: L('В среднем 84 из 110 г, не хватает около 26 г в день. Добавь белок в каждый приём: яйца или творог утром, курица или рыба в обед, кефир вечером.', "On average 84 of 110 g, about 26 g short per day. Add protein to every meal: eggs or cottage cheese in the morning, chicken or fish at lunch, kefir in the evening."), action: L('Завтра: творог или яйца на завтрак', "Tomorrow: cottage cheese or eggs for breakfast") },
     metrics: [
       { key: 'kcal', label: L('Калории', "Calories"), value: L('1 720 ккал', "1,720 kcal"), goal: L('норма 1 650', "target 1,650"), status: 'good', note: L('в норме 5 из 6 дн.', "on target 5 of 6 days"), delta: { text: L('−90 к прошлому', "−90 vs previous"), dir: 'good' } },
@@ -633,13 +643,15 @@ const routes = [
     date: q.date || todayISO(),
     closed: true,
     headline: L('В целом неплохо', "Pretty good overall"),
+    score: 60,
     incomplete: false,
+    motivation: [L('🔥 Записываешь питание 15 дней подряд.', "🔥 15 days of logging in a row.")],
     rows: [
-      { label: L('Калории', "Calories"), value: L('1 580 ккал', "1,580 kcal"), goal: L('1 650', "1,650"), status: 'good' },
-      { label: L('Белок', "Protein"), value: L('92 г', "92 g"), goal: L('120 г', "120 g"), status: 'ok' },
-      { label: L('Вода', "Water"), value: L('900 мл', "900 ml"), goal: L('2 000 мл', "2,000 ml"), status: 'bad' },
-      { label: L('Шаги', "Steps"), value: L('9 400', "9,400"), goal: L('8 000', "8,000"), status: 'good' },
-      { label: L('Сон', "Sleep"), value: L('6 ч 40 мин', "6 h 40 min"), goal: L('7+ ч', "7+ h"), status: 'ok' },
+      { label: L('Калории', "Calories"), value: L('1 580 ккал', "1,580 kcal"), goal: L('1 650', "1,650"), status: 'good', key: 'kcal', num: 1580, max: 1650, more_is_better: false, hint: L('в норме', "on target") },
+      { label: L('Белок', "Protein"), value: L('92 г', "92 g"), goal: L('120 г', "120 g"), status: 'ok', key: 'protein', num: 92, max: 120, more_is_better: true, hint: L('не хватило 28 г', "28 g short") },
+      { label: L('Вода', "Water"), value: L('900 мл', "900 ml"), goal: L('2 000 мл', "2,000 ml"), status: 'bad', key: 'water', num: 900, max: 2000, more_is_better: true, hint: L('не хватило 1 100 мл', "1,100 ml short") },
+      { label: L('Шаги', "Steps"), value: L('9 400', "9,400"), goal: L('8 000', "8,000"), status: 'good', key: 'steps', num: 9400, max: 8000, more_is_better: true, hint: L('цель выполнена', "goal reached") },
+      { label: L('Сон', "Sleep"), value: L('6 ч 40 мин', "6 h 40 min"), goal: L('7+ ч', "7+ h"), status: 'ok', key: 'sleep', num: 400, max: 420, more_is_better: true, hint: L('меньше нормы на 20 мин', "20 min below target") },
     ],
     good: [L('Калории в цели', "Calories on target"), L('Шаги в плане (9 400)', "Steps on plan (9,400)")],
     tips: [
