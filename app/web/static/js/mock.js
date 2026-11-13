@@ -365,7 +365,8 @@ const FREQ = [
 ];
 function favList() {
   const starred = FREQ.filter((f) => mockFavs[f.meal_id]).map((f) => ({ ...f, id: mockFavs[f.meal_id], note: null, photo_url: null }));
-  return [...customFavs, ...starred].map((f) => ({ ...f, meal_type: f.meal_type || 'breakfast', use_count: favUse[f.id] || 0, ...(favEdits[f.id] || {}) }))
+  const cats = { 1: 'breakfast', 2: 'lunch', 3: 'snack', 4: 'drink' };
+  return [...customFavs, ...starred].map((f) => ({ ...f, meal_type: f.meal_type || 'breakfast', category: f.category || cats[f.meal_id] || 'breakfast', use_count: favUse[f.id] || 0, ...(favEdits[f.id] || {}) }))
     .sort((a, b) => b.use_count - a.use_count);
 }
 let weekGoal = null;
@@ -611,7 +612,7 @@ const routes = [
   ['GET', /^\/favorites\/(\d+)$/, (m) => { const f = favList().find((x) => x.id === +m[1]); if (!f) throw notFound(); return f; }],
   ['POST', /^\/favorites\/custom$/, (m, q, b) => {
     const id = Math.max(500, ...customFavs.map((x) => x.id)) + 1;
-    customFavs.unshift({ id, meal_id: id, title: b.title, note: b.note || null, kcal: Math.round(b.kcal), protein: +b.protein || 0, fat: +b.fat || 0, carbs: +b.carbs || 0, names: [b.title], photo_url: null });
+    customFavs.unshift({ id, meal_id: id, title: b.title, note: b.note || null, kcal: Math.round(b.kcal), protein: +b.protein || 0, fat: +b.fat || 0, carbs: +b.carbs || 0, names: [b.title], photo_url: null, category: b.category || 'snack' });
     return { id };
   }, 201],
   ['PATCH', /^\/favorites\/(\d+)$/, (m, q, b) => {

@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { foodPic, mealPic } from '../pics.js';
 import { h, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, numCheck, confirmDialog, errorState, skeletonCards, photoImg } from '../ui.js';
 import { t } from '../i18n.js';
+import { CATEGORIES } from './favorites.js';
 
 export default async function render(root, ctx) {
   const isNew = ctx.params.id === 'new';
@@ -31,6 +32,15 @@ export default async function render(root, ctx) {
   const pic = fav.photo_url ? h('div', { class: 'fav-photo' }, photoImg(fav.photo_url, '', fav.title, stub))
     : h('div', { class: 'fav-photo ph' }, stub());
 
+  // Категория: в каком разделе списка лежит блюдо.
+  let category = CATEGORIES.some(([k]) => k === fav.category) ? fav.category : null;
+  const catBox = h('div', { class: 'chips wrap', role: 'radiogroup', 'aria-label': t('favc.aria') });
+  function paintCat() {
+    catBox.replaceChildren(...CATEGORIES.map(([k, label]) => h('button', { type: 'button', role: 'radio', class: 'chip' + (category === k ? ' active' : ''), 'aria-checked': String(category === k),
+      onclick: () => { category = k; haptic('selection'); paintCat(); } }, label)));
+  }
+  paintCat();
+
   let busy = false;
   async function save() {
     if (busy) return;
@@ -41,6 +51,7 @@ export default async function render(root, ctx) {
     const bad = numCheck(kcal, t('prof.kcal')) || numCheck(pr, t('macro.protein')) || numCheck(fat, t('macro.fat')) || numCheck(carb, t('macro.carbs'));
     if (bad) { toast(bad, 'error'); return; }
     const body = { title: ttl, note: note.value.trim(), kcal: k, protein: numVal(pr) || 0, fat: numVal(fat) || 0, carbs: numVal(carb) || 0 };
+    if (category) body.category = category;
     busy = true; mainButton.setLoading(true);
     try {
       if (isNew) await api.post('/favorites/custom', body); else await api.patch('/favorites/' + fav.id, body);
@@ -57,6 +68,7 @@ export default async function render(root, ctx) {
     isNew ? null : pic,
     h('form', { class: 'stack', novalidate: true, onsubmit: (e) => { e.preventDefault(); save(); } },
       group([frow(t('common.name'), title)]),
+      h('div', { class: 'section-label' }, t('favc.title')), catBox,
       h('div', { class: 'section-label' }, t('favf.one')),
       group([frow(t('prof.f_kcal'), kcal), frow(t('prof.f_p'), pr), frow(t('prof.f_f'), fat), frow(t('prof.f_c'), carb)]),
       h('div', { class: 'section-label' }, t('favf.note')), note,

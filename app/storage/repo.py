@@ -520,7 +520,7 @@ def add_favorite(conn: sqlite3.Connection, user_id: int, meal_id: int) -> int | 
 def list_favorites(conn: sqlite3.Connection, user_id: int, limit: int = 30) -> list[dict]:
     """Избранное, новое сверху: {id, meal_id, kcal, protein, fat, carbs, names, title, note}."""
     rows = conn.execute(
-        """SELECT f.id, f.meal_id, f.title, f.note, m.kcal_total, m.protein_g, m.fat_g, m.carbs_g,
+        """SELECT f.id, f.meal_id, f.title, f.note, f.category, m.kcal_total, m.protein_g, m.fat_g, m.carbs_g,
                   m.meal_type, f.use_count, f.last_used_at,
                   EXISTS(SELECT 1 FROM meal_photos p WHERE p.meal_id = f.meal_id) AS has_photo
            FROM favorite_meals f JOIN meals m ON m.id = f.meal_id
@@ -534,8 +534,28 @@ def list_favorites(conn: sqlite3.Connection, user_id: int, limit: int = 30) -> l
                         "protein": r["protein_g"], "fat": r["fat_g"], "carbs": r["carbs_g"],
                         "title": r["title"], "note": r["note"], "names": names,
                         "has_photo": bool(r["has_photo"]), "meal_type": r["meal_type"],
+                        "category": r["category"] or _guess_category(names, r["meal_type"]),
                         "use_count": r["use_count"] or 0})
     return out
+
+
+FAVORITE_CATEGORIES = ("breakfast", "lunch", "dinner", "snack", "drink")
+
+
+def _guess_category(names: list[str], meal_type: str) -> str:
+    """Категория, пока человек не выбрал свою: напиток из каталога — «drink», иначе тип исходного приёма."""
+    from app.domain import drinks as drinksdom
+    if len(names) == 1:
+        low = names[0].lower()
+        if any(low.startswith(d.name.lower()) for d in drinksdom.DRINKS):
+            return "drink"
+    return meal_type
+
+
+def set_favorite_category(conn: sqlite3.Connection, user_id: int, favorite_id: int, category: str) -> None:
+    conn.execute("UPDATE favorite_meals SET category=? WHERE id=? AND user_id=?",
+                 (category, favorite_id, user_id))
+    conn.commit()
 
 
 def get_favorite(conn: sqlite3.Connection, user_id: int, favorite_id: int) -> dict | None:

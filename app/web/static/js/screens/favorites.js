@@ -3,13 +3,17 @@ import { api } from '../api.js';
 import { foodPic, mealPic } from '../pics.js';
 import { t, tn } from '../i18n.js';
 import {
-  h, nav, mainButton, pageHead, emptyState, errorState, skeletonCards, fmtN, photoImg, macroChips, icon, sheet, segmented,
+  h, nav, mainButton, pageHead, emptyState, errorState, skeletonCards, fmtN, photoImg, macroChips, icon, sheet, segmented, sectionTitle,
   toast, haptic, MEAL_TYPES, todayISO, addDays, dataChanged,
 } from '../ui.js';
 
 const SEARCH_FROM = 6;                    // поиск появляется, когда блюд стало много
 const PORTIONS = [['0.5', t('fav.p05')], ['1', '×1'], ['1.5', t('fav.p15')], ['2', '×2']];
 const norm = (t) => String(t || '').toLowerCase().replace(/ё/g, 'е');
+// Категории списка: четыре приёма и напитки. У блюда из дневника категория по умолчанию — тип того приёма.
+export const CATEGORIES = [['breakfast', t('favc.breakfast')], ['lunch', t('favc.lunch')], ['dinner', t('favc.dinner')], ['snack', t('favc.snack')], ['drink', t('favc.drink')]];
+const catOf = (f) => (CATEGORIES.some(([k]) => k === f.category) ? f.category : 'snack');
+let lastCat = null;                       // выбранная категория переживает уход в карточку блюда и обратно
 
 function defaultMealType() {
   const hr = new Date().getHours();
@@ -37,7 +41,17 @@ export default async function render(root, ctx) {
     return;
   }
 
-  const listBox = h('div');
+  const listBox = h('div', { class: 'stack' });
+  const chips = h('div', { class: 'chips scroll', role: 'tablist', 'aria-label': t('favc.aria') });
+  let cat = lastCat;
+  const counts = new Map();
+  items.forEach((f) => counts.set(catOf(f), (counts.get(catOf(f)) || 0) + 1));
+  if (cat && !counts.has(cat)) cat = null;
+  function paintChips() {
+    const mk = (key, text) => h('button', { type: 'button', role: 'tab', class: 'chip' + (cat === key ? ' active' : ''), 'aria-selected': String(cat === key),
+      onclick: () => { cat = key; lastCat = key; haptic('selection'); paintChips(); paint(); } }, text);
+    chips.replaceChildren(mk(null, t('prod.all', { n: items.length })), ...CATEGORIES.filter(([k]) => counts.has(k)).map(([k, label]) => mk(k, `${label} ${counts.get(k)}`)));
+  }
   const count = h('div', { class: 'footnote' }, t('fav.count', { n: tn('fav.dishes', items.length) }));
   const search = h('input', { type: 'search', placeholder: t('fav.search_ph'), 'aria-label': t('common.search'), autocomplete: 'off', oninput: () => paint() });
 
@@ -57,14 +71,19 @@ export default async function render(root, ctx) {
 
   function paint() {
     const q = norm(search.value.trim());
-    const shown = q ? items.filter((f) => norm(f.title).includes(q) || (f.names || []).some((n) => norm(n).includes(q))) : items;
+    const found = q ? items.filter((f) => norm(f.title).includes(q) || (f.names || []).some((n) => norm(n).includes(q))) : items;
+    const shown = cat ? found.filter((f) => catOf(f) === cat) : found;
     if (!shown.length) { listBox.replaceChildren(emptyState('search', t('common.not_found'), t('common.try_other'))); return; }
-    listBox.replaceChildren(h('div', { class: 'list tiles prod-list' }, shown.map(row)));
+    const card = (list) => h('div', { class: 'list tiles prod-list' }, list.map(row));
+    // «Все» без поиска: разделы по категориям; выбранная категория или поиск: один список
+    if (cat || q) { listBox.replaceChildren(card(shown)); return; }
+    listBox.replaceChildren(...CATEGORIES.filter(([k]) => counts.has(k)).flatMap(([k, label]) => [sectionTitle(label), card(shown.filter((f) => catOf(f) === k))]));
   }
 
   /** «Добавить в дневник»: тип приёма, порция, день. Остаёмся на списке. */
   function addSheet(f) {
-    let type = defaultMealType(), factor = '1', day = 'today', busy = false;
+    // тип приёма по умолчанию — категория блюда; у напитков и без категории — по времени суток
+    let type = MEAL_TYPES[f.category] ? f.category : defaultMealType(), factor = '1', day = 'today', busy = false;
     const label = () => t('fav.add_btn', { v: fmtN(Math.round((Number(f.kcal) || 0) * Number(factor))) });
     const go = h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: submit }, label());
     async function submit() {
@@ -94,8 +113,10 @@ export default async function render(root, ctx) {
     });
   }
 
+  paintChips();
   paint();
   box.replaceChildren(
     items.length >= SEARCH_FROM ? h('div', { class: 'search' }, icon('search', 18), search) : null,
+    counts.size > 1 ? chips : null,
     listBox, count);
 }

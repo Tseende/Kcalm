@@ -286,6 +286,13 @@ export default {
   "fav.add_btn": "Добавить · {v} ккал",
   "fav.added": "Добавлено в дневник",
   "fav.sheet": "Добавить в дневник",
+  "favc.title": "Категория",
+  "favc.aria": "Категория блюда",
+  "favc.breakfast": "Завтраки",
+  "favc.lunch": "Обеды",
+  "favc.dinner": "Ужины",
+  "favc.snack": "Перекусы",
+  "favc.drink": "Напитки",
   // favf
   "favf.ph_title": "Например: мой омлет",
   "favf.kcal_aria": "Ккал порции",

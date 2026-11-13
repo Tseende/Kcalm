@@ -286,6 +286,13 @@ export default {
   "fav.add_btn": "Add · {v} kcal",
   "fav.added": "Added to your diary",
   "fav.sheet": "Add to diary",
+  "favc.title": "Category",
+  "favc.aria": "Meal category",
+  "favc.breakfast": "Breakfasts",
+  "favc.lunch": "Lunches",
+  "favc.dinner": "Dinners",
+  "favc.snack": "Snacks",
+  "favc.drink": "Drinks",
   // favf
   "favf.ph_title": "E.g. my omelette",
   "favf.kcal_aria": "Kcal per serving",

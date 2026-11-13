@@ -1597,3 +1597,20 @@ async def test_stats_kcal_sources(client, db, user_id, fake_food):
     src = (await (await client.get("/api/stats?range=week", headers=H)).json())["sources"]
     assert src["total"] > 0 and sum(x["share"] for x in src["by_type"]) == 100
     assert src["top"] and src["top"][0]["times"] >= 1 and src["top"][0]["kcal"] >= src["top"][-1]["kcal"]
+
+
+# ------------------------------------------------------------------ мои блюда: категории
+
+async def test_favorite_category(client, db, user_id):
+    body = {"title": "Мой омлет", "kcal": 320, "protein": 20, "fat": 24, "carbs": 3}
+    fav_id = (await (await client.post("/api/favorites/custom", headers=H, json={**body, "category": "breakfast"})).json())["id"]
+    fav = await (await client.get(f"/api/favorites/{fav_id}", headers=H)).json()
+    assert fav["category"] == "breakfast"
+    resp = await client.patch(f"/api/favorites/{fav_id}", headers=H, json={"category": "dinner"})
+    assert resp.status == 200 and (await resp.json())["category"] == "dinner"
+    assert (await client.patch(f"/api/favorites/{fav_id}", headers=H, json={"category": "dessert"})).status == 400
+    # без выбранной категории: напиток из каталога узнаётся по названию, остальное по типу приёма-образца
+    drink_id = (await (await client.post("/api/favorites/custom", headers=H, json={
+        "title": "Капучино", "kcal": 98, "protein": 5, "fat": 5, "carbs": 8})).json())["id"]
+    items = {f["id"]: f for f in (await (await client.get("/api/favorites", headers=H)).json())["items"]}
+    assert items[drink_id]["category"] == "drink" and items[fav_id]["category"] == "dinner"

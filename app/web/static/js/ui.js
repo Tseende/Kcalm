@@ -455,13 +455,14 @@ export function reloadRoute() { window.dispatchEvent(new HashChangeEvent('hashch
 export function toast(msg, kind = '', { undo } = {}) {
   if (kind === 'error') msg = friendly(msg);
   const ms = undo ? 5000 : 3000;
-  const t = h('div', { class: 'toast ' + kind + (undo ? ' has-action' : ''), role: 'status' }, h('span', null, msg));
+  // el, а не t: иначе локальная переменная перекрывает t() из i18n и подпись кнопки «Отменить» падает
+  const el = h('div', { class: 'toast ' + kind + (undo ? ' has-action' : ''), role: 'status' }, h('span', null, msg));
   if (undo) {
     let used = false;
-    t.append(h('button', { class: 'toast-action', type: 'button', onclick: async () => {
+    el.append(h('button', { class: 'toast-action', type: 'button', onclick: async () => {
       if (used) return;
       used = true;
-      t.remove();
+      el.remove();
       try {
         await undo();
         haptic('light');
@@ -469,10 +470,10 @@ export function toast(msg, kind = '', { undo } = {}) {
       } catch (e) { toast(e, 'error'); }
     } }, t('common.undo')));
   }
-  $('#toasts').append(t);
+  $('#toasts').append(el);
   if (kind === 'error') haptic('error');
-  setTimeout(() => t.classList.add('out'), ms);
-  setTimeout(() => t.remove(), ms + 400);
+  setTimeout(() => el.classList.add('out'), ms);
+  setTimeout(() => el.remove(), ms + 400);
 }
 
 // Screens that show diary data listen for this to reload after changes made elsewhere (undo).

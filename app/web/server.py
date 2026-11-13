@@ -990,8 +990,17 @@ def _favorite_json(f: dict) -> dict:
     return {"id": f["id"], "title": f["title"] or _short_title(f["names"]), "note": f["note"],
             "names": f["names"], "kcal": int(f["kcal"]), "protein": round(float(f["protein"] or 0), 1),
             "fat": round(float(f["fat"] or 0), 1), "carbs": round(float(f["carbs"] or 0), 1),
-            "meal_type": f.get("meal_type"), "use_count": f.get("use_count", 0),
+            "meal_type": f.get("meal_type"), "category": f.get("category") or f.get("meal_type"),
+            "use_count": f.get("use_count", 0),
             "photo_url": f"/api/favorites/{f['id']}/photo" if f.get("has_photo") else None}
+
+
+def _favorite_category(data: dict) -> str | None:
+    if data.get("category") is None:
+        return None
+    if data["category"] not in repo.FAVORITE_CATEGORIES:
+        raise bad("category: breakfast, lunch, dinner, snack или drink.", "bad_field")
+    return data["category"]
 
 
 def _favorite_fields(data: dict, *, partial: bool) -> tuple[str | None, str | None, "object | None"]:
@@ -1046,10 +1055,14 @@ async def api_favorite_photo(request: web.Request) -> web.StreamResponse:
 async def api_favorite_custom(request: web.Request) -> web.Response:
     """Избранное с нуля: название, ккал и БЖУ порции, заметка. В дневник не попадает."""
     db, user, _ = ctx(request)
-    title, note, calc = _favorite_fields(await read_json(request), partial=False)
+    data = await read_json(request)
+    category = _favorite_category(data)
+    title, note, calc = _favorite_fields(data, partial=False)
     fav_id = repo.create_favorite_custom(db, user["id"], title, note, calc)
     if fav_id is None:
         raise ApiError(409, "exists", "Блюдо с таким названием уже есть в «Моих блюдах».")
+    if category:
+        repo.set_favorite_category(db, user["id"], fav_id, category)
     return ok({"id": fav_id}, 201)
 
 
@@ -1061,6 +1074,7 @@ async def api_favorite_patch(request: web.Request) -> web.Response:
     if old is None:
         raise ApiError(404, "not_found", "Блюдо не найдено.")
     data = await read_json(request)
+    category = _favorite_category(data)
     if any(k in data for k in ("kcal", "protein", "fat", "carbs")):      # недостающие числа берём из текущих
         data = {**{k: old[k] for k in ("kcal", "protein", "fat", "carbs")}, **data}
     title, note, calc = _favorite_fields(data, partial=True)
@@ -1071,6 +1085,8 @@ async def api_favorite_patch(request: web.Request) -> web.Response:
     if calc is not None and "title" not in data and not old["title"]:
         calc.items[0].name_ru = old["names"][0] if old["names"] else "Блюдо"
     repo.update_favorite(db, user["id"], fav_id, title=title, note=note, calc=calc)
+    if category:
+        repo.set_favorite_category(db, user["id"], fav_id, category)
     return ok(_favorite_json(repo.get_favorite(db, user["id"], fav_id)))
 
 
