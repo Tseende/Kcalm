@@ -34,8 +34,10 @@ export default async function render(root, ctx) {
       list.replaceChildren(h('div', { class: 'list tiles' }, dishes.map((d) => h('button', { class: 'row', type: 'button', onclick: () => nav.go('/menu/dish/' + d.id) },
         d.photo_url ? h('div', { class: 'thumb sm' }, photoImg(d.photo_url, '', d.name)) : (dishPic(d.kind, 40) || tile(dishKind(d.kind).icon, dishKind(d.kind).color)),
         h('span', { class: 'grow' },
-          h('span', { class: 'row-title' }, d.name, d.is_default ? h('span', { class: 'badge' }, t('dishes.default')) : null),
-          h('span', { class: 'row-sub' }, dishKind(d.kind).label + ' · ' + dishInfo(d))),
+          h('span', { class: 'row-title dish-name' }, d.name),
+          // вид посуды не повторяем, если он уже в названии («Глубокая тарелка · Глубокая тарелка»)
+          h('span', { class: 'row-sub' }, [d.name.toLowerCase().includes(dishKind(d.kind).label.toLowerCase()) ? null : dishKind(d.kind).label, dishInfo(d)].filter(Boolean).join(' · ')),
+          d.is_default ? h('span', { class: 'badge dish-badge' }, t('dishes.default')) : null),
         icon('next', 18)))));
     } catch (e) { if (ctx.alive()) errorState(list, e, load); }
   }

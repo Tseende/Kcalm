@@ -61,6 +61,8 @@ function help(view) {
       step('camera', 'orange', t('info.s1'), t('info.s1t')),
       step('barcode', 'green', t('info.s2'), t('info.s2t')),
       step('soup', 'teal', t('info.s3'), t('info.s3t')),
+      step('star', 'yellow', t('info.s6'), t('info.s6t')),
+      step('cup', 'teal', t('info.s7'), t('info.s7t')),
       step('target', 'red', t('info.s4'), t('info.s4t')),
       step('bell', 'purple', t('menu.reminders'), t('info.s5t'))),
     h('div', { class: 'footnote' }, t('info.disclaimer')),

@@ -2,7 +2,7 @@
 import { api } from '../api.js';
 import { t, tn } from '../i18n.js';
 import {
-  h, icon, toast, haptic, mainButton, pageHead, frow, group, numInput, numVal, numCheck, checkList, sheet,
+  h, icon, nav, toast, haptic, mainButton, pageHead, frow, group, numInput, numVal, numCheck, checkList, sheet,
   fmtN, fmtKcal, errorState, skeletonBlocks, dataChanged, macroChips,
 } from '../ui.js';
 
@@ -158,14 +158,14 @@ export default async function render(root, ctx) {
 
   box.replaceChildren(
     targetCard,
-    h('div', { class: 'muted small target-note' }, t('prof.formula')),
+    h('details', { class: 'target-how' }, h('summary', null, t('prof.how')), h('div', { class: 'muted small' }, t('prof.formula'))),
     h('div', { class: 'section-label' }, t('prof.about')),
-    group([h('div', { class: 'frow static' }, h('span', { class: 'frow-label' }, t('prof.sex')), h('span', { class: 'frow-val' }, cur.sex === 'female' ? t('prof.female') : t('prof.male'))), frow(t('prof.year'), year), frow(t('prof.f_height'), height), h('div', { class: 'frow static' }, h('span', { class: 'frow-label' }, t('prof.weight_now')), h('span', { class: 'frow-val' }, cur.weight_kg ? `${fmtN(cur.weight_kg)} ${t('unit.kg')}` : '—')), frow(t('prof.f_goal'), goal)]),
+    group([h('div', { class: 'frow static' }, h('span', { class: 'frow-label' }, t('prof.sex')), h('span', { class: 'frow-val' }, cur.sex === 'female' ? t('prof.female') : t('prof.male'))), frow(t('prof.year'), year), frow(t('prof.f_height'), height), h('button', { class: 'frow', type: 'button', 'aria-label': t('prof.weight_log'), onclick: () => nav.go('/add/weight') }, h('span', { class: 'frow-label' }, t('prof.weight_now')), h('span', { class: 'frow-val' }, cur.weight_kg ? `${fmtN(cur.weight_kg)} ${t('unit.kg')}` : t('prof.weight_log')), icon('next', 18)), frow(t('prof.f_goal'), goal)]),
     ageHint,
     h('div', { class: 'section-label' }, t('prof.act_rate')),
     group([act, rate]), rateHint,
     h('div', { class: 'section-label' }, t('prof.mode')),
-    group([frow(t('prof.cutoff'), cutoff), frow(t('prof.tz'), tz)], t('prof.weight_hint')));
+    group([frow(t('prof.cutoff'), cutoff), frow(t('prof.tz'), tz)]));
   paintTargets();
   mainButton.show(t('common.save'), save, { disabled: true });
 }
