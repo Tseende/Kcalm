@@ -44,11 +44,11 @@ export const TIPS = [
   { id: 'meal.fav', route: 'meal', target: () => q('.meal-actions .act[aria-pressed]'), pad: 4, radius: 16,
     title: t('coach.meal.fav.t'), text: t('coach.meal.fav.x') },
 
-  { id: 'addmeal.photo', route: 'addmeal', target: '.capture .cap-grid',
+  { id: 'addmeal.photo', route: 'addmeal', target: '.capture.cap-menu',
     title: t('coach.addmeal.photo.t'), text: t('coach.addmeal.photo.x') },
   { id: 'addmeal.text', route: 'addmeal', target: '.compose-keep',
     title: t('coach.addmeal.text.t'), text: t('coach.addmeal.text.x') },
-  { id: 'addmeal.quick', route: 'addmeal', target: () => { const el = q('#view .quick-list'); return el && !el.closest('[hidden]') ? el.parentElement : null; },
+  { id: 'addmeal.quick', route: 'addmeal', target: () => { const el = q('#view .quick-list'); return el && !el.closest('[hidden]') ? el : null; },
     title: t('coach.addmeal.quick.t'), text: t('coach.addmeal.quick.x') },
 
   { id: 'stats.range', route: 'stats', target: '#view .seg',

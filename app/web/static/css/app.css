@@ -289,7 +289,7 @@ html.scheme-dark .toast.ok { background: color-mix(in srgb, var(--c-green) 60%, 
 .photo-card textarea { min-height: 64px; background: color-mix(in srgb, var(--c-hint) 9%, transparent); border-radius: 10px; padding: 10px 12px; }
 .ing-list { background: color-mix(in srgb, var(--c-hint) 9%, transparent); --sep-l: 16px; }
 .ing-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.ing-actions .btn { padding-inline: 6px; gap: 6px; font-size: 14px; min-width: 0; }
+.ing-actions .btn { flex-direction: column; padding: 8px 2px; gap: 4px; font-size: 12px; line-height: 1.2; min-width: 0; white-space: nowrap; }
 .dish-pick { background: color-mix(in srgb, var(--c-hint) 9%, transparent); --sep-l: 57px; }
 .dish-pick .row.selected { background: color-mix(in srgb, var(--c-accent) 12%, transparent); }
 .radio { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid color-mix(in srgb, var(--c-hint) 60%, transparent); display: grid; place-items: center; color: #fff; }
@@ -724,13 +724,15 @@ button.frow > .ico:last-child { flex: none; color: color-mix(in srgb, var(--c-hi
 .often-star { color: var(--c-warn); display: inline-flex; }
 .often-star .ico svg { fill: currentColor; }
 .quick-list { display: flex; flex-direction: column; }
-.quick-star { flex: none; width: 40px; height: 40px; display: grid; place-items: center; color: var(--c-hint); }
+.quick-star { flex: none; width: 44px; height: 44px; display: grid; place-items: center; color: var(--c-hint); }
 .quick-star.on { color: var(--c-warn); }
 .quick-star.on .ico svg { fill: currentColor; }
 .barcode-row { display: flex; gap: 8px; }
 .barcode-row input { flex: 1; min-width: 0; }
-.quick-list .row { align-items: center; padding-block: 4px; }
-.quick-list .row-btn { appearance: none; background: none; border: 0; padding: 6px 0; margin: 0; font: inherit; color: inherit; text-align: left; display: flex; flex-direction: column; min-width: 0; cursor: pointer; }
+.quick-list .fav-row { padding-right: 6px; }
+.quick-list .fav-open { font: inherit; color: inherit; cursor: pointer; }
+.quick-list .row-title { font-weight: 400; }
+.quick-list .quick-thumb { width: 40px; height: 40px; border-radius: 10px; }
 .quick-list .row.is-pending { opacity: .5; pointer-events: none; }
 .quick-star { appearance: none; background: none; border: 0; padding: 0; cursor: pointer; }
 
@@ -894,17 +896,15 @@ body.kb-open .screen.compose textarea { min-height: 34vh; }
 .kbbar .kbbar-hide { flex: 0 0 auto; padding-inline: 16px; }
 .kbbar .btn-block { flex: 1; width: auto; }
 
-/* карточка добавления: три плитки действий */
-.capture { padding: 18px 14px 14px; gap: 4px; }
+/* добавление приёма: главная кнопка «Сфотографировать» и список остальных способов */
 .capture.compact { padding: 10px; }
-.cap-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: 100%; margin-top: 14px; }
-.cap-tile { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 14px 6px 12px; border: 0; border-radius: 16px; font: inherit; color: var(--c-text); background: color-mix(in srgb, var(--c-btn) 10%, transparent); cursor: pointer; }
-.cap-tile:active { transform: scale(.97); }
-.cap-tile .cap-ico { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; margin-bottom: 6px; background: color-mix(in srgb, var(--c-btn) 16%, transparent); color: var(--c-btn); }
-.cap-tile.main { background: var(--c-btn); color: #fff; }
-.cap-tile.main .cap-ico { background: rgba(255,255,255,.22); color: #fff; }
-.cap-label { font-size: 15px; font-weight: 650; }
-.cap-sub { font-size: 12px; opacity: .65; }
+.capture.cap-menu { background: none; padding: 0; gap: 12px; align-items: stretch; text-align: left; border-radius: 0; }
+.cap-main { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 16px; border: 0; border-radius: var(--r-card); font: inherit; text-align: left; background: var(--c-btn); color: #fff; cursor: pointer; transition: transform .12s; }
+.cap-main:active { transform: scale(.98); }
+.cap-main .cap-ico { flex: none; width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.22); color: #fff; }
+.cap-main .grow { min-width: 0; }
+.cap-label { display: block; font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
+.cap-sub { display: block; font-size: 13px; opacity: .8; margin-top: 1px; }
 
 /* =====================================================================
    Онбординг первого запуска (.onb-*). Только transform/opacity в анимациях;
@@ -1445,3 +1445,15 @@ img.broken { display: none; }
 .add-item-btn { margin-top: 10px; }
 .check-row { display: flex; align-items: center; gap: 10px; padding: 4px 2px; font-size: 15px; }
 .check-row input { width: 20px; height: 20px; }
+
+/* напитки: сетка по группам и шторка порции */
+.drink-pick .drink-card { border: 0; }
+.drink-sheet .chips { justify-content: center; }
+.drink-hero { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.drink-sheet .drink-sugar { display: flex; align-items: center; gap: 12px; background: var(--c-card); border-radius: var(--r-card); padding: 10px 14px; }
+.drink-sheet .drink-sum { text-align: center; display: flex; flex-direction: column; gap: 2px; }
+.capture.compact { align-items: stretch; text-align: left; gap: 8px; }
+.capture.compact .section-label { font-size: 13px; color: var(--c-hint); text-transform: uppercase; letter-spacing: .02em; padding: 2px 6px 0; }
+.drink-wait { min-height: 240px; }
+.sheet .drink-card { background: var(--c-fill); box-shadow: none; }
+.stack > .capture.compact { order: 1; }

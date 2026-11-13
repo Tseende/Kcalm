@@ -559,7 +559,7 @@ const routes = [
     water.set(T, [...(water.get(T) || []), e]);
     return { water_ml: waterOf(T), goal_ml: TARGETS.water_ml, id: e.id };
   }],
-  ['GET', /^\/drinks$/, () => ({ drinks: MOCK_DRINKS })],
+  ['GET', /^\/drinks$/, () => ({ drinks: MOCK_DRINKS.map((d) => ({ protein: 0, fat: 0, carbs: Math.round(d.kcal_100 / 4 * 10) / 10, alcohol: ['beer', 'wine'].includes(d.id), ...d })) })],
   ['POST', /^\/drinks$/, (m, q, b) => {
     const T = todayISO();
     const d = MOCK_DRINKS.find((x) => x.id === b.drink);
@@ -593,7 +593,7 @@ const routes = [
   }],
   ['POST', /^\/activity$/, (m, q, b) => { const bd = body.get(b.date || todayISO()); if (bd) { if (b.steps) bd.steps = b.steps; if (b.active_kcal) bd.active_kcal = b.active_kcal; } return { ok: true }; }],
   ['GET', /^\/frequent$/, () => ({ items: [
-    ...favList().map((f) => ({ meal_id: f.meal_id, favorite_id: f.id, title: f.title, names: f.names, kcal: f.kcal, count: 0 })),
+    ...favList().map((f) => ({ meal_id: f.meal_id, favorite_id: f.id, title: f.title, names: f.names, kcal: f.kcal, count: 0, photo_url: f.photo_url || null })),
     ...FREQ.filter((f) => !mockFavs[f.meal_id]).map((f) => ({ meal_id: f.meal_id, favorite_id: null, title: f.title, names: f.names, kcal: f.kcal, count: f.count }))] })],
   ['GET', /^\/favorites$/, () => ({ items: favList() })],
   ['GET', /^\/favorites\/(\d+)$/, (m) => { const f = favList().find((x) => x.id === +m[1]); if (!f) throw notFound(); return f; }],

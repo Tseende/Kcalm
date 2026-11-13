@@ -66,6 +66,7 @@ def get(drink_id: str) -> Drink | None:
 def catalog_json() -> list[dict]:
     return [{"id": d.id, "name": d.name, "emoji": d.emoji, "color": d.color,
              "kcal_100": round(4 * d.protein + 9 * d.fat + 4 * d.carbs + ALCOHOL_KCAL * d.alcohol, 1),
+             "protein": d.protein, "fat": d.fat, "carbs": d.carbs, "alcohol": d.alcohol > 0,
              "sizes": list(d.sizes), "sugar": d.sugar,
              "hydrates": hydration_ml(d.name, d.name_en, 100) > 0}      # чай и кофе идут в воду
             for d in DRINKS]

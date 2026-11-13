@@ -969,7 +969,8 @@ async def api_frequent(request: web.Request) -> web.Response:
     today = now_local(user).strftime("%Y-%m-%d")
     favorites = repo.list_favorites(db, user["id"], limit=limit)
     items = [{"meal_id": f["meal_id"], "favorite_id": f["id"], "title": f["title"] or _short_title(f["names"]),
-              "names": f["names"], "kcal": int(f["kcal"]), "count": 0} for f in favorites]
+              "names": f["names"], "kcal": int(f["kcal"]), "count": 0,
+              "photo_url": f"/api/favorites/{f['id']}/photo" if f.get("has_photo") else None} for f in favorites]
     have = {repo.meal_signature(f["names"]) for f in favorites}
     for f in repo.frequent_meals(db, user["id"], limit=limit + len(have), today=today):
         if len(items) >= limit:
@@ -1024,7 +1025,7 @@ async def api_favorite_get(request: web.Request) -> web.Response:
     db, user, _ = ctx(request)
     fav = repo.get_favorite(db, user["id"], path_id(request))
     if fav is None:
-        raise ApiError(404, "not_found", "Избранное не найдено.")
+        raise ApiError(404, "not_found", "Блюдо не найдено.")
     return ok(_favorite_json(fav))
 
 
@@ -1044,7 +1045,7 @@ async def api_favorite_custom(request: web.Request) -> web.Response:
     title, note, calc = _favorite_fields(await read_json(request), partial=False)
     fav_id = repo.create_favorite_custom(db, user["id"], title, note, calc)
     if fav_id is None:
-        raise ApiError(409, "exists", "Блюдо с таким названием уже есть в избранном.")
+        raise ApiError(409, "exists", "Блюдо с таким названием уже есть в «Моих блюдах».")
     return ok({"id": fav_id}, 201)
 
 
@@ -1054,7 +1055,7 @@ async def api_favorite_patch(request: web.Request) -> web.Response:
     fav_id = path_id(request)
     old = repo.get_favorite(db, user["id"], fav_id)
     if old is None:
-        raise ApiError(404, "not_found", "Избранное не найдено.")
+        raise ApiError(404, "not_found", "Блюдо не найдено.")
     data = await read_json(request)
     if any(k in data for k in ("kcal", "protein", "fat", "carbs")):      # недостающие числа берём из текущих
         data = {**{k: old[k] for k in ("kcal", "protein", "fat", "carbs")}, **data}
@@ -1088,7 +1089,7 @@ async def api_favorite_add(request: web.Request) -> web.Response:
 async def api_favorite_delete(request: web.Request) -> web.Response:
     db, user, _ = ctx(request)
     if not repo.remove_favorite(db, user["id"], path_id(request)):
-        raise ApiError(404, "not_found", "Избранное не найдено.")
+        raise ApiError(404, "not_found", "Блюдо не найдено.")
     return web.Response(status=204)
 
 
@@ -1107,7 +1108,7 @@ async def api_favorite_repeat(request: web.Request) -> web.Response:
     new_id = meals_svc.repeat_meal(db, user, meal_id, allow_deleted=True, factor=factor or 1.0,
                                    meal_type=meal_type, day=day) if meal_id else None
     if new_id is None:
-        raise ApiError(404, "not_found", "Избранное не найдено.")
+        raise ApiError(404, "not_found", "Блюдо не найдено.")
     repo.touch_favorite(db, user["id"], fav_id)
     return ok({"id": new_id, "kcal": int(repo.get_meal(db, user["id"], new_id)["kcal_total"])}, 201)
 
