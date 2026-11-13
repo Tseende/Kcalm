@@ -219,3 +219,34 @@ def parse_workout_text(text: str) -> dict | None:
         parts.append(f"{minutes} мин")
     return {"name": " ".join(parts), "minutes": minutes, "km": km,
             "yesterday": wants_yesterday(t)}
+
+
+# ---- подсказка про уровень активности в профиле
+HINT_WINDOW_DAYS = 21      # смотрим последние три недели
+HINT_MIN_DAYS = 10         # и только если шаги записаны хотя бы в 10 из них
+_STEP_LEVELS = ((5000, 1), (10000, 2))   # < 5000 сидячая, < 10000 лёгкая, дальше средняя
+
+
+def steps_level(avg_steps: float) -> int:
+    """Уровень активности профиля (1..3), которому отвечают средние шаги. Высокую (4) по одним шагам не ставим."""
+    for limit, level in _STEP_LEVELS:
+        if avg_steps < limit:
+            return level
+    return 3
+
+
+def activity_hint(avg_steps: float | None, days: int, workouts: int, current: int) -> int | None:
+    """Какой уровень активности предложить вместо current, либо None.
+
+    Норма калорий от шагов не пересчитывается: человеку лишь предлагается поправить профиль.
+    Вверх предлагаем по шагам. Вниз только на одну ступень и только если в окне нет тренировок:
+    шаги не видят зал и бассейн.
+    """
+    if avg_steps is None or days < HINT_MIN_DAYS:
+        return None
+    level = steps_level(avg_steps)
+    if level > current:
+        return level
+    if level < current and workouts == 0:
+        return current - 1
+    return None

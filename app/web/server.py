@@ -660,6 +660,10 @@ async def api_day(request: web.Request) -> web.Response:
         "meals": [meal_json(db, m) for m in repo.day_meals(db, uid, key)],
         "sleep": q.day_sleep(db, uid, key),
         "activity": q.day_activity(db, uid, key),
+        "steps_goal": q.STEPS_GOAL,
+        # подсказка поправить уровень активности в профиле: только для сегодняшнего дня
+        "activity_hint": (q.activity_hint(db, uid, day, profilesvc.activity_level(user["activity_pa"]))
+                          if day == now_local(user).date() else None),
         "weight": q.day_weight(db, uid, key),
         "weight_last": q.last_weight(db, uid, key),
     })

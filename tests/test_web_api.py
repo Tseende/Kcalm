@@ -316,7 +316,7 @@ async def test_day_shape_and_content(client, db, user_id, fake_food):
     assert resp.status == 200
     day = await resp.json()
     assert set(day) == {"date", "targets", "totals", "remaining_kcal", "water_ml", "meals",
-                        "sleep", "activity", "weight", "weight_last"}
+                        "sleep", "activity", "steps_goal", "activity_hint", "weight", "weight_last"}
     assert day["weight_last"] == {"kg": 82.4, "date": TODAY}
     assert day["date"] == TODAY and day["water_ml"] == 250
     assert day["totals"]["kcal"] == meal["kcal"] > 0
@@ -1523,3 +1523,33 @@ async def test_foods_search_cyrillic_case_and_own_first(client, db, user_id):
     found = repo.search_foods(db, user_id, "кур")
     assert found[0]["id"] == mine and found[0]["own"] is True   # свои выше общих
     assert all(f["own"] for f in repo.search_foods(db, user_id, ""))   # пустой запрос: только свои
+
+
+# ------------------------------------------------------------------ шаги и уровень активности
+
+def test_activity_hint_rules():
+    from app.domain.tracking import activity_hint
+    assert activity_hint(12000, 9, 0, 1) is None           # мало дней с шагами
+    assert activity_hint(None, 0, 0, 2) is None
+    assert activity_hint(12000, 14, 0, 1) == 3             # вверх: по шагам
+    assert activity_hint(30000, 14, 0, 3) is None          # высокую по одним шагам не предлагаем
+    assert activity_hint(3000, 14, 0, 3) == 2              # вниз: на одну ступень
+    assert activity_hint(3000, 14, 2, 3) is None           # есть тренировки: шаги их не видят
+    assert activity_hint(7000, 14, 0, 2) is None           # совпадает
+
+
+async def test_day_steps_goal_and_activity_hint(client, db, user_id):
+    from datetime import date, timedelta
+    day = await (await client.get("/api/day", headers=H)).json()
+    assert day["steps_goal"] == 8000 and day["activity_hint"] is None
+    db.execute("UPDATE users SET activity_pa=1.0 WHERE id=?", (user_id,))
+    db.commit()
+    today = date.fromisoformat(TODAY)
+    for i in range(12):
+        resp = await client.post("/api/activity", headers=H, json={
+            "date": (today - timedelta(days=i)).isoformat(), "steps": 12000})
+        assert resp.status == 200
+    day = await (await client.get("/api/day", headers=H)).json()
+    assert day["activity_hint"] == {"avg_steps": 12000, "days": 12, "current": 1, "suggested": 3}
+    past = await (await client.get(f"/api/day?date={(today - timedelta(days=1)).isoformat()}", headers=H)).json()
+    assert past["activity_hint"] is None                   # только для сегодняшнего дня

@@ -24,6 +24,13 @@ export default async function render(root, ctx) {
   const allPhotos = () => groups.flatMap((g) => g.photos);
   let target = groups[0];
   let busy = false;
+  // Пришли с плюса в группе на главной («Добавить в обед»): записанному приёму ставим этот тип.
+  const wantType = sessionStorage.getItem('meal-type');
+  sessionStorage.removeItem('meal-type');
+  async function fixType(id) {
+    if (!wantType || !id) return;
+    try { await api.patch('/meals/' + id, { type: wantType }); } catch (e) { /* тип останется угаданным по времени */ }
+  }
 
   // Форма рисуется сразу; список посуды подтягивается следом (loadDishes).
 
@@ -74,6 +81,7 @@ export default async function render(root, ctx) {
             row.classList.add('is-pending');
             try {
               const r = await api.post(f.favorite_id ? `/favorites/${f.favorite_id}/repeat` : `/meals/${f.meal_id}/repeat`);
+              await fixType(r.id);
               haptic('success');
               mainButton.hide();
               nav.replace('/meal/' + r.id);
@@ -196,6 +204,7 @@ export default async function render(root, ctx) {
       add.disabled = true;
       try {
         const r = await api.post('/meals/product', { name: d.name, brand: d.brand, grams: g, kcal: d.kcal, protein: d.protein, fat: d.fat, carbs: d.carbs });
+        await fixType(r.id);
         haptic('success');
         sh.close();
         mainButton.hide();
@@ -497,6 +506,7 @@ export default async function render(root, ctx) {
       }
       // вода пишется после приёма: сбой здесь не должен терять сам приём
       if (waterMl) { try { await api.post('/water', { ml: Math.min(3000, Math.round(waterMl)) }); } catch (er) { toast(er.message, 'error'); } }
+      if (meal) await fixType(meal.id);
       haptic('success');
       stop();
       clearDraft();

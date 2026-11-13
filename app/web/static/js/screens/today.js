@@ -14,6 +14,10 @@ const waterUndo = []; // water entries added in this session: {ml, id, p}
 let firstPaint = true; // animate the ring once per visit (and on day switch), not on every refresh
 let oftenCache = null; // last /frequent answer, painted instantly on re-render
 
+const GROUPS = ['breakfast', 'lunch', 'dinner', 'snack'];
+const openGroups = new Set();   // раскрытые группы приёмов: «дата:тип»
+const openInit = new Set();     // для каких дат уже выбрана группа по умолчанию
+
 export default async function render(root, ctx) {
   // Пришли на вкладку «Сегодня» с другой вкладки: показываем сегодня, а не день, на котором остановились (иначе «+» пишет в сегодня, а на экране вчера).
   // Возврат с экрана приёма сохраняет выбранный день.
@@ -157,13 +161,14 @@ export default async function render(root, ctx) {
     paintWater();
 
     // health strip: one grouped card, line icons, empty states are actions
-    const mini = (ic, title, value, sub, p) => {
+    const mini = (ic, title, value, sub, p, progress = null) => {
       const path = curDate === todayISO() ? p : `${p}?date=${curDate}`;
       const empty = value === null;
       return h('button', { class: 'mini', type: 'button', onclick: () => nav.go(path), 'aria-label': `${title}: ${empty ? t('today.mini_empty_aria') : value}` },
         h('span', { class: 'mini-ico', 'aria-hidden': 'true' }, icon(ic, 22)),
         h('div', { class: 'mini-val' + (empty ? ' is-empty' : '') }, empty ? t('today.mini_add') : value),
-        h('div', { class: 'mini-sub' }, sub));
+        h('div', { class: 'mini-sub' }, sub),
+        progress === null ? null : h('span', { class: 'mini-bar' + (progress >= 1 ? ' done' : ''), 'aria-hidden': 'true' }, h('i', { style: { width: Math.round(Math.min(1, progress) * 100) + '%' } })));
     };
     const wl = day.weight_last || (day.weight != null ? { kg: day.weight, date: day.date } : null);
     const ago = (iso) => {
@@ -172,20 +177,23 @@ export default async function render(root, ctx) {
     };
     const sleepOk = !!day.sleep;
     const stepsOk = day.activity && day.activity.steps != null;
+    const stepsGoal = day.steps_goal || 8000;
     const miniRow = h('div', { class: 'card mini-group' },
       mini('bed', t('add.sleep'), sleepOk ? fmtDur(day.sleep.duration_min) : null, sleepOk ? (day.sleep.score ? t('today.score', { n: day.sleep.score }) : t('today.sleep_sub')) : t('today.sleep_sub'), '/add/sleep'),
-      mini('walk', t('today.steps'), stepsOk ? fmtKcal(day.activity.steps) : null, t('today.steps_sub'), '/add/activity'),
+      mini('walk', t('today.steps'), stepsOk ? fmtKcal(day.activity.steps) : null,
+        stepsOk ? (day.activity.steps >= stepsGoal ? t('today.steps_done') : t('today.steps_of', { n: fmtKcal(stepsGoal) })) : t('today.steps_sub'),
+        '/add/activity', stepsOk ? day.activity.steps / stepsGoal : null),
       mini('scale', t('add.weight'), wl ? fmtN(wl.kg) + ' ' + t('unit.kg') : null, wl ? ago(wl.date) : t('today.weight_sub'), '/add/weight'));
 
     // meals
     const mealsList = day.meals.length
-      ? h('div', { class: 'list thumbs' }, day.meals.map(mealRow))
+      ? h('div', { class: 'stack meal-groups' }, mealGroups(day))
       : emptyState('tools-kitchen-2', t('today.empty_title'), t('today.empty_text'),
         h('button', { class: 'btn btn-primary', type: 'button', onclick: () => nav.go('/add/meal') }, t('today.add_meal')));
 
     const isToday = curDate === todayISO();
     const often = isToday ? oftenRow() : null;
-    const kids = [kcalCard, waterCard, miniRow, ...(isToday ? [weekGoalBlock(ctx, { compact: true })] : []),
+    const kids = [kcalCard, waterCard, miniRow, ...(isToday ? [activityHint(day.activity_hint)].filter(Boolean) : []), ...(isToday ? [weekGoalBlock(ctx, { compact: true })] : []),
       sectionTitle(t('today.meals'), isToday ? h('button', { class: 'btn-link section-add', type: 'button', onclick: () => nav.go('/add/meal') }, icon('plus', 14), t('common.add')) : null), mealsList,
       ...(isToday ? [sectionTitle(t('today.repeat')), often, ...(often._ph ? [often._ph] : [])] : [])];
     body.replaceChildren(...kids);
@@ -250,10 +258,74 @@ export default async function render(root, ctx) {
   const onData = () => { if (ctx.alive()) load({ quiet: true }); else window.removeEventListener('app:data', onData); };
   window.addEventListener('app:data', onData);
 
+  // Шаги норму калорий не меняют. Если средние шаги расходятся с уровнем активности в профиле,
+  // предлагаем поправить профиль. «Не сейчас» прячет подсказку на 30 дней.
+  function activityHint(hint) {
+    if (!hint) return null;
+    const KEY = 'kcalm:act-hint';
+    try { if (Date.now() - Number(localStorage.getItem(KEY) || 0) < 30 * 86400000) return null; } catch (e) { /* хранилище недоступно */ }
+    const lvl = (n) => t('prof.act' + n).toLowerCase();
+    const card = h('div', { class: 'card act-hint' },
+      h('div', { class: 'act-hint-head' }, tile('walk', 'green', 30),
+        h('div', { class: 'grow' },
+          h('div', { class: 'row-title' }, t(hint.suggested > hint.current ? 'today.hint_up' : 'today.hint_down')),
+          h('div', { class: 'row-sub' }, t('today.hint_text', { n: fmtKcal(hint.avg_steps), d: hint.days, a: lvl(hint.current), b: lvl(hint.suggested) })))),
+      h('div', { class: 'act-hint-actions' },
+        h('button', { class: 'btn-link', type: 'button', onclick: () => { try { localStorage.setItem(KEY, String(Date.now())); } catch (e) { /* ignore */ } card.remove(); } }, t('today.hint_later')),
+        h('button', { class: 'btn-link strong', type: 'button', onclick: () => nav.go('/menu/profile') }, t('today.hint_open'))));
+    return card;
+  }
+
+  // Приёмы сгруппированы по типу: завтрак, обед, ужин, перекусы. Группа сворачивается; по умолчанию открыта та,
+  // где последняя запись за сегодня. Что открыто, помним до ухода с экрана (обновление данных не схлопывает).
+  function mealGroups(day) {
+    const isToday = day.date === todayISO() || curDate === todayISO();
+    const by = new Map(GROUPS.map((g) => [g, []]));
+    day.meals.forEach((m) => by.get(GROUPS.includes(m.type) ? m.type : 'snack').push(m));
+    const key = (g) => curDate + ':' + g;
+    if (!openInit.has(curDate)) {
+      openInit.add(curDate);
+      const last = isToday ? [...day.meals].sort((x, y) => String(x.time).localeCompare(String(y.time))).pop() : null;
+      if (last) openGroups.add(key(GROUPS.includes(last.type) ? last.type : 'snack'));
+    }
+    return GROUPS.filter((g) => by.get(g).length).map((g) => {
+      const list = by.get(g);
+      const mt = mealType(g);
+      const sum = list.reduce((a, m) => ({ kcal: a.kcal + (m.kcal || 0), protein: a.protein + (m.protein || 0), fat: a.fat + (m.fat || 0), carbs: a.carbs + (m.carbs || 0) }), { kcal: 0, protein: 0, fat: 0, carbs: 0 });
+      ['protein', 'fat', 'carbs'].forEach((k) => { sum[k] = Math.round(sum[k] * 10) / 10; });
+      const names = list.flatMap((m) => (m.items || []).map((i) => i.name));
+      const times = list.map((m) => m.time).filter(Boolean).sort();
+      const when = times.length > 1 && times[0] !== times[times.length - 1] ? `${times[0]}–${times[times.length - 1]}` : (times[0] || '');
+      const body = h('div', { class: 'meal-group-body' },
+        list.map(mealRow),
+        isToday ? h('button', { class: 'row meal-add-row', type: 'button', onclick: () => { sessionStorage.setItem('meal-type', g); nav.go('/add/meal'); } },
+          icon('plus', 18), h('span', null, t('today.add_to', { n: mt.label.toLowerCase() }))) : null);
+      const title = g === 'snack' ? t('meal.snacks') : mt.label;
+      const head = h('button', { class: 'row meal-group-head', type: 'button', 'aria-label': `${title}, ${fmtKcal(sum.kcal)} ${t('unit.kcal')}`,
+        onclick: () => { haptic('light'); setOpen(!openGroups.has(key(g))); } },
+        h('div', { class: 'thumb' }, mealPic(g, 44) || tile(mt.icon, mt.color, 44)),
+        h('span', { class: 'grow' },
+          h('span', { class: 'row-title' }, title, when ? h('span', { class: 'meal-when' }, when) : null),
+          h('span', { class: 'row-sub clamp' }, names.join(', ') || t('today.no_items')),
+          h('span', { class: 'row-sub' }, macroLine(sum))),
+        h('span', { class: 'meal-kcal' }, fmtKcal(sum.kcal), h('small', null, ' ' + t('unit.kcal'))),
+        h('span', { class: 'meal-chev' }, icon('chevron-right', 18)));
+      const card = h('div', { class: 'list meal-group' }, head, body);
+      function setOpen(on) {
+        if (on) openGroups.add(key(g)); else openGroups.delete(key(g));
+        card.classList.toggle('open', on);
+        head.setAttribute('aria-expanded', String(on));
+        body.hidden = !on;
+      }
+      setOpen(openGroups.has(key(g)));
+      return card;
+    });
+  }
+
   function mealRow(m) {
     const mt = mealType(m.type);
-    const fallback = () => mealIcon(m, 56) || mealPic(m.type, 56) || tile(mt.icon, mt.color, 56);
-    // В списке всегда иконка типа приёма; само фото открывается на экране приёма (здесь только счётчик).
+    const fallback = () => mealIcon(m, 40) || mealPic(m.type, 40) || tile(mt.icon, mt.color, 40);
+    // В списке всегда иконка блюда; само фото открывается на экране приёма (здесь только счётчик).
     const n = (m.photos || []).length;
     const thumb = h('div', { class: 'thumb' }, fallback(),
       n ? h('span', { class: 'thumb-count' }, icon('photo', 10), String(n)) : null);
@@ -261,9 +333,8 @@ export default async function render(root, ctx) {
     return h('button', { class: 'row meal-row', type: 'button', onclick: () => nav.go('/meal/' + m.id), 'aria-label': `${mt.label} ${m.time}, ${m.kcal} ${t('unit.kcal')}` },
       thumb,
       h('span', { class: 'grow' },
-        h('span', { class: 'row-title' }, `${mt.label} · ${m.time}`),
-        h('span', { class: 'row-sub clamp' }, names || t('today.no_items')),
-        h('span', { class: 'row-sub' }, macroLine(m))),
+        h('span', { class: 'row-title clamp1' }, names || t('today.no_items')),
+        h('span', { class: 'row-sub' }, `${m.time} · ${macroLine(m)}`)),
       h('span', { class: 'meal-kcal' }, fmtKcal(m.kcal), h('small', null, ' ' + t('unit.kcal'))));
   }
 

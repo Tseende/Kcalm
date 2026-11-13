@@ -161,33 +161,25 @@ function sleep(date) {
 }
 
 function activity(date) {
+  // Только шаги и тренировка: активные ккал и минуты ни на что не влияли (API их по-прежнему принимает со скриншотов).
   const steps = numInput({ min: 0, max: 100000, step: 100, inputmode: 'numeric', placeholder: '8000', 'aria-label': t('today.steps') });
-  const kcal = numInput({ min: 0, max: 5000, step: 10, inputmode: 'numeric', placeholder: '350', 'aria-label': t('forms.active_kcal') });
-  const mins = numInput({ min: 0, max: 1440, step: 5, inputmode: 'numeric', placeholder: '45', 'aria-label': t('forms.active_min_aria') });
   const workout = h('input', { type: 'text', placeholder: t('forms.ph_workout'), maxLength: 200, 'aria-label': t('forms.workout') });
   return {
     title: t('add.activity'),
     fill(day) {
       const a = day.activity;
-      if (!a) return;
-      if (a.steps != null && !steps.value) numSet(steps, a.steps);
-      if (a.active_kcal != null && !kcal.value) numSet(kcal, a.active_kcal);
+      if (a && a.steps != null && !steps.value) numSet(steps, a.steps);
     },
     body: [
-      group([
-        h('label', { class: 'frow' }, tile('walk', 'green', 30), h('span', { class: 'frow-label' }, t('today.steps')), steps),
-        h('label', { class: 'frow' }, tile('flame', 'orange', 30), h('span', { class: 'frow-label' }, t('forms.active_kcal')), kcal),
-        h('label', { class: 'frow' }, tile('clock', 'blue', 30), h('span', { class: 'frow-label' }, t('forms.active_min')), mins)]),
+      group([h('label', { class: 'frow' }, tile('walk', 'green', 30), h('span', { class: 'frow-label' }, t('today.steps')), steps)], t('forms.steps_note')),
       group([h('label', { class: 'frow' }, tile('run', 'red', 30), h('span', { class: 'frow-label' }, t('forms.workout')), workout)], t('forms.workout_note')),
     ],
     async submit() {
-      const bad = numCheck(steps, t('today.steps')) || numCheck(kcal, t('forms.active_kcal')) || numCheck(mins, t('forms.active_min'));
+      const bad = numCheck(steps, t('today.steps'));
       if (bad) return invalid(bad);
       const payload = { date };
-      const s = numVal(steps), k = numVal(kcal), m = numVal(mins);
+      const s = numVal(steps);
       if (s !== null) payload.steps = Math.round(s);
-      if (k !== null) payload.active_kcal = Math.round(k);
-      if (m !== null) payload.active_minutes = Math.round(m);
       if (workout.value.trim()) payload.workout = workout.value.trim();
       if (Object.keys(payload).length === 1) return invalid(t('forms.v_any'));
       await api.post('/activity', payload);

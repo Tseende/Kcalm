@@ -1457,3 +1457,36 @@ img.broken { display: none; }
 .drink-wait { min-height: 240px; }
 .sheet .drink-card { background: var(--c-fill); box-shadow: none; }
 .stack > .capture.compact { order: 1; }
+
+/* главная: приёмы по группам (завтрак, обед, ужин, перекусы), группа сворачивается */
+.meal-groups { gap: 10px; }
+.meal-group { --sep-l: 16px; }
+.meal-group-head { padding: 12px 12px 12px 16px; gap: 12px; }
+.today .meal-group-head .thumb { width: 44px; height: 44px; }
+.meal-group-head .row-title { font-weight: 600; }
+.meal-when { margin-left: 8px; font-size: 13px; font-weight: 400; color: var(--c-hint); font-variant-numeric: tabular-nums; }
+.meal-chev { flex: none; display: inline-flex; color: color-mix(in srgb, var(--c-hint) 70%, transparent); transition: transform .2s var(--ease, ease); }
+.meal-group.open .meal-chev { transform: rotate(90deg); }
+.meal-group-body[hidden] { display: none; }
+.meal-group-body { position: relative; background: color-mix(in srgb, var(--c-hint) 6%, transparent); }
+.meal-group-body::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: .5px; background: var(--c-sep); }
+.meal-group-body .meal-row { padding: 8px 16px; gap: 12px; }
+.today .meal-group-body .thumb { width: 40px; height: 40px; border-radius: 10px; }
+.meal-group-body .meal-row .row-title { font-size: 15px; }
+.meal-group-body .meal-kcal { font-size: 14px; font-weight: 500; }
+.clamp1 { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meal-row .grow, .meal-group-head .grow { min-width: 0; }
+.meal-add-row { gap: 8px; min-height: 44px; font-size: 15px; font-weight: 500; color: var(--c-accent, var(--c-btn)); }
+.meal-add-row .ico { color: inherit; }
+.meal-group-head .row-title { display: flex; align-items: baseline; white-space: nowrap; }
+
+/* главная: прогресс шагов к цели и подсказка про уровень активности */
+.mini-bar { display: block; width: 100%; height: 4px; margin-top: 8px; border-radius: 2px; background: color-mix(in srgb, var(--c-hint) 22%, transparent); overflow: hidden; }
+.mini-bar i { display: block; height: 100%; border-radius: 2px; background: var(--c-btn); }
+.mini-bar.done i { background: var(--t-green); }
+.act-hint { display: flex; flex-direction: column; gap: 8px; }
+.act-hint-head { display: flex; gap: 12px; align-items: flex-start; }
+.act-hint-head .grow { min-width: 0; }
+.act-hint .row-title { font-weight: 600; }
+.act-hint-actions { display: flex; justify-content: flex-end; gap: 20px; }
+.act-hint-actions .strong { font-weight: 600; }

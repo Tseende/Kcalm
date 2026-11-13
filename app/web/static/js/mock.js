@@ -225,6 +225,8 @@ function getDay(date) {
     water_ml: waterOf(date), meals: ms,
     sleep: b.sleep_min ? { duration_min: b.sleep_min, score: b.score } : null,
     activity: b.steps ? { steps: b.steps, active_kcal: b.active_kcal } : null,
+    steps_goal: 8000,
+    activity_hint: date === todayISO() && prof.activity < 3 ? { avg_steps: 11200, days: 16, current: prof.activity, suggested: 3 } : null,
     weight: b.weight ?? null,
     weight_last: b.weight != null ? { kg: b.weight, date } : { kg: 82.4, date: iso(addDays(date, -3)) },
   };

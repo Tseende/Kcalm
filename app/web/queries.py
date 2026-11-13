@@ -10,6 +10,8 @@ import sqlite3
 from datetime import date, timedelta
 
 from app.domain import analytics
+from app.domain import tracking as trk
+from app.domain.weekgoal import STEPS_GOAL
 from app.domain.targets import ewma_dated, value_at_or_before
 from app.services import water as watersvc
 from app.storage import repo
@@ -82,6 +84,24 @@ def day_sleep(db: sqlite3.Connection, user_id: int, wake_date: str) -> dict | No
         if row["duration_min"] is not None or row["score"] is not None:
             return {"duration_min": row["duration_min"], "score": row["score"]}
     return None
+
+
+def activity_hint(db: sqlite3.Connection, user_id: int, today: date, current: int) -> dict | None:
+    """Подсказка «уровень активности в профиле не совпадает с шагами» или None (см. domain.tracking.activity_hint)."""
+    start = (today - timedelta(days=trk.HINT_WINDOW_DAYS - 1)).isoformat()
+    steps = [r["steps"] for r in repo.activity_series(db, user_id, start, today.isoformat())
+             if r["steps"] is not None]
+    if not steps:
+        return None
+    workouts = db.execute(
+        "SELECT COUNT(*) FROM activity_daily WHERE user_id=? AND local_date BETWEEN ? AND ? "
+        "AND workouts_json IS NOT NULL AND workouts_json NOT IN ('', '[]')",
+        (user_id, start, today.isoformat())).fetchone()[0]
+    avg = sum(steps) / len(steps)
+    suggested = trk.activity_hint(avg, len(steps), int(workouts or 0), current)
+    if suggested is None:
+        return None
+    return {"avg_steps": int(round(avg, -2)), "days": len(steps), "current": current, "suggested": suggested}
 
 
 def day_activity(db: sqlite3.Connection, user_id: int, local_date: str) -> dict | None:
@@ -192,7 +212,7 @@ def stats(db: sqlite3.Connection, user: sqlite3.Row, range_name: str, today: dat
     tgt = repo.current_target(db, user["id"])
     return {"range": range_name, "days": days, "summary": summarize(days), "prev_summary": summarize(prev),
             "goals": {"protein_g": int(tgt["protein_g"]) if tgt and tgt["protein_g"] else None,
-                      "water_ml": watersvc.goal_for(db, user), "steps": 8000, "sleep_min": 420}}
+                      "water_ml": watersvc.goal_for(db, user), "steps": STEPS_GOAL, "sleep_min": 420}}
 
 
 # ------------------------------------------------------------------ CSV
