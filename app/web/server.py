@@ -1388,6 +1388,81 @@ async def api_product_label(request: web.Request) -> web.Response:
                "notes": notes})
 
 
+@routes.post("/api/products/parse")
+async def api_product_parse(request: web.Request) -> web.Response:
+    """Надиктованное/написанное описание продукта → название и КБЖУ на 100 г (поля могут быть null)."""
+    db, user, _ = ctx(request)
+    text = str((await read_json(request)).get("text") or "").strip()
+    if not text:
+        raise bad("Нужен текст описания продукта.", "bad_field")
+    if len(text) > MAX_TEXT:
+        raise bad("Слишком длинное описание.", "bad_field")
+    llm_gate(db, user)
+    draft = await call(service("products", "parse_text"), db, user, text) or {}
+
+    def num(key: str):
+        v = draft.get(key)
+        return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+    name = str(draft.get("name") or "").strip() or None
+    return ok({"name": name, "per": "100g", "kcal": num("kcal"), "protein": num("protein"),
+               "fat": num("fat"), "carbs": num("carbs")})
+
+
+# ------------------------------------------------------------------ голос → текст
+
+MAX_AUDIO_BYTES = 5 * 1024 * 1024
+# тип контейнера → (расширение, mime для модели)
+AUDIO_KINDS = {"webm": ("webm", "audio/webm"), "m4a": ("m4a", "audio/mp4"),
+               "ogg": ("ogg", "audio/ogg"), "mp3": ("mp3", "audio/mpeg"),
+               "wav": ("wav", "audio/wav"), "aac": ("aac", "audio/aac")}
+AUDIO_MIMES = {"audio/webm": "webm", "audio/mp4": "m4a", "audio/x-m4a": "m4a", "audio/m4a": "m4a",
+               "audio/aac": "aac", "audio/ogg": "ogg", "audio/mpeg": "mp3", "audio/mp3": "mp3",
+               "audio/wav": "wav", "audio/x-wav": "wav", "audio/wave": "wav"}
+
+
+def audio_kind(data: bytes, mime: str | None) -> str | None:
+    """Контейнер по сигнатуре, иначе по заявленному mime (без «;codecs=...»)."""
+    if data[:4] == b"\x1a\x45\xdf\xa3":
+        return "webm"
+    if data[:4] == b"OggS":
+        return "ogg"
+    if data[4:8] == b"ftyp":
+        return "m4a"
+    if data[:4] == b"RIFF" and data[8:12] == b"WAVE":
+        return "wav"
+    if data[:3] == b"ID3":
+        return "mp3"
+    clean = (mime or "").split(";")[0].strip().lower()
+    return AUDIO_MIMES.get(clean)
+
+
+@routes.post("/api/transcribe")
+async def api_transcribe(request: web.Request) -> web.Response:
+    """Диктовка в поля ввода: аудио (поле audio) → {"text": ...}."""
+    db, user, config = ctx(request)
+    try:
+        form = await read_form(request, MAX_AUDIO_BYTES)
+    except ApiError as e:
+        if e.status == 413:
+            raise ApiError(413, "too_large", "Запись слишком длинная: наговорите короче.") from None
+        raise
+    files = form.files.get("audio", [])
+    if not files:
+        raise bad("Запись пустая: попробуйте ещё раз.", "bad_audio")
+    data = files[0]
+    kind = audio_kind(data, form.value("mime"))
+    if kind is None:
+        raise bad("Такой формат записи не поддерживается.", "bad_audio")
+    ext, mime = AUDIO_KINDS[kind]
+    llm_gate(db, user)
+    try:
+        text = await llm.transcribe_audio(data, f"voice.{ext}", mime, model=config.model_asr,
+                                          user_id=user["id"], db=db, purpose="asr_web")
+    except llm.LLMError as e:
+        raise llm_failure(e, "Не удалось распознать голос. Попробуйте ещё раз или напишите текстом.") from None
+    return ok({"text": (text or "").strip()})
+
+
 @routes.get("/api/products/barcode/{code}")
 async def api_product_barcode(request: web.Request) -> web.Response:
     """Штрихкод → черновик из Open Food Facts (поле existing_id: такой продукт у вас уже есть)."""

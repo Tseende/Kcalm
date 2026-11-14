@@ -547,6 +547,8 @@ const routes = [
   ['POST', /^\/products$/, (m, q, b) => { const p = { id: nid(), brand: null, default_grams: null, unit_name: null, unit_grams: null, barcode: null, times_used: 0, ...b }; products.unshift(p); return p; }, 201],
   ['PATCH', /^\/products\/(\d+)$/, (m, q, b) => { const p = products.find((x) => x.id === +m[1]); if (!p) throw notFound(); return Object.assign(p, b); }],
   ['DELETE', /^\/products\/(\d+)$/, (m) => { products = products.filter((x) => x.id !== +m[1]); return null; }],
+  ['POST', /^\/transcribe$/, async () => { await sleep(800); return { text: L('овсянка на молоке 250 г и банан', 'oatmeal with milk 250 g and a banana') }; }],
+  ['POST', /^\/products\/parse$/, async (m, q, b) => { await sleep(500); return { name: L('Творог 5%', 'Cottage cheese 5%'), per: '100g', kcal: 121, protein: 17, fat: 5, carbs: 1.8 }; }],
   ['POST', /^\/products\/label$/, async () => {
     await sleep(1500);
     return {

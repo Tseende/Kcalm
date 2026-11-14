@@ -1535,3 +1535,34 @@ img.broken { display: none; }
 .dish-title .badge { flex: none; }
 .dish-name { display: block; }
 .dish-badge { display: block; width: fit-content; margin: 4px 0 0; }
+
+/* ---------- collapsible dishware picker ---------- */
+.dish-wrap { display: flex; flex-direction: column; }
+.dish-head { background: color-mix(in srgb, var(--c-hint) 9%, transparent); }
+.dish-current { width: 100%; text-align: left; }
+.dish-chev { flex: none; display: grid; place-items: center; color: color-mix(in srgb, var(--c-hint) 80%, transparent); transform: rotate(90deg); transition: transform .2s; }
+.dish-wrap.open .dish-chev { transform: rotate(-90deg); }
+.dish-body { display: grid; grid-template-rows: 0fr; opacity: 0; visibility: hidden; transition: grid-template-rows .22s ease, opacity .18s ease, visibility 0s .22s; }
+.dish-body-in { min-height: 0; overflow: hidden; }
+.dish-wrap.open .dish-body { grid-template-rows: 1fr; opacity: 1; visibility: visible; transition-delay: 0s; }
+.dish-wrap.open .dish-body-in { padding-top: 8px; }
+
+/* ---------- voice dictation ---------- */
+.mic-wrap { position: relative; display: flex; }
+.mic-wrap > textarea { width: 100%; padding-right: 52px; min-height: 92px; }
+.mic-box { position: absolute; right: 8px; bottom: 8px; display: inline-flex; align-items: center; gap: 8px; }
+.mic-box.inline { position: static; flex: none; margin-left: 8px; }
+.mic-row { flex: 1; display: flex; align-items: center; min-width: 0; }
+.mic-row > input { min-width: 0; }
+.mic-time { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--c-danger); }
+.mic-btn { position: relative; flex: none; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; background: var(--c-fill); color: var(--c-accent); cursor: pointer; transition: background .15s, color .15s; }
+.mic-btn:disabled { opacity: .7; cursor: default; }
+.mic-btn.rec { background: #ff3b30; color: #fff; }
+.mic-btn.rec svg { fill: currentColor; }
+.mic-btn.rec::after { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 2px solid #ff3b30; animation: mic-pulse 1.2s ease-out infinite; pointer-events: none; }
+@keyframes mic-pulse { from { transform: scale(1); opacity: .7; } to { transform: scale(1.7); opacity: 0; } }
+.mic-spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--c-sep); border-top-color: var(--c-accent); animation: spin .8s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .mic-btn.rec::after { animation: none; opacity: .45; transform: scale(1.25); }
+  .dish-chev, .dish-body { transition: none; }
+}

@@ -3,9 +3,10 @@
 //   из базы:  { food_id, name, brand, grams, per100 }
 //   вручную:  { name, grams, per100, per, raw, save }   (raw — значения как ввели, per — к чему они относятся)
 import { api } from './api.js';
+import { voiceButton } from './voice.js';
 import { t } from './i18n.js';
 import {
-  h, icon, sheet, toast, haptic, fmtN, numInput, numVal, numCheck, frow, group, segmented, macroLine,
+  h, icon, sheet, toast, haptic, fmtN, numInput, numVal, numSet, numCheck, frow, group, segmented, macroLine,
 } from './ui.js';
 
 export const G_MAX = 5000;
@@ -150,6 +151,23 @@ export function manualSheet({ cta, name = '', saveOption = true } = {}) {
     }
     [kcal, p, f, c].forEach((x) => x.addEventListener('input', mismatch));
     limits();
+    // Диктовка: «творог 5%, 121 ккал, белки 17, жиры 5, углеводы 1.8» -> название и К/Б/Ж/У на 100 г.
+    const nameMic = voiceButton(nameI, {
+      inline: true,
+      onText: async (text) => {
+        let r = null;
+        try { r = await api.post('/products/parse', { text }); } catch (e) { /* только название */ }
+        nameI.value = ((r && r.name) || text).slice(0, 120);
+        const got = r && [r.kcal, r.protein, r.fat, r.carbs].some((x) => typeof x === 'number');
+        if (got) {
+          per = '100g';
+          seg.querySelectorAll('button').forEach((b, i) => { b.classList.toggle('active', i === 0); b.setAttribute('aria-selected', String(i === 0)); });
+          limits();
+          [[kcal, r.kcal], [p, r.protein], [f, r.fat], [c, r.carbs]].forEach(([el, v]) => { if (typeof v === 'number') numSet(el, v); });
+          mismatch();
+        } else if (r) toast(t('voice.parse_fail'));
+      },
+    });
     const go = () => {
       const n = nameI.value.trim();
       if (!n) { toast(t('fp.v_name'), 'error'); nameI.focus(); return; }
@@ -174,7 +192,7 @@ export function manualSheet({ cta, name = '', saveOption = true } = {}) {
       title: t('fp.manual_title'),
       onClose: () => { if (!done) resolve(null); },
       content: h('div', { class: 'stack' },
-        group([frow(t('common.name'), nameI), frow(t('add.grams'), grams)]),
+        group([frow(t('common.name'), h('span', { class: 'mic-row' }, nameI, nameMic)), frow(t('add.grams'), grams)]),
         seg,
         group([frow(t('prof.f_kcal'), kcal), frow(t('prof.f_p'), p), frow(t('prof.f_f'), f), frow(t('prof.f_c'), c)]),
         hint,

@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import {
   h, icon, tile, toast, haptic, nav, mainButton, draft, pageHead, compressImage, busyOverlay, dishKind, sheet, fmtN, numInput, numVal, numCheck, codeInput, frow, macroLine, sectionTitle, photoImg,
 } from '../ui.js';
+import { voiceButton } from '../voice.js';
 import { scanBarcode, decodeFile, validBarcode } from '../scanner.js';
 import { dishInfo } from './dishes.js';
 import { pickFood, editEntryGrams, entryAbs, entryTotal, toPayload } from '../food_picker.js';
@@ -38,7 +39,8 @@ export default async function render(root, ctx) {
   const camera = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, onchange: () => addFiles(camera) });
   const gallery = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, onchange: () => addFiles(gallery) });
   const textTa = h('textarea', { rows: 3, placeholder: t('add.ph_text'), oninput: () => { sync(); quickVisibility(); } });
-  const textField = h('label', { class: 'field compose-keep' }, h('span', { class: 'field-label' }, t('add.or_describe')), textTa);
+  const textField = h('label', { class: 'field compose-keep' }, h('span', { class: 'field-label' }, t('add.or_describe')),
+    h('div', { class: 'mic-wrap' }, textTa, voiceButton(textTa)));
   const clearDraft = draft('meal-text', textTa);
   const dishList = h('div', { class: 'stack' });
   const capture = h('div', { class: 'capture' });
@@ -167,21 +169,45 @@ export default async function render(root, ctx) {
     input.click();
   }
 
-  // Radio list of the user's dishes with sizes; the size is what makes the estimate better.
+  // Dishware picker: collapsed to the chosen option by default, tap to expand the radio list in place
+  // (g.dishOpen survives repaints). Choosing an option collapses it again.
   function dishPicker(g, n) {
     const opt = (id, ic, color, title, sub, pic) => {
       const on = g.dishId === id;
       return h('button', {
         type: 'button', class: 'row row-btn' + (on ? ' selected' : ''), role: 'radio', 'aria-checked': String(on),
-        onclick: () => { g.dishId = id; haptic('light'); paint(); },
+        onclick: () => { g.dishId = id; g.dishOpen = false; haptic('light'); paint(); },
       },
       (pic || tile(ic, color)),
       h('span', { class: 'grow' }, h('span', { class: 'row-title' }, title), h('span', { class: 'row-sub' }, sub)),
       h('span', { class: 'radio' + (on ? ' on' : '') }, on ? icon('check', 14) : null));
     };
-    return h('div', { class: 'list dish-pick', role: 'radiogroup', 'aria-label': t('add.dish_aria', { n }) },
-      dishes.map((d) => { const k = dishKind(d.kind); return opt(d.id, k.icon, k.color, d.name, dishInfo(d), dishPic(d.kind, 40)); }),
-      opt(null, 'x', 'gray', t('add.no_dish'), t('add.no_dish_sub')));
+    const cur = dishes.find((x) => x.id === g.dishId);
+    const k = cur ? dishKind(cur.kind) : null;
+    const open = !!g.dishOpen;
+    const body = h('div', { class: 'dish-body', 'aria-hidden': String(!open) },
+      h('div', { class: 'dish-body-in' },
+        h('div', { class: 'list dish-pick', role: 'radiogroup', 'aria-label': t('add.dish_aria', { n }) },
+          dishes.map((d) => { const dk = dishKind(d.kind); return opt(d.id, dk.icon, dk.color, d.name, dishInfo(d), dishPic(d.kind, 40)); }),
+          opt(null, 'x', 'gray', t('add.no_dish'), t('add.no_dish_sub')))));
+    const head = h('button', {
+      type: 'button', class: 'row row-btn dish-current', 'aria-expanded': String(open), 'aria-label': t('add.dish_change', { n }),
+      onclick: () => {
+        g.dishOpen = !g.dishOpen;
+        wrap.classList.toggle('open', g.dishOpen);
+        head.setAttribute('aria-expanded', String(g.dishOpen));
+        body.setAttribute('aria-hidden', String(!g.dishOpen));
+        haptic('selection');
+      },
+    },
+    (cur ? (dishPic(cur.kind, 40) || tile(k.icon, k.color)) : tile('x', 'gray')),
+    h('span', { class: 'grow' },
+      h('span', { class: 'row-title' }, cur ? cur.name : t('add.no_dish')),
+      h('span', { class: 'row-sub' }, cur ? dishInfo(cur) : t('add.no_dish_sub'))),
+    h('span', { class: 'dish-chev' }, icon('next', 18)));
+    const wrap = h('div', { class: 'dish-wrap' + (open ? ' open' : '') },
+      h('div', { class: 'list dish-head' }, head), body);
+    return wrap;
   }
 
   function chosenLabel(g) {
@@ -319,13 +345,21 @@ export default async function render(root, ctx) {
     });
     note.dataset.gid = String(g.id);
     note.value = g.note;
+    // Диктовка пишет в g.note (карточка могла перерисоваться, пока шла запись) и обновляет живое поле.
+    const noteMic = voiceButton(note, {
+      onText: (text) => {
+        g.note = [g.note.trim(), text].filter(Boolean).join(g.note.trim() ? ', ' : '');
+        const live = document.querySelector(`textarea[data-gid="${g.id}"]`);
+        if (live) live.value = g.note;
+      },
+    });
     const ings = g.ings.length ? h('div', { class: 'list ing-list' }, g.ings.map((d, i) => h('div', { class: 'row' },
       h('span', { class: 'grow' }, h('span', { class: 'row-title' }, d.name),
         h('span', { class: 'row-sub' }, [d.brand, `${fmtN(d.kcal)} ${t('unit.kcal')} · ${macroLine(d)} ${t('common.per100')}`].filter(Boolean).join(' · '))),
       h('button', { class: 'icon-btn', type: 'button', 'aria-label': t('add.remove_item', { n: d.name }), onclick: () => { g.ings.splice(i, 1); paint(); } }, icon('close', 18))))) : null;
     return [
       h('div', { class: 'section-label' }, t('add.ingr')),
-      note, ings,
+      h('div', { class: 'mic-wrap' }, note, noteMic), ings,
       h('div', { class: 'ing-actions' },
         h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => pick(camera, g) }, icon('camera', 20), t('add.label')),
         h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => scanIng(g) }, icon('barcode', 20), t('pf.barcode')),

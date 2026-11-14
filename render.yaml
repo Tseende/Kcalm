@@ -53,4 +53,4 @@ services:
       # - key: VISION_PROMPT       # промт распознавания фото; по умолчанию vision, кандидат на замену: vision_v3
       #   value: vision
       - key: MODEL_ASR            # только голос: DeepSeek аудио не принимает
-        value: google/gemini-2.5-flash
+        value: openai/gpt-4o-mini-transcribe

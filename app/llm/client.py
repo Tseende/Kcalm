@@ -286,35 +286,67 @@ async def chat_json(purpose: str, messages: list[dict], model: str | None = None
     return parsed, model_used
 
 
-async def transcribe_ogg(ogg_bytes: bytes, filename: str = "voice.ogg",
-                         model: str = "google/gemini-2.5-flash",
-                         language_hint: str = "ru", user_id: int | None = None,
-                         db: Any = None) -> str:
-    """ASR голосовых: OGG/Opus напрямую, без ffmpeg."""
-    cfg = get_config()
-    check_limit(db, user_id, "asr")
+async def _transcribe_once(cfg, data: bytes, filename: str, mime: str, model: str,
+                           language_hint: str, user_id: int | None, db: Any,
+                           purpose: str) -> str:
+    """Один запрос к /audio/transcriptions с повтором на сетевой сбой; логирует вызов."""
     headers = {"Authorization": f"Bearer {cfg.openrouter_api_key}"}
     start = time.monotonic()
     client = _get_client()
     for attempt in (1, 2):
         try:
-            files = {"file": (filename, ogg_bytes, "audio/ogg")}
-            data = {"model": model, "language": language_hint}
+            files = {"file": (filename, data, mime)}
+            form = {"model": model, "language": language_hint}
             async with _get_sem():
                 resp = await client.post(f"{cfg.openrouter_base_url}/audio/transcriptions",
-                                         headers=headers, files=files, data=data,
+                                         headers=headers, files=files, data=form,
                                          timeout=_timeout(cfg))
             resp.raise_for_status()
-            await _log_call(cfg, user_id, "asr", model, {}, start, True, None, db)
-            return resp.json().get("text", "").strip()
+            body = resp.json()
+            u = body.get("usage") if isinstance(body.get("usage"), dict) else {}
+            usage = {"prompt_tokens": u.get("input_tokens"), "completion_tokens": u.get("output_tokens"),
+                     "cost": u.get("cost")}
+            await _log_call(cfg, user_id, purpose, model, usage, start, True, None, db)
+            return (body.get("text") or "").strip()
         except Exception as e:                      # noqa: BLE001
             if attempt == 1 and _retryable(e):
                 await asyncio.sleep(RETRY_PAUSE_S)
                 continue
-            await _log_call(cfg, user_id, "asr", model, {}, start, False,
+            await _log_call(cfg, user_id, purpose, model, {}, start, False,
                             f"{type(e).__name__}: {e}", db)
             raise LLMError("распознавание голоса не удалось") from e
     raise LLMError("unreachable")
+
+
+async def transcribe_audio(data: bytes, filename: str, mime: str,
+                           model: str = "openai/gpt-4o-mini-transcribe",
+                           language_hint: str = "ru", user_id: int | None = None,
+                           db: Any = None, purpose: str = "asr") -> str:
+    """ASR: аудио напрямую (ogg/webm/mp4/mp3/wav), без ffmpeg. Сбой основной модели
+    (кроме лимита) → один запрос к запасной MODEL_ASR_FALLBACK."""
+    cfg = get_config()
+    check_limit(db, user_id, "asr")
+    try:
+        return await _transcribe_once(cfg, data, filename, mime, model, language_hint,
+                                      user_id, db, purpose)
+    except LLMLimitError:
+        raise
+    except LLMError:
+        fallback = (cfg.model_asr_fallback or "").strip()
+        if not fallback or fallback == model:
+            raise
+        log.warning("ASR: %s не сработала, пробую %s", model, fallback)
+        return await _transcribe_once(cfg, data, filename, mime, fallback, language_hint,
+                                      user_id, db, purpose)
+
+
+async def transcribe_ogg(ogg_bytes: bytes, filename: str = "voice.ogg",
+                         model: str = "openai/gpt-4o-mini-transcribe",
+                         language_hint: str = "ru", user_id: int | None = None,
+                         db: Any = None) -> str:
+    """ASR голосовых Telegram: OGG/Opus (тонкая обёртка над transcribe_audio)."""
+    return await transcribe_audio(ogg_bytes, filename, "audio/ogg", model=model,
+                                  language_hint=language_hint, user_id=user_id, db=db)
 
 
 def cached_tokens(usage: dict) -> int | None:
