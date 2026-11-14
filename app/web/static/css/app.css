@@ -901,6 +901,12 @@ body.kb-open .screen.compose textarea { min-height: 34vh; }
 .capture.cap-menu { background: none; padding: 0; gap: 12px; align-items: stretch; text-align: left; border-radius: 0; }
 .cap-main { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 16px; border: 0; border-radius: var(--r-card); font: inherit; text-align: left; background: var(--c-btn); color: #fff; cursor: pointer; transition: transform .12s; }
 .cap-main:active { transform: scale(.98); }
+.cap-minis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.cap-mini { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-width: 0; min-height: 44px; padding: 12px 4px; border: 0; border-radius: var(--r-card); background: var(--c-card); color: inherit; font: inherit; cursor: pointer; transition: transform .12s; }
+.cap-mini:active { transform: scale(.96); }
+.cap-mini-l { display: block; max-width: 100%; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 359px) { .cap-minis { gap: 6px; } .cap-mini { padding: 10px 2px; } .cap-mini-l { font-size: 12px; letter-spacing: -.01em; } }
+.quick-more { width: 100%; text-align: center; align-self: stretch; }
 .cap-main .cap-ico { flex: none; width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.22); color: #fff; }
 .cap-main .grow { min-width: 0; }
 .cap-label { display: block; font-size: 17px; font-weight: 650; letter-spacing: -.01em; }

@@ -361,7 +361,15 @@ const FREQ = [
   { meal_id: 1, title: L('Овсянка с бананом +1', "Oatmeal with banana +1"), names: [L('Овсянка с бананом', "Oatmeal with banana"), L('Кофе с молоком', "Coffee with milk")], kcal: 410, protein: 16, fat: 11, carbs: 62, count: 9 },
   { meal_id: 2, title: L('Гречка +1', "Buckwheat +1"), names: [L('Гречка', "Buckwheat"), L('Куриная грудка', "Chicken breast")], kcal: 520, protein: 41, fat: 12, carbs: 58, count: 6 },
   { meal_id: 3, title: L('Творог 5%', "Cottage cheese 5%"), names: [L('Творог 5%', "Cottage cheese 5%")], kcal: 180, protein: 30, fat: 5, carbs: 3, count: 4 },
-  { meal_id: 4, title: L('Капучино', "Cappuccino"), names: [L('Капучино', "Cappuccino")], kcal: 98, protein: 5, fat: 5, carbs: 8, count: 3 },
+  { meal_id: 4, title: L('Капучино', "Cappuccino"), names: [L('Капучино', "Cappuccino")], kcal: 98, protein: 5, fat: 5, carbs: 8, count: 3, is_drink: true },
+  { meal_id: 5, title: L('Яичница +1', "Fried eggs +1"), names: [L('Яичница', "Fried eggs"), L('Хлеб', "Bread")], kcal: 360, protein: 20, fat: 24, carbs: 14, count: 5 },
+  { meal_id: 6, title: L('Салат с курицей', "Chicken salad"), names: [L('Салат с курицей', "Chicken salad")], kcal: 290, protein: 28, fat: 14, carbs: 8, count: 4 },
+  { meal_id: 7, title: L('Паста болоньезе', "Pasta bolognese"), names: [L('Паста болоньезе', "Pasta bolognese")], kcal: 610, protein: 28, fat: 20, carbs: 80, count: 3 },
+  { meal_id: 8, title: L('Йогурт', "Yogurt"), names: [L('Йогурт', "Yogurt")], kcal: 120, protein: 6, fat: 3, carbs: 16, count: 3 },
+  { meal_id: 9, title: L('Яблоко', "Apple"), names: [L('Яблоко', "Apple")], kcal: 80, protein: 0, fat: 0, carbs: 19, count: 2 },
+  { meal_id: 10, title: L('Апельсиновый сок', "Orange juice"), names: [L('Апельсиновый сок', "Orange juice")], kcal: 110, protein: 1, fat: 0, carbs: 26, count: 2, is_drink: true },
+  { meal_id: 11, title: L('Сырники', "Syrniki"), names: [L('Сырники', "Syrniki")], kcal: 340, protein: 22, fat: 14, carbs: 30, count: 2 },
+  { meal_id: 12, title: L('Борщ', "Borscht"), names: [L('Борщ', "Borscht")], kcal: 230, protein: 9, fat: 9, carbs: 26, count: 2 },
 ];
 function favList() {
   const starred = FREQ.filter((f) => mockFavs[f.meal_id]).map((f) => ({ ...f, id: mockFavs[f.meal_id], note: null, photo_url: null }));
@@ -606,8 +614,8 @@ const routes = [
   }],
   ['POST', /^\/activity$/, (m, q, b) => { const bd = body.get(b.date || todayISO()); if (bd) { if (b.steps) bd.steps = b.steps; if (b.active_kcal) bd.active_kcal = b.active_kcal; } return { ok: true }; }],
   ['GET', /^\/frequent$/, () => ({ items: [
-    ...favList().map((f) => ({ meal_id: f.meal_id, favorite_id: f.id, title: f.title, names: f.names, kcal: f.kcal, count: 0, photo_url: f.photo_url || null })),
-    ...FREQ.filter((f) => !mockFavs[f.meal_id]).map((f) => ({ meal_id: f.meal_id, favorite_id: null, title: f.title, names: f.names, kcal: f.kcal, count: f.count }))] })],
+    ...favList().map((f) => ({ meal_id: f.meal_id, favorite_id: f.id, title: f.title, names: f.names, kcal: f.kcal, count: 0, photo_url: f.photo_url || null, is_drink: !!f.is_drink })),
+    ...FREQ.filter((f) => !mockFavs[f.meal_id]).map((f) => ({ meal_id: f.meal_id, favorite_id: null, title: f.title, names: f.names, kcal: f.kcal, count: f.count, is_drink: !!f.is_drink }))] })],
   ['GET', /^\/favorites$/, () => ({ items: favList() })],
   ['GET', /^\/favorites\/(\d+)$/, (m) => { const f = favList().find((x) => x.id === +m[1]); if (!f) throw notFound(); return f; }],
   ['POST', /^\/favorites\/custom$/, (m, q, b) => {

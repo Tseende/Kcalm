@@ -11,6 +11,7 @@ import { pickDrink, drinkEntry } from '../drink_picker.js';
 import { t, tn } from '../i18n.js';
 
 const MAX = 6;
+const QUICK_SHOWN = 5;
 
 export default async function render(root, ctx) {
   const view = h('div', { class: 'screen' });
@@ -49,9 +50,11 @@ export default async function render(root, ctx) {
   // «Мои блюда» и «Частые»: один тап записывает приём заново, звезда добавляет/убирает из своих блюд.
   async function loadQuick() {
     let items = [];
-    try { items = (await api.get('/frequent', { limit: 20 })).items || []; } catch (e) { return; }
+    try { items = (await api.get('/frequent', { limit: 60 })).items || []; } catch (e) { return; }
     if (!ctx.alive()) return;
     let starBusy = false;
+    let quickTab = null;
+    let quickExpanded = false;
     quickVisibility = () => { quick.hidden = !items.length || allPhotos().length > 0 || !!textTa.value.trim() || prods.length > 0; };
     const pic = (f) => foodPic(f.title, 40) || foodPic((f.names || [])[0] || '', 40) || mealPic('snack', 40);
     const quickRow = (f) => {
@@ -98,7 +101,34 @@ export default async function render(root, ctx) {
     const section = (title, list) => (list.length ? [sectionTitle(title), h('div', { class: 'list tiles prod-list quick-list' }, list.map(quickRow))] : null);
     const paintQuick = () => {
       quickVisibility();
-      quick.replaceChildren(...[section(t('fav.title'), items.filter((f) => f.favorite_id)), section(t('add.frequent'), items.filter((f) => !f.favorite_id))].flat().filter(Boolean));
+      const tabs = [
+        ['freq', t('add.frequent'), items.filter((f) => !f.is_drink && !f.favorite_id)],
+        ['mine', t('fav.title'), items.filter((f) => !f.is_drink && f.favorite_id)],
+        ['drinks', t('add.drinks'), items.filter((f) => f.is_drink)],
+      ].filter((x) => x[2].length);
+      if (!tabs.length) { quick.replaceChildren(); return; }
+      if (!tabs.some((x) => x[0] === quickTab)) {
+        let saved = null;
+        try { saved = localStorage.getItem('addmeal_quick_tab'); } catch (e) { /* ignore */ }
+        quickTab = (tabs.find((x) => x[0] === saved) || tabs[0])[0];
+      }
+      const cur = tabs.find((x) => x[0] === quickTab);
+      const chips = tabs.length > 1 ? h('div', { class: 'chips scroll', role: 'tablist', 'aria-label': t('add.frequent') },
+        tabs.map(([key, label, list]) => h('button', {
+          type: 'button', role: 'tab', class: 'chip' + (key === quickTab ? ' active' : ''), 'aria-selected': String(key === quickTab),
+          onclick: () => {
+            if (key === quickTab) return;
+            quickTab = key; quickExpanded = false;
+            try { localStorage.setItem('addmeal_quick_tab', key); } catch (e) { /* ignore */ }
+            haptic('selection');
+            paintQuick();
+          },
+        }, `${label} ${list.length}`))) : sectionTitle(cur[1]);
+      const list = cur[2];
+      const shown = quickExpanded ? list : list.slice(0, QUICK_SHOWN);
+      quick.replaceChildren(...[chips,
+        h('div', { class: 'list tiles prod-list quick-list' }, shown.map(quickRow)),
+        list.length > shown.length ? h('button', { class: 'an-more quick-more', type: 'button', onclick: () => { quickExpanded = true; paintQuick(); } }, t('add.show_more', { n: list.length - shown.length })) : null].filter(Boolean));
     };
     quickPaint = paintQuick;
     paintQuick();
@@ -407,19 +437,17 @@ export default async function render(root, ctx) {
     capture.className = 'capture' + (has ? ' compact' : ' cap-menu');
     if (!has) {
       target = groups[0];
-      const opt = (ic, color, label, sub, fn) => h('button', { class: 'row', type: 'button', onclick: fn },
-        tile(ic, color),
-        h('span', { class: 'grow' }, h('span', { class: 'row-title' }, label), h('span', { class: 'row-sub' }, sub)),
-        icon('next', 18));
+      const opt = (ic, color, short, full, fn) => h('button', { class: 'cap-mini', type: 'button', 'aria-label': full, onclick: fn },
+        tile(ic, color, 36), h('span', { class: 'cap-mini-l' }, short));
       capture.replaceChildren(
         h('button', { class: 'cap-main', type: 'button', onclick: () => pick(camera, groups[0]) },
           h('span', { class: 'cap-ico' }, icon('camera', 26)),
           h('span', { class: 'grow' }, h('span', { class: 'cap-label' }, t('add.shoot')), h('span', { class: 'cap-sub' }, t('add.cap_sub', { n: MAX })))),
-        h('div', { class: 'list tiles' },
-          opt('image', 'purple', t('add.from_gallery'), t('add.from_gallery_sub'), () => pick(gallery, groups[0])),
-          opt('barcode', 'green', t('add.scan'), t('add.scan_sub'), () => scanIng(null)),
-          opt('package', 'orange', t('add.find_product'), t('add.find_product_sub'), addProd),
-          opt('cup', 'teal', t('add.drink'), t('add.drink_sub'), addDrink)));
+        h('div', { class: 'cap-minis' },
+          opt('image', 'purple', t('add.gallery_short'), t('add.from_gallery'), () => pick(gallery, groups[0])),
+          opt('barcode', 'green', t('add.scan_short'), t('add.scan'), () => scanIng(null)),
+          opt('package', 'orange', t('add.product_short'), t('add.find_product'), addProd),
+          opt('cup', 'teal', t('add.drink_short'), t('add.drink'), addDrink)));
     } else {
       const more = (ic, label, fn) => h('button', { class: 'btn btn-secondary', type: 'button', onclick: fn }, icon(ic, 20), label);
       capture.replaceChildren(

@@ -94,3 +94,13 @@ def test_beer_counts_alcohol_calories():
     assert drinks.calculate(beer, 500).kcal_total == round(beer.kcal_100 * 5, -1) or 200 <= drinks.calculate(beer, 500).kcal_total <= 230
     assert drinks.get("wine").kcal_100 > beer.kcal_100
     assert {"beer", "beer0", "wine", "energy", "smoothie", "shake"} <= set(drinks.BY_ID)
+
+
+def test_is_drink_name_and_meal():
+    for n in ("Капучино", "Капучино, 2 ч. л. сахара", "Апельсиновый сок", "Кола без сахара", "Чай с лимоном", "Вино красное", "Кефир 1%"):
+        assert drinks.is_drink_name(n), n
+    for n in ("Гречка", "Творог 5%", "Кофейный торт", "Чайная ложка сахара", "Овсянка на молоке", ""):
+        assert not drinks.is_drink_name(n), n
+    assert drinks.is_drink_meal(["Капучино", "Сок"])
+    assert not drinks.is_drink_meal(["Капучино", "Круассан"])
+    assert not drinks.is_drink_meal([])

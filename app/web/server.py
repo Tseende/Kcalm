@@ -967,13 +967,15 @@ async def api_frequent(request: web.Request) -> web.Response:
     """Избранные блюда, затем частые за 60 дней: запись в одно нажатие. Разовые блюда не предлагаем."""
     db, user, _ = ctx(request)
     try:
-        limit = max(1, min(30, int(request.query.get("limit", 8))))
+        limit = max(1, min(60, int(request.query.get("limit", 8))))
     except ValueError:
         limit = 8
     today = now_local(user).strftime("%Y-%m-%d")
     favorites = repo.list_favorites(db, user["id"], limit=limit)
     items = [{"meal_id": f["meal_id"], "favorite_id": f["id"], "title": f["title"] or _short_title(f["names"]),
               "names": f["names"], "kcal": int(f["kcal"]), "count": 0,
+              "is_drink": (f.get("category") == "drink"
+                           or (not f.get("category") and drinksdom.is_drink_meal(f["names"]))),
               "photo_url": f"/api/favorites/{f['id']}/photo" if f.get("has_photo") else None} for f in favorites]
     have = {repo.meal_signature(f["names"]) for f in favorites}
     for f in repo.frequent_meals(db, user["id"], limit=limit + len(have), today=today):
@@ -982,7 +984,8 @@ async def api_frequent(request: web.Request) -> web.Response:
         if f["count"] < 2 or repo.meal_signature(f["names"]) in have:
             continue
         items.append({"meal_id": f["meal_id"], "favorite_id": None, "title": _short_title(f["names"]),
-                      "names": f["names"], "kcal": int(f["kcal"]), "count": f["count"]})
+                      "names": f["names"], "kcal": int(f["kcal"]), "count": f["count"],
+                      "is_drink": drinksdom.is_drink_meal(f["names"])})
     return ok({"items": items})
 
 

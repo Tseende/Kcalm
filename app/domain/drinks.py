@@ -7,10 +7,11 @@
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from app.domain.nutrition import CalculatedItem, MealCalculation
-from app.domain.water import hydration_ml
+from app.domain.water import _NOT_A_DRINK, hydration_ml
 
 SUGAR_TSP_G = 5.0                 # чайная ложка сахара без горки
 MAX_SUGAR_TSP = 6
@@ -100,3 +101,26 @@ def calculate(drink: Drink, ml: float, sugar_tsp: int = 0) -> MealCalculation:
     return MealCalculation(
         items=[item], kcal_total=kcal, kcal_low=low, kcal_high=high, protein_g=item.protein_g,
         fat_g=item.fat_g, carbs_g=item.carbs_g, method="db", confidence=0.9)
+
+
+# Названия, по которым позиция считается напитком (каталог + частые слова). Нужно, чтобы
+# разложить «частые» и «мои блюда» по вкладке «Напитки».
+_DRINK_WORDS = re.compile(
+    r"(?<![а-яa-z])(?:сок|сока|соки|соком|кофе|капучино|латте|американо|эспрессо|чай|чая|чаем|"
+    r"вода|воды|воду|водой|морс|морса|компот|компота|кефир|кефира|молоко|молока|смузи|какао|"
+    r"лимонад|газировк\w*|кола|колы|пиво|пива|вино|вина|фанта|энергетик|коктейль|напиток)(?![а-яa-z])")
+_CATALOG_NAMES = tuple(d.name.lower().replace("ё", "е") for d in DRINKS)
+
+
+def is_drink_name(name: str) -> bool:
+    """Название позиции похоже на напиток (каталог напитков или ключевое слово)."""
+    low = (name or "").lower().replace("ё", "е").strip()
+    if not low or _NOT_A_DRINK.search(low):
+        return False
+    return low.startswith(_CATALOG_NAMES) or bool(_DRINK_WORDS.search(low))
+
+
+def is_drink_meal(names: list[str]) -> bool:
+    """Приём целиком из напитков: все позиции — напитки."""
+    names = [n for n in names if n]
+    return bool(names) and all(is_drink_name(n) for n in names)
