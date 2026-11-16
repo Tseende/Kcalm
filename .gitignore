@@ -3,3 +3,8 @@
 data/
 __pycache__/
 .pytest_cache/
+
+# Local GREEN spreadsheet copies (not application data)
+*[Gg][Rr][Ee][Ee][Nn]*.xlsx
+*[Gg][Rr][Ee][Ee][Nn]*.xls
+*[Gg][Rr][Ee][Ee][Nn]*.csv

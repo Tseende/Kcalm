@@ -206,6 +206,7 @@ def delete_all_data(db: sqlite3.Connection, user) -> None:
     root = Path(get_config().photos_dir).resolve()
     with db:
         paths = _photo_paths(db, uid)
+        repo.anonymize_referrals(db, uid, user["tg_id"])
         for sql in ("DELETE FROM favorite_meals WHERE user_id=?", "DELETE FROM dishes WHERE user_id=?",
                     "DELETE FROM recent_files WHERE user_id=?", "DELETE FROM chat_messages WHERE user_id=?",
                     "DELETE FROM llm_calls WHERE user_id=?", "DELETE FROM model_usage_daily WHERE user_id=?",

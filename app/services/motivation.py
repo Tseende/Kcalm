@@ -22,13 +22,14 @@ def _days_word(n: int) -> str:
 
 
 def logging_streak(db: sqlite3.Connection, user_id: int, today: date) -> int:
-    """Сколько дней подряд есть хотя бы одна запись о еде. Сегодня без записи серию не рвёт."""
+    """Сколько дней подряд есть хотя бы одна запись о еде. Сегодня без записи серию не рвёт.
+    День, закрытый заморозкой (streak_freeze_days), считается днём с записью."""
     rows = db.execute(
         """SELECT DISTINCT local_date FROM meals
            WHERE user_id=? AND deleted_at IS NULL AND local_date<=?
            ORDER BY local_date DESC LIMIT 400""",
         (user_id, today.isoformat())).fetchall()
-    have = {r["local_date"] for r in rows}
+    have = {r["local_date"] for r in rows} | repo.frozen_dates(db, user_id, today.isoformat())
     day = today if today.isoformat() in have else today - timedelta(days=1)
     n = 0
     while day.isoformat() in have:

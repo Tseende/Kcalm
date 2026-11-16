@@ -11,6 +11,7 @@ from aiogram.types import CallbackQuery, Message
 
 from app.config import get_config
 from app.llm import client as llm_client
+from app.services import referral
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +43,39 @@ async def notify(event, text: str) -> None:
         log.debug("middleware: не удалось ответить", exc_info=True)
 
 
+def _start_code(event) -> str | None:
+    """Код приглашения из «/start r_<код>» (только в сообщении), иначе None."""
+    text = getattr(event, "text", None)
+    if not isinstance(event, Message) or not text:
+        return None
+    head, _, payload = text.strip().partition(" ")
+    if head.split("@")[0].lower() != "/start":
+        return None
+    return referral.parse_payload(payload)
+
+
+async def _admitted(event, user, data) -> bool:
+    """Пускать ли человека, которого нет в списке: по выданному ранее доступу или по ссылке-приглашению.
+    Если ссылка не сработала (неверная, приглашения кончились), отвечаем здесь, а закрытый тест не показываем."""
+    db = data.get("db") if isinstance(data, dict) else None
+    if db is None:
+        return False
+    if referral.has_access(db, user.id):
+        return True
+    code = _start_code(event)
+    if code is None:
+        return False
+    status = referral.redeem(db, user.id, code, getattr(user, "first_name", None))
+    if status == "granted":
+        return True
+    text = referral.REDEEM_TEXTS.get(status)
+    if text is None:
+        return False
+    if should_notify("referral_fail", user.id, 30):
+        await notify(event, text)
+    return None                                   # ответили сами: дальше не идём
+
+
 class AccessMiddleware(BaseMiddleware):
     def __init__(self, max_per_min: int = 20) -> None:
         self.max_per_min = max_per_min
@@ -52,12 +86,20 @@ class AccessMiddleware(BaseMiddleware):
         if user is None:
             return await handler(event, data)
         if not get_config().is_allowed(user.id):
+            admitted = await _admitted(event, user, data)
+            if admitted is None:
+                return
+            if admitted:
+                return await self._pass(handler, event, data, user)
             log.info("whitelist: %s отклонён", user.id)
             if should_notify("closed", user.id):
                 await notify(event, CLOSED_TEST_TEXT.format(id=user.id))
             elif isinstance(event, CallbackQuery):
                 await _quiet_answer(event)
             return
+        return await self._pass(handler, event, data, user)
+
+    async def _pass(self, handler, event, data, user):
         now = time.monotonic()
         dq = self._hits[user.id]
         while dq and now - dq[0] > 60:

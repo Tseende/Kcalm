@@ -23,6 +23,7 @@ def _db():
     db = sqlite3.connect(":memory:")
     db.row_factory = sqlite3.Row
     db.execute("CREATE TABLE meals (user_id INT, local_date TEXT, deleted_at TEXT)")
+    db.execute("CREATE TABLE streak_freeze_days (user_id INT, local_date TEXT)")
     return db
 
 

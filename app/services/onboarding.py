@@ -11,6 +11,7 @@ from datetime import timedelta
 
 from app.domain.targets import MAX_RATE, MIN_AGE, MIN_BMI, bmi, compute_target, min_goal_weight
 from app.services import profile as profilesvc
+from app.services import referral as referralsvc
 from app.services import water as watersvc
 from app.storage import repo
 from app.timeutils import local_today, minutes_before
@@ -112,6 +113,9 @@ def complete(db: sqlite3.Connection, tg_id: int, data: dict, *, log_weight: bool
             enabled = False                              # осторожный режим: без напоминаний о весе
         repo.set_reminder(db, uid, kind, local_time, enabled)
     repo.set_reminder(db, uid, "kitchen_close", minutes_before(cutoff, 15), True)
+
+    if referralsvc.on_onboarded(db, tg_id, uid):         # пришёл по приглашению: заморозка серии в подарок
+        notes.append(referralsvc.BONUS_NOTE)
 
     fresh = repo.get_user_by_tg(db, tg_id)
     goal_date = None

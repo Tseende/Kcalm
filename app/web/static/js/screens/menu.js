@@ -104,6 +104,7 @@ export default async function render(root, ctx) {
         item('package', 'orange', t('menu.products'), t('menu.products_sub'), '/menu/products'),
         item('soup', 'teal', t('menu.dishes'), t('menu.dishes_sub'), '/menu/dishes')),
       h('div', { class: 'list tiles' },
+        item('star', 'purple', t('ref.title'), t('ref.subtitle'), '/menu/referral'),
         themeRow(),
         item('file-export', 'green', t('menu.data'), t('menu.data_sub'), '/menu/export'),
         item('help-circle', 'blue', t('menu.help'), t('menu.help_sub'), '/menu/help'))].filter(Boolean);

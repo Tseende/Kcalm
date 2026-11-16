@@ -1,5 +1,27 @@
 // English UI dictionary. Keys mirror ru.js.
 export default {
+  "ref.title": "Invite a friend",
+  "ref.subtitle": "Invites and streak freezes",
+  "ref.invites": "Invites left: {n}",
+  "ref.freezes": "Streak freezes: {n}",
+  "ref.streak": "Streak days: {n}",
+  "ref.rules": "Your friend gets access and a freeze after setup. When they log food on 3 different days in their first 7 calendar days, you get a freeze and another invite. Rewards are limited to 10 friends.",
+  "ref.freeze_note": "A freeze automatically covers one missed day when you next log food today. Two missed days in a row break the streak.",
+  "ref.share": "Share invite",
+  "ref.share_text": "I use this bot as a food diary. Join through my link.",
+  "ref.copy": "Copy link",
+  "ref.copied": "Link copied",
+  "ref.copy_failed": "Could not copy. Select and copy the link.",
+  "ref.exhausted": "No invites left. You get another when an invited friend activates, if you have not reached the reward limit.",
+  "ref.unavailable": "Could not get your link. Try refreshing later.",
+  "ref.friends": "Invited friends",
+  "ref.empty": "Nobody yet. Send your link to a friend.",
+  "ref.friend": "Friend",
+  "ref.joined": "Opened bot",
+  "ref.onboarded": "Completed setup",
+  "ref.activated": "Activated",
+  "ref.cap": "Friend rewards remaining: {n}",
+
   // add
   "add.meal": "Meal",
   "add.meal_sub": "A photo of your plate or a text description",
@@ -356,6 +378,7 @@ export default {
   "forms.v_any": "Fill in at least one field",
   "forms.act_saved": "Activity saved",
   // grp
+  "grp.snacks": "Snacks",
   "grp.dairy": "Dairy & eggs",
   "grp.meat": "Meat & sausages",
   "grp.fish": "Fish & seafood",

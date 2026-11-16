@@ -22,6 +22,7 @@ const routes = [
   R('/menu/dishes', () => import('./screens/dishes.js'), { parent: '/menu' }),
   R('/menu/dish/(new|\\d+)', () => import('./screens/dish.js'), { keys: ['id'], parent: '/menu/dishes' }),
   R('/menu/profile', () => import('./screens/profile.js'), { parent: '/menu' }),
+  R('/menu/referral', () => import('./screens/referral.js'), { parent: '/menu' }),
   R('/menu/reminders', () => import('./screens/reminders.js'), { parent: '/menu' }),
   R('/menu/favorites', () => import('./screens/favorites.js'), { parent: '/menu' }),
   R('/menu/favorite/(new|\\d+)', () => import('./screens/favorite.js'), { keys: ['id'], parent: '/menu/favorites' }),

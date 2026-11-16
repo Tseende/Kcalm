@@ -19,6 +19,7 @@ from app.middleware import AccessMiddleware, notify, should_notify
 from app.routers import (commands, craving, dishes, intake, menu, onboarding, products, reports,
                          support, tracking)
 from app.scheduler import build_scheduler
+from app.services import referral
 from app.web.server import WEBHOOK_PATH, start_web
 from app.widgets import runtime as widgets_runtime
 from app.widgets.dispatcher import WidgetDispatcher
@@ -112,6 +113,7 @@ async def main() -> None:
     bot.session.middleware(rich.RichMiddleware())
     dp = create_dispatcher(db)
     widgets_runtime.setup(bot, db, cfg)       # карточка дня и пауза; выключатель WIDGETS_ENABLED
+    referral.install(referral.bot_notifier(bot, asyncio.get_running_loop()))   # награды и заморозки серии
 
     try:                                   # сбой Telegram при старте не должен ронять бота
         await bot.set_my_commands(BOT_COMMANDS)
@@ -163,6 +165,7 @@ async def main() -> None:
         if web_runner:
             await web_runner.cleanup()
         widgets_runtime.teardown()
+        referral.uninstall()
         sched.shutdown(wait=False)
         db.close()
         await bot.session.close()

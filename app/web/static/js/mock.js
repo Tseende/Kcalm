@@ -415,6 +415,7 @@ function mockOnboarding(b) {
 }
 
 const routes = [
+  ['GET', /^\/referral$/, () => ({ link: 'https://t.me/example_bot?start=r_demo2345', invites_left: 2, freezes: 1, streak: 4, rewards_cap_left: 9, invited: [{name: L('Аня', 'Anna'), status: 'activated'}] })],
   ['GET', /^\/me$/, () => onbPending ? { onboarded: false, user: { first_name: L('Аня', "Anna") } } : ({
     onboarded: true,
     user: { tg_id: 1, first_name: L('Жан', "Jean"), sex: 'm', height_cm: 178, goal_weight_kg: 76, tz: 'Europe/Moscow', eating_cutoff: '21:00' },

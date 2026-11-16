@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from aiogram import Router
 from aiogram.filters import Command, CommandObject
-from aiogram.types import BufferedInputFile, Message
+from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup, LinkPreviewOptions, Message
 
 from app import rich
 from app.domain import analytics, body, water, weighin
@@ -20,7 +20,7 @@ from app.services.craving import week_lines as craving_week_lines
 from app.domain.targets import (INTAKE_COVERAGE, MIN_AGE, MIN_BMI, adaptive_tdee, bmi,
                                 compute_target, ewma_dated, kcal_floor_check, pal_from_pa,
                                 value_at_or_before, weekly_slope)
-from app.services import report
+from app.services import referral, report
 from app.services.food import meal_type_ru
 from app.storage import repo
 from app.textutil import esc
@@ -59,6 +59,34 @@ async def cmd_today(msg: Message, db: sqlite3.Connection) -> None:
     chart = await report.day_chart_bytes(db, user, today)
     await rich.answer(msg, report.day_doc(db, user, today, chart=chart),
                       reply_markup=report.actions_kb("today"))
+
+
+@router.message(Command("invite"))
+async def cmd_invite(msg: Message, db: sqlite3.Connection) -> None:
+    """Ссылка-приглашение, остаток приглашений и заморозок. Команда не в списке BOT_COMMANDS: основной вход в меню приложения."""
+    user = _user(msg, db)
+    if not user or not user["onboarded"]:
+        await msg.answer("Сначала настрой профиль: /start")
+        return
+    info = referral.summary(db, user, await referral.bot_username(msg.bot))
+    link = info["link"]
+    if not link:
+        await msg.answer("Не получилось собрать ссылку, попробуй чуть позже.")
+        return
+    left = info["invites_left"]
+    lines = [f"Твоя ссылка-приглашение:\n{esc(link)}", "",
+             f"Приглашений осталось: {left}", f"Заморозок серии: {info['freezes']}", "",
+             "Друг получит доступ и заморозку серии в подарок. Когда он освоится за первую неделю "
+             "и запишет еду в три разных дня, ты получишь заморозку и ещё одно приглашение. "
+             "Заморозка закрывает один пропущенный день, и серия не прерывается."]
+    if left <= 0:
+        lines.insert(4, "Приглашения закончились, новые появятся, когда друзья освоятся.")
+    kb = None
+    if left > 0:
+        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
+            text="Поделиться", url=referral.share_url(link))]])
+    await msg.answer("\n".join(lines), reply_markup=kb,
+                     link_preview_options=LinkPreviewOptions(is_disabled=True))
 
 
 @router.message(Command("weighin"))

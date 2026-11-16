@@ -350,6 +350,31 @@ def day_changed(user_id: int) -> None:
         pass
 
 
+# Второй подписчик: «человек записал приём пищи» (рефералы: активация друга, заморозка серии).
+# app.services.referral.install() подставляет сюда функцию (conn, user_id, local_date). Без неё — пусто.
+_meal_listener = None
+
+
+def set_meal_listener(fn) -> None:
+    global _meal_listener
+    _meal_listener = fn
+
+
+def meal_saved(conn: sqlite3.Connection, user_id: int, local_date: str) -> None:
+    fn = _meal_listener
+    if fn is None:
+        return
+    try:
+        fn(conn, user_id, local_date)
+    except Exception:  # noqa: BLE001 — запись еды важнее бонусов
+        import logging
+        logging.getLogger(__name__).warning("meal listener упал", exc_info=True)
+        try:
+            conn.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def _insert_item(conn: sqlite3.Connection, meal_id: int, it) -> int:
     snapshot = json.dumps({
         "kcal": it.kcal, "protein": it.protein_g, "fat": it.fat_g,
@@ -382,9 +407,10 @@ def save_meal(conn: sqlite3.Connection, user_id: int, eaten_utc: str, local_date
               local_time: str, meal_type: str, source: str, calc: MealCalculation,
               photo_path: str | None = None, transcript: str | None = None,
               photo_paths: list[str] | None = None,
-              dish_ids: list[int | None] | None = None) -> int:
+              dish_ids: list[int | None] | None = None, notify: bool = True) -> int:
     """photo_paths — все фото приёма по порядку (альбом); photo_path остаётся первым.
-    dish_ids — посуда каждого фото (того же порядка), None — без посуды."""
+    dish_ids — посуда каждого фото (того же порядка), None — без посуды.
+    notify=False: служебная запись (образец избранного), рефералы и заморозки её не видят."""
     paths = [p for p in (photo_paths or ([photo_path] if photo_path else [])) if p]
     photo_path = photo_path or (paths[0] if paths else None)
     cur = conn.execute(
@@ -401,6 +427,8 @@ def save_meal(conn: sqlite3.Connection, user_id: int, eaten_utc: str, local_date
     add_meal_photos(conn, meal_id, paths, dish_ids=dish_ids, commit=False)
     sync_meal_water(conn, meal_id)
     conn.commit()
+    if notify:
+        meal_saved(conn, user_id, local_date)
     return meal_id
 
 
@@ -475,6 +503,7 @@ def repeat_meal(conn: sqlite3.Connection, user_id: int, meal_id: int, eaten_utc:
                      (factor, factor, new_id))
     sync_meal_water(conn, new_id)
     conn.commit()
+    meal_saved(conn, user_id, local_date)
     return new_id
 
 
@@ -578,7 +607,7 @@ def _hidden_meal(conn: sqlite3.Connection, user_id: int, calc: MealCalculation,
     """Образец избранного: обычная запись приёма, но убранная из дневника (deleted_at)."""
     now = utcnow_iso()
     meal_id = save_meal(conn, user_id, now, now[:10], now[11:16], "snack", "manual", calc,
-                        photo_paths=photo_paths or None)
+                        photo_paths=photo_paths or None, notify=False)
     conn.execute("UPDATE meals SET deleted_at=? WHERE id=?", (now, meal_id))
     sync_meal_water(conn, meal_id)
     conn.commit()
@@ -1746,3 +1775,150 @@ def clear_weekly_goal(conn: sqlite3.Connection, user_id: int, week_start: str) -
     conn.execute("DELETE FROM weekly_goals WHERE user_id=? AND week_start=?",
                  (user_id, week_start))
     conn.commit()
+
+
+# ------------------------------------------------------------------ рефералы и заморозки серии
+
+def user_by_ref_code(conn: sqlite3.Connection, code: str) -> sqlite3.Row | None:
+    return conn.execute("SELECT * FROM users WHERE ref_code = ?", (code,)).fetchone()
+
+
+def set_ref_code(conn: sqlite3.Connection, user_id: int, code: str) -> bool:
+    """Записать код, если у человека его ещё нет. False — код занят другим или уже есть свой."""
+    try:
+        cur = conn.execute("UPDATE users SET ref_code = ? WHERE id = ? AND ref_code IS NULL", (code, user_id))
+        conn.commit()
+    except sqlite3.IntegrityError:
+        conn.rollback()
+        return False
+    except Exception as exc:  # noqa: BLE001 — libsql бросает ValueError с текстом UNIQUE
+        if "UNIQUE" not in str(exc).upper():
+            raise
+        conn.rollback()
+        return False
+    return cur.rowcount == 1
+
+
+def has_access_grant(conn: sqlite3.Connection, tg_id: int) -> bool:
+    return conn.execute("SELECT 1 FROM access_grants WHERE tg_id = ?", (tg_id,)).fetchone() is not None
+
+
+def redeem_referral(conn: sqlite3.Connection, inviter_id: int, tg_id: int, name: str | None) -> bool:
+    """Одной транзакцией: приглашение −1, доступ, запись referral. False — приглашений нет или человек уже учтён."""
+    try:
+        if conn.execute("SELECT 1 FROM referrals WHERE invitee_tg_id = ?", (tg_id,)).fetchone():
+            return False
+        cur = conn.execute("UPDATE users SET invites_left = invites_left - 1 WHERE id = ? AND invites_left > 0",
+                           (inviter_id,))
+        if cur.rowcount != 1:
+            conn.rollback()
+            return False
+        conn.execute("INSERT OR IGNORE INTO access_grants (tg_id, inviter_user_id) VALUES (?, ?)", (tg_id, inviter_id))
+        conn.execute("INSERT INTO referrals (inviter_user_id, invitee_tg_id, invitee_name) VALUES (?,?,?)",
+                     (inviter_id, tg_id, (name or "").strip()[:64] or None))
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+
+
+def referral_of_invitee_tg(conn: sqlite3.Connection, tg_id: int) -> sqlite3.Row | None:
+    return conn.execute("SELECT * FROM referrals WHERE invitee_tg_id = ?", (tg_id,)).fetchone()
+
+
+def referral_of_invitee_user(conn: sqlite3.Connection, user_id: int) -> sqlite3.Row | None:
+    return conn.execute("SELECT * FROM referrals WHERE invitee_user_id = ?", (user_id,)).fetchone()
+
+
+def list_referrals(conn: sqlite3.Connection, inviter_id: int) -> list[sqlite3.Row]:
+    return conn.execute("SELECT * FROM referrals WHERE inviter_user_id = ? ORDER BY id", (inviter_id,)).fetchall()
+
+
+def rewarded_referrals(conn: sqlite3.Connection, inviter_id: int) -> int:
+    return conn.execute("SELECT COUNT(*) FROM referrals WHERE inviter_user_id = ? AND rewarded_at IS NOT NULL",
+                        (inviter_id,)).fetchone()[0]
+
+
+def mark_referral_onboarded(conn: sqlite3.Connection, referral_id: int, invitee_user_id: int,
+                            inviter_id: int | None, now: str) -> bool:
+    """Друг завершил онбординг: связываем с users. False — уже отмечено."""
+    cur = conn.execute("UPDATE referrals SET invitee_user_id = ?, onboarded_at = ? "
+                       "WHERE id = ? AND onboarded_at IS NULL", (invitee_user_id, now, referral_id))
+    if cur.rowcount != 1:
+        conn.rollback()
+        return False
+    conn.execute("UPDATE users SET invited_by = ? WHERE id = ?", (inviter_id, invitee_user_id))
+    return True
+
+
+def mark_referral_activated(conn: sqlite3.Connection, referral_id: int, now: str) -> bool:
+    """Без commit: отметка и награды фиксируются одной транзакцией вызывающим кодом."""
+    cur = conn.execute("UPDATE referrals SET activated_at = ? WHERE id = ? AND activated_at IS NULL",
+                       (now, referral_id))
+    return cur.rowcount == 1
+
+
+def meal_days_between(conn: sqlite3.Connection, user_id: int, first: str, last: str) -> int:
+    """Сколько разных дат с приёмом пищи в [first, last] (включительно)."""
+    return conn.execute(
+        """SELECT COUNT(DISTINCT local_date) FROM meals
+           WHERE user_id = ? AND deleted_at IS NULL AND local_date >= ? AND local_date <= ?""",
+        (user_id, first, last)).fetchone()[0]
+
+
+def add_reward(conn: sqlite3.Connection, user_id: int, kind: str, amount: int, reason: str,
+               referral_id: int | None = None) -> None:
+    """Начислить (или списать, amount < 0) заморозки / приглашения и записать в журнал. Без commit."""
+    column = {"freeze": "streak_freezes", "invite": "invites_left"}[kind]
+    conn.execute(f"UPDATE users SET {column} = MAX(0, {column} + ?) WHERE id = ?", (amount, user_id))
+    conn.execute("INSERT INTO reward_log (user_id, kind, amount, reason, referral_id) VALUES (?,?,?,?,?)",
+                 (user_id, kind, amount, reason, referral_id))
+
+
+def mark_referral_rewarded(conn: sqlite3.Connection, referral_id: int, now: str) -> None:
+    conn.execute("UPDATE referrals SET rewarded_at = ? WHERE id = ?", (now, referral_id))
+
+
+def frozen_dates(conn: sqlite3.Connection, user_id: int, last: str, limit: int = 400) -> set[str]:
+    rows = conn.execute("SELECT local_date FROM streak_freeze_days WHERE user_id = ? AND local_date <= ? "
+                        "ORDER BY local_date DESC LIMIT ?", (user_id, last, limit)).fetchall()
+    return {r["local_date"] for r in rows}
+
+
+def day_has_record(conn: sqlite3.Connection, user_id: int, local_date: str) -> bool:
+    """В этот день была запись о еде или он закрыт заморозкой."""
+    return conn.execute(
+        """SELECT 1 FROM meals WHERE user_id = ? AND local_date = ? AND deleted_at IS NULL
+           UNION ALL SELECT 1 FROM streak_freeze_days WHERE user_id = ? AND local_date = ? LIMIT 1""",
+        (user_id, local_date, user_id, local_date)).fetchone() is not None
+
+
+def spend_freeze(conn: sqlite3.Connection, user_id: int, local_date: str) -> bool:
+    """Закрыть день заморозкой: день в таблицу, заморозка −1, строка в журнал. False — заморозок нет."""
+    cur = conn.execute("UPDATE users SET streak_freezes = streak_freezes - 1 WHERE id = ? AND streak_freezes > 0",
+                       (user_id,))
+    if cur.rowcount != 1:
+        conn.rollback()
+        return False
+    inserted = conn.execute("INSERT OR IGNORE INTO streak_freeze_days (user_id, local_date) VALUES (?, ?)", (user_id, local_date))
+    if inserted.rowcount != 1:
+        conn.rollback()
+        return False
+    conn.execute("INSERT INTO reward_log (user_id, kind, amount, reason) VALUES (?, 'freeze', -1, 'streak_saved')",
+                 (user_id,))
+    conn.commit()
+    return True
+
+
+def anonymize_referrals(conn: sqlite3.Connection, user_id: int, tg_id: int) -> None:
+    """Удаление данных человека: его строка-приглашение обезличивается (счётчики пригласившего целы),
+    а выданный по приглашению доступ снимается. Без commit: вызывается внутри транзакции удаления."""
+    conn.execute("UPDATE referrals SET invitee_tg_id = -id, invitee_user_id = NULL, invitee_name = NULL "
+                 "WHERE invitee_user_id = ? OR invitee_tg_id = ?", (user_id, tg_id))
+    conn.execute("DELETE FROM access_grants WHERE tg_id = ?", (tg_id,))
+    conn.execute("DELETE FROM reward_log WHERE user_id = ?", (user_id,))
+    conn.execute("DELETE FROM streak_freeze_days WHERE user_id = ?", (user_id,))
+    conn.execute("UPDATE users SET invited_by = NULL WHERE invited_by = ?", (user_id,))
+    conn.execute("UPDATE referrals SET inviter_user_id = NULL WHERE inviter_user_id = ?", (user_id,))
+    conn.execute("UPDATE access_grants SET inviter_user_id = NULL WHERE inviter_user_id = ?", (user_id,))

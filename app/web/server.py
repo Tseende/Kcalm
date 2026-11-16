@@ -33,6 +33,7 @@ from app.services import food as foodsvc
 from app.services import meals as meals_svc
 from app.services import onboarding as onboardingsvc
 from app.services import profile as profilesvc
+from app.services import referral
 from app.services import reminders as remsvc
 from app.services import screens as screens_svc
 from app.services import water as watersvc
@@ -148,6 +149,22 @@ def whitelisted(config: Config, tg_id: int) -> bool:
     return config.is_allowed(tg_id)
 
 
+def admit_by_invite(db, config: Config, tg_id: int, first_name: str, start_param) -> None:
+    """Доступ по приглашению для Mini App; иначе ApiError 401 not_allowed (текст берётся из ответа)."""
+    if repo.has_access_grant(db, tg_id):
+        return
+    code = referral.parse_payload(start_param if isinstance(start_param, str) else None)
+    if code:
+        status = referral.redeem(db, tg_id, code, first_name, config)
+        if status == "granted":
+            return
+        if status in referral.REDEEM_TEXTS:
+            raise ApiError(401, "not_allowed", referral.REDEEM_TEXTS[status])
+    log.info("web: whitelist: %s отклонён", tg_id)
+    # 401, а не 403: экран блокировки в приложении привязан к 401, а текст берётся из ответа
+    raise ApiError(401, "not_allowed", "Доступ к тесту пока закрыт.")
+
+
 def _unauthorized() -> ApiError:
     return ApiError(401, "unauthorized", "Откройте приложение из Telegram, чтобы войти.")
 
@@ -175,9 +192,8 @@ async def auth_middleware(request: web.Request, handler):
         tg_id = data["user"]["id"]
         first_name = str(data["user"].get("first_name") or "")
         if not whitelisted(config, tg_id):
-            log.info("web: whitelist: %s отклонён", tg_id)
-            # 401, а не 403: экран блокировки в приложении привязан к 401, а текст берётся из ответа
-            raise ApiError(401, "not_allowed", "Доступ к тесту пока закрыт.")
+            # не из списка: пускаем, если доступ выдан по приглашению раньше или start_param=r_<код> даёт его сейчас
+            admit_by_invite(db, config, tg_id, first_name, data.get("start_param"))
     elif dev_allowed(request.remote, request.headers, config):
         tg_id, first_name = config.web_dev_tg_id, "Dev"
     else:
@@ -632,6 +648,14 @@ async def _announce_profile_ready(request: web.Request, result: dict, care: bool
         await bot.send_message(request["tg_id"], f"{head} {tail}", reply_markup=menu.main_kb())
     except Exception:                                        # noqa: BLE001
         log.warning("не удалось отправить сообщение о готовности профиля", exc_info=True)
+
+
+@routes.get("/api/referral")
+async def api_referral(request: web.Request) -> web.Response:
+    """Экран «Пригласить друга»: ссылка, остаток приглашений, заморозки, серия, список приглашённых."""
+    db, user, _ = ctx(request)
+    username = await referral.bot_username(request.app[BOT])
+    return ok(referral.summary(db, user, username))
 
 
 @routes.delete("/api/me")

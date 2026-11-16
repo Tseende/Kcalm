@@ -15,6 +15,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from app.config import get_config
 from app.domain.targets import MIN_AGE
 from app.routers import menu
+from app.services import referral
 from app.services.onboarding import CARE_NOTE, HEALTH_NOTE, UNDERAGE_TEXT, complete
 from app.storage import repo
 from app.timeutils import local_today, validate_hhmm, validate_timezone
@@ -185,24 +186,25 @@ async def start(msg: Message, state: FSMContext, db: sqlite3.Connection) -> None
         )
         return
     url = get_config().webapp_url
+    invited = referral.welcome_line(db, msg.from_user.id)       # пришёл по ссылке друга: одна строка про приглашение
     if url:
         # новому человеку сначала предлагаем настройку в приложении; чат остаётся запасным путём
         await state.clear()
-        await msg.answer(WELCOME_TEXT, reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+        await msg.answer(WELCOME_TEXT + (f"\n\n{invited}" if invited else ""), reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="✨ Настроить за минуту", web_app=WebAppInfo(url=url))],
             [InlineKeyboardButton(text="Ответить в чате", callback_data=CHAT_FLOW_CB)],
         ]))
         return
-    await _begin_chat_flow(msg, state)
+    await _begin_chat_flow(msg, state, invited)
 
 
-async def _begin_chat_flow(msg: Message, state: FSMContext) -> None:
+async def _begin_chat_flow(msg: Message, state: FSMContext, invited: str | None = None) -> None:
     await state.set_state(Onboard.q)
     await state.update_data(qi=0, answers={})
     await msg.answer(
         "Привет! Это дневник питания и здоровья. Это не медицинский сервис, "
         "все оценки приблизительные. Настрою профиль — 8 коротких вопросов, "
-        "необязательные можно взять дефолтом словом «ок».\n\n" + QUESTIONS[0][1]
+        "необязательные можно взять дефолтом словом «ок».\n\n" + (f"{invited}\n\n" if invited else "") + QUESTIONS[0][1]
     )
 
 
