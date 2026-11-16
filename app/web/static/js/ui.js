@@ -318,9 +318,11 @@ function showKbBar() {
   }, t('kb.hide'));
   kbBar.replaceChildren(kbHide, kbBtn);
   kbBar.hidden = false;
+  document.body.classList.add('has-kbbar');
   paintKbBtn();
 }
 function hideKbBar() {
+  document.body.classList.remove('has-kbbar');
   if (kbBar) { kbBar.hidden = true; kbBar.replaceChildren(); }
   kbBtn = null;
 }

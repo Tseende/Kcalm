@@ -416,16 +416,16 @@ input[type=text], input[type=number], input[type=time], input[type=search], inpu
 .card.mini:active, .row-btn:active { transform: none; }
 
 /* ---------- экранная клавиатура ---------- */
-:root { --kb-h: 0px; }
+:root { --kb-h: 0px; --kb-visible-h: 100vh; }
 body.kb-open .tabbar, body.kb-open .mainbar { display: none; }
 body.kb-open { --safe-b: 0px; padding-bottom: calc(var(--kb-h) + 24px); }
 body.kb-open.has-tabbar, body.kb-open.has-main { padding-bottom: calc(var(--kb-h) + 24px); }
 /* главная кнопка над клавиатурой: «Сохранить» всегда под рукой */
 .kbbar { position: fixed; left: 0; right: 0; bottom: var(--kb-h); z-index: 26; box-sizing: border-box; height: 68px; padding: 10px 16px; background: var(--c-bg); border-top: 1px solid var(--card-edge); }
 .kbbar[hidden] { display: none; }
-body.kb-open.has-main, body.kb-open.has-main.has-tabbar { padding-bottom: calc(var(--kb-h) + 92px); }
+body.kb-open.has-main, body.kb-open.has-kbbar { padding-bottom: calc(var(--kb-h) + 92px); }
 body.kb-open .sheet-wrap { padding-bottom: var(--kb-h); }
-body.kb-open .sheet { max-height: calc(92vh - var(--kb-h)); max-height: calc(min(92vh, var(--tg-viewport-stable-height, 100vh) * .92) - var(--kb-h)); }
+body.kb-open .sheet { max-height: max(80px, calc(var(--kb-visible-h) - 16px)); }
 body.sheet-open { overflow: hidden; }
 /* поля не должны уезжать под липкую шапку и нижние панели при прокрутке к ним */
 input, textarea, select { scroll-margin-top: calc(var(--safe-t) + 70px); scroll-margin-bottom: 90px; }
@@ -887,9 +887,6 @@ input.time-in[type="time"] { width: 104px; flex: none; min-height: 36px; padding
 .fav-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .fav-photo.ph { height: 110px; }
 
-/* ввод словами: поле наверху, остальное убрано (только когда открыта клавиатура) */
-body.kb-open .ck-hide { display: none !important; }
-body.kb-open .screen.compose textarea { min-height: 34vh; }
 .scan-quick { margin-top: 10px; }
 
 .kbbar:not([hidden]) { display: flex; gap: 10px; }

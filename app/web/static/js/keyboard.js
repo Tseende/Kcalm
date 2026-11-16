@@ -1,45 +1,23 @@
-// Экранная клавиатура: прячем нижние панели, поднимаем поле ввода и показываем то, куда пишет пользователь.
+// Keep focused fields visible without rebuilding the page under the iOS keyboard.
 import { mainButton } from './ui.js';
 import { tg, inTelegram } from './api.js';
 
 const TEXTUAL = new Set(['text', 'number', 'search', 'tel', 'email', 'url', 'password', 'time', 'date', '']);
 const isField = (el) => !!el && ((el.tagName === 'TEXTAREA') || (el.tagName === 'INPUT' && TEXTUAL.has((el.getAttribute('type') || '').toLowerCase())) || el.isContentEditable);
 
-const KBBAR_H = 68; // высота кнопки над клавиатурой, см. .kbbar в app.css
-
-// Свободный текст (комментарий, описание): остальное на экране прячем, поле выходит наверх на всю высоту.
-// Положение прокрутки запоминаем и возвращаем, когда поле отпустили: страница не «улетает» наверх насовсем.
-let composed = [];
-let composedScreen = null;
-let savedY = null;
-function composeOn(ta) {
-  const screen = ta.closest('.screen');
-  if (!screen || ta.closest('.sheet')) return;
-  // Набор нового списка скрываемых узлов; прежние, которых в нём нет, показываем. Так при смене поля или
-  // перерисовке карточки (фокус переехал в новый textarea) ничего не мигает.
-  const next = [];
-  for (let a = ta; a && a !== screen; a = a.parentElement) {
-    for (const sib of a.parentElement.children) {
-      if (sib !== a && !sib.matches('.page-head, header, [hidden], input[type=file]')) next.push(sib);
-    }
+// Scroll the containing dialog/list first. Scrolling window cannot reveal a field
+// inside a sheet while body is locked, and makes the underlying page jump instead.
+function moveField(el, delta) {
+  let rest = delta;
+  for (let parent = el.parentElement; parent && parent !== document.body && parent !== document.documentElement; parent = parent.parentElement) {
+    const style = getComputedStyle(parent);
+    if (!/(auto|scroll)/.test(style.overflowY) || parent.scrollHeight <= parent.clientHeight) continue;
+    const before = parent.scrollTop;
+    parent.scrollTop = Math.max(0, Math.min(parent.scrollHeight - parent.clientHeight, before + rest));
+    rest -= parent.scrollTop - before;
+    if (Math.abs(rest) < 1) return;
   }
-  const hide = new Set(next);
-  for (const el of composed) if (el !== screen && !hide.has(el)) el.classList.remove('ck-hide');
-  next.forEach((el) => el.classList.add('ck-hide'));
-  screen.classList.add('compose');
-  const fresh = composedScreen !== screen;
-  composed = [...next, screen];
-  composedScreen = screen;
-  // После сворачивания остального поле оказывается у верха страницы: прокрутка нужна, только если мы были ниже.
-  if (fresh && window.scrollY > 0) { savedY = window.scrollY; window.scrollTo({ top: 0, behavior: 'instant' }); }
-}
-function composeOff() {
-  for (const el of composed) el.classList.remove('ck-hide', 'compose');
-  const had = composed.length > 0;
-  composed = [];
-  composedScreen = null;
-  if (had && savedY !== null) window.scrollTo({ top: savedY, behavior: 'instant' });
-  savedY = null;
+  if (Math.abs(rest) >= 1 && !document.body.classList.contains('sheet-open')) window.scrollBy(0, rest);
 }
 
 export function initKeyboard() {
@@ -51,71 +29,97 @@ export function initKeyboard() {
   let baseH = window.innerHeight;
   let timer = 0;
 
-  function lift() {
-    // Сколько нужно поднять зафиксированные снизу элементы: у Telegram на iOS окно не сжимается, и клавиатура их перекрывает.
-    const h = vv ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
-    root.style.setProperty('--kb-h', h + 'px');
-    return h;
+  function viewport() {
+    const top = vv ? Math.max(0, vv.offsetTop) : 0;
+    const telegramH = inTelegram && Number(tg?.viewportHeight) > 0 ? Number(tg.viewportHeight) : window.innerHeight;
+    const bottom = Math.min(window.innerHeight, vv ? top + vv.height : window.innerHeight, telegramH);
+    return { top, bottom, height: Math.max(0, bottom - top), lift: Math.max(0, window.innerHeight - bottom) };
   }
 
-  function reveal() {
+  function reveal(delay = 120) {
+    clearTimeout(timer);
     const el = document.activeElement;
     if (!isField(el)) return;
-    // Ждём, пока клавиатура доедет: до этого размеры окна ещё старые.
-    clearTimeout(timer);
     timer = setTimeout(() => {
-      if (document.activeElement !== el) return;
-      // Прокручиваем только если поле реально закрыто клавиатурой, кнопкой над ней или шапкой: без лишних скачков.
-      // scrollIntoView здесь не годится: он двигает ещё и visualViewport, и поле «прыгает» вверх.
-      const r = el.getBoundingClientRect();
-      const visTop = (vv ? vv.offsetTop : 0) + 60;
-      const visBottom = (vv ? vv.offsetTop + vv.height : window.innerHeight) - (open ? KBBAR_H : 0);
-      if (r.bottom > visBottom - 12) window.scrollBy(0, Math.ceil(r.bottom - visBottom + 16));
-      else if (r.top < visTop) window.scrollBy(0, Math.floor(r.top - visTop - 8));
-    }, 320);
+      if (document.activeElement !== el || !el.isConnected) return;
+      const view = viewport();
+      const sheet = el.closest('.sheet');
+      let top = view.top + 12;
+      let bottom = view.bottom - 12;
+      if (sheet) {
+        const bounds = sheet.getBoundingClientRect();
+        top = Math.max(top, bounds.top + 12);
+        bottom = Math.min(bottom, bounds.bottom - 12);
+      } else {
+        const safe = parseFloat(getComputedStyle(body).paddingTop) || 0;
+        top = Math.max(top, safe + 8);
+        const head = el.closest('.screen')?.querySelector('.page-head');
+        if (head) top = Math.max(top, head.getBoundingClientRect().bottom + 8);
+        const bar = document.getElementById('kbbar');
+        if (open && bar && !bar.hidden) bottom = Math.min(bottom, bar.getBoundingClientRect().top - 12);
+      }
+      if (bottom <= top) return; // Ignore intermediate geometry during a keyboard animation.
+      const rect = el.getBoundingClientRect();
+      // A tall textarea cannot fit in the visible area. Align its top rather than
+      // its bottom: bottom-alignment is what used to send the input above the screen.
+      if (rect.height > bottom - top) {
+        if (rect.top < top || rect.top >= bottom) moveField(el, rect.top - top);
+      } else if (rect.bottom > bottom) moveField(el, Math.ceil(rect.bottom - bottom));
+      else if (rect.top < top) moveField(el, Math.floor(rect.top - top));
+    }, delay);
   }
 
   function update() {
-    const shrunk = vv ? baseH - vv.height > 120 : false;
-    const next = focused && (shrunk || lift() > 80);
-    if (!focused && !shrunk) baseH = Math.max(baseH, window.innerHeight);
-    if (next === open) { lift(); return; }
-    open = next;
-    body.classList.toggle('kb-open', open);
-    if (open) { mainButton.suspend(); reveal(); } else mainButton.resume();
-    lift();
+    focused = isField(document.activeElement) && document.activeElement.isConnected;
+    body.classList.toggle('kb-focus', focused);
+    const view = viewport();
+    // When Android resizes innerHeight, lift can be zero; the baseline still
+    // detects its keyboard. On iOS VisualViewport or Telegram provides the inset.
+    const zoomed = vv && vv.scale > 1.05;
+    const next = focused && !zoomed && (baseH - view.height > 120 || view.lift > 80);
+    if (!focused && !open) baseH = Math.max(baseH, window.innerHeight);
+    root.style.setProperty('--kb-h', (next ? Math.round(view.lift) : 0) + 'px');
+    root.style.setProperty('--kb-visible-h', Math.round(view.height) + 'px');
+    if (next !== open) {
+      open = next;
+      body.classList.toggle('kb-open', open);
+      if (open) mainButton.suspend(); else mainButton.resume();
+    }
   }
 
   document.addEventListener('focusin', (e) => {
     if (!isField(e.target)) return;
     focused = true;
     body.classList.add('kb-focus');
-    if (e.target.tagName === 'TEXTAREA') composeOn(e.target);
+    // Do not hide sibling blocks, grow the textarea, or reset scroll here.
+    // Safari is already panning to the focused field; changing its layout races it.
     update();
-    reveal();
+    reveal(320);
   });
   document.addEventListener('focusout', () => {
-    // Фокус может сразу перейти в соседнее поле: решаем после того, как всё уляжется.
     setTimeout(() => {
       if (isField(document.activeElement)) return;
       focused = false;
-      composeOff();
+      clearTimeout(timer);
       body.classList.remove('kb-focus');
       update();
-      if (!open) mainButton.resume();
+      mainButton.resume();
     }, 60);
   });
+  const resized = () => { update(); if (focused) reveal(); };
   if (vv) {
-    vv.addEventListener('resize', () => { update(); if (open) reveal(); });
-    vv.addEventListener('scroll', lift);
+    vv.addEventListener('resize', resized);
+    vv.addEventListener('scroll', resized);
   }
-  window.addEventListener('resize', update);
-  // Смена ориентации и сворачивание: запоминаем высоту заново.
-  window.addEventListener('orientationchange', () => { baseH = window.innerHeight; setTimeout(update, 300); });
-  if (inTelegram && tg && tg.onEvent) {
-    try { tg.onEvent('viewportChanged', () => { if (!focused) baseH = window.innerHeight; update(); }); } catch (e) { /* старый клиент */ }
+  window.addEventListener('resize', resized);
+  window.addEventListener('orientationchange', () => {
+    // Do not use the keyboard-reduced height as the new full-height baseline.
+    baseH = Math.max(window.innerHeight, inTelegram ? Number(tg?.viewportStableHeight) || 0 : 0);
+    setTimeout(resized, 300);
+  });
+  if (inTelegram && tg?.onEvent) {
+    try { tg.onEvent('viewportChanged', resized); } catch (e) { /* old client */ }
   }
-  // Тап по пустому месту убирает клавиатуру.
   document.addEventListener('pointerdown', (e) => {
     if (focused && !isField(e.target) && !e.target.closest('button, a, label, .composer, .sheet')) document.activeElement?.blur?.();
   }, { passive: true });
