@@ -702,7 +702,9 @@ def set_meal_photos_dish(conn: sqlite3.Connection, meal_id: int, dish_id: int | 
 
 # ------------------------------------------------------------------ посуда
 
-DISH_KINDS = ("plate", "deep_plate", "bowl", "salad_bowl", "mug", "cup", "glass", "pan", "pot", "container", "jar", "thermos", "other")
+DISH_KINDS = ("plate", "deep_plate", "bowl", "salad_bowl", "mug", "cup", "glass", "pan", "pot", "container", "jar", "thermos",
+              "dessert_plate", "square_plate", "oval_plate", "rectangular_plate",
+              "pasta_plate", "divided_plate", "platter", "ramekin", "other")
 _DISH_FIELDS = ("name", "kind", "diameter_cm", "depth_cm", "volume_ml", "photo_path")
 
 

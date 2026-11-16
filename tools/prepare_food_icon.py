@@ -1,6 +1,6 @@
 """Resize a generated transparent icon to the existing 112px WebP asset format.
 
-python tools/prepare_food_icon.py source.png icon_name
+python tools/prepare_food_icon.py source.png icon_name [--kind food|dish]
 Artwork generation happens separately; alpha is preserved, not keyed from a colour.
 """
 from pathlib import Path
@@ -32,7 +32,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('source', type=Path)
     parser.add_argument('name')
+    parser.add_argument('--kind', choices=('food', 'dish'), default='food')
     args = parser.parse_args()
-    if not args.name.isascii() or not args.name.isalnum():
-        parser.error('name must be an ASCII alphanumeric icon key')
-    prepare(args.source, Path(__file__).resolve().parents[1] / 'app/web/static/img/food' / f'{args.name}.webp')
+    if not args.name.isascii() or not args.name.replace('_', '').isalnum():
+        parser.error('name must be an ASCII letters, digits or underscores')
+    prepare(args.source, Path(__file__).resolve().parents[1] / f'app/web/static/img/{args.kind}' / f'{args.name}.webp')

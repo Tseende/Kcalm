@@ -365,7 +365,7 @@ export function drinkPic(id, size = 48) {
   return pic(`img/drink/${DRINK_ALIAS[id] || id}.webp?v=5`, size);
 }
 
-const DISH_PICS = { plate: 'plate', deep_plate: 'deep_plate', bowl: 'bowl', salad_bowl: 'salad_bowl', mug: 'mug', cup: 'cup', glass: 'glass', pan: 'pan', pot: 'pot', container: 'lunchbox', jar: 'jar', thermos: 'thermos' };
+const DISH_PICS = { dessert_plate: 'dessert_plate', square_plate: 'square_plate', oval_plate: 'oval_plate', rectangular_plate: 'rectangular_plate', pasta_plate: 'pasta_plate', divided_plate: 'divided_plate', platter: 'platter', ramekin: 'ramekin', plate: 'plate', deep_plate: 'deep_plate', bowl: 'bowl', salad_bowl: 'salad_bowl', mug: 'mug', cup: 'cup', glass: 'glass', pan: 'pan', pot: 'pot', container: 'lunchbox', jar: 'jar', thermos: 'thermos' };
 
 // null для «другое»: вызывающий код рисует обычную плитку.
 export function dishPic(kind, size = 48) {

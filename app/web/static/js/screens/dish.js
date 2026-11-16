@@ -4,7 +4,7 @@ import { dishPic } from '../pics.js';
 import { t } from '../i18n.js';
 import {
   h, icon, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, numCheck, toggle, confirmDialog, errorState, skeletonCards,
-  photoImg, compressImage, DISH_KINDS, dishKind,
+  photoImg, compressImage, DISH_KINDS, dishKind, dishDimension,
 } from '../ui.js';
 
 const val = (v) => (v === null || v === undefined ? '' : v);
@@ -32,10 +32,12 @@ export default async function render(root, ctx) {
   function paintKinds() {
     kindGrid.replaceChildren(...Object.entries(DISH_KINDS).map(([k, v]) => h('button', {
       type: 'button', class: 'kind-opt' + (kindVal === k ? ' on' : ''), role: 'radio', 'aria-checked': String(kindVal === k),
-      onclick: () => { kindVal = k; haptic('light'); paintKinds(); if (!photoFile && !dish.photo_url) paintPhoto(null); },
+      onclick: () => { kindVal = k; dimensionLabel.textContent = t('dish.f_' + dishDimension(k)); diam.setAttribute('aria-label', dimensionLabel.textContent); haptic('light'); paintKinds(); if (!photoFile && !dish.photo_url) paintPhoto(null); },
     }, dishPic(k, 44) || h('span', { class: 'pic', style: { width: '44px', height: '44px' } }, icon(v.icon, 24)), h('span', { class: 'kind-lbl' }, v.label))));
   }
   const diam = numInput({ value: val(dish.diameter_cm), min: 1, max: 80, step: 0.5, placeholder: '20', 'aria-label': t('dish.a_diam') });
+  const dimensionLabel = h('span', null, t('dish.f_' + dishDimension(kindVal)));
+  diam.setAttribute('aria-label', dimensionLabel.textContent);
   const depth = numInput({ value: val(dish.depth_cm), min: 0.5, max: 50, step: 0.5, placeholder: '5', 'aria-label': t('dish.a_depth') });
   const vol = numInput({ value: val(dish.volume_ml), min: 10, max: 10000, step: 10, placeholder: '500', inputmode: 'numeric', 'aria-label': t('dish.volume') });
   const preview = h('div', { class: 'photo-pick' });
@@ -60,7 +62,7 @@ export default async function render(root, ctx) {
     const n = name.value.trim();
     if (!n) { toast(t('pf.v_name'), 'error'); name.focus(); return; }
     const d = numVal(diam), dp = numVal(depth), v = numVal(vol);
-    const bad = numCheck(diam, t('dish.f_diam')) || numCheck(depth, t('dish.f_depth')) || numCheck(vol, t('dish.f_vol'));
+    const bad = numCheck(diam, dimensionLabel.textContent) || numCheck(depth, t('dish.f_depth')) || numCheck(vol, t('dish.f_vol'));
     if (bad) { toast(bad, 'error'); return; }
     busy = true; mainButton.setLoading(true);
     try {
@@ -91,7 +93,8 @@ export default async function render(root, ctx) {
       group([frow(t('common.name'), name)]),
       h('div', { class: 'section-title' }, h('span', null, t('dish.kind'))),
       kindGrid,
-      group([frow(t('dish.f_diam'), diam), frow(t('dish.f_depth'), depth), frow(t('dish.f_vol'), vol)]),
+      h('div', { class: 'footnote' }, t('dish.shape_hint')),
+      group([frow(dimensionLabel, diam), frow(t('dish.f_depth'), depth), frow(t('dish.f_vol'), vol)]),
       group([h('div', { class: 'frow' },
         h('span', { class: 'grow' }, h('span', { class: 'row-title' }, t('dish.default')), h('span', { class: 'row-sub' }, t('dish.default_sub'))),
         toggle(isDefault, (c) => { isDefault = c; }, t('dish.default_aria')))]),

@@ -10,11 +10,23 @@ KIND_RU = {
     "plate": "тарелка", "deep_plate": "глубокая тарелка", "bowl": "миска", "mug": "кружка",
     "cup": "чашка", "glass": "стакан", "pan": "сковорода", "container": "контейнер",
     "salad_bowl": "салатник", "pot": "кастрюля", "jar": "банка", "thermos": "термос",
+    "dessert_plate": "десертная тарелка", "square_plate": "квадратная тарелка",
+    "oval_plate": "овальная тарелка", "rectangular_plate": "прямоугольная тарелка",
+    "pasta_plate": "тарелка для пасты", "divided_plate": "тарелка с секциями",
+    "platter": "сервировочное блюдо", "ramekin": "форма для запекания",
     "other": "посуда",
 }
 
 # порядок важен: «глубокая тарелка» раньше «тарелка»
 _KIND_PATTERNS = [
+    ("dessert_plate", r"десертн\w*\s+тарелк\w*|блюдц\w*"),
+    ("square_plate", r"квадратн\w*\s+тарелк\w*|тарелк\w*\s+квадратн\w*"),
+    ("rectangular_plate", r"прямоугольн\w*\s+тарелк\w*|тарелк\w*\s+прямоугольн\w*"),
+    ("oval_plate", r"овальн\w*\s+тарелк\w*|тарелк\w*\s+овальн\w*"),
+    ("pasta_plate", r"тарелк\w*\s+для\s+пасты|паста[\s-]*тарелк\w*"),
+    ("divided_plate", r"тарелк\w*\s+с\s+секци\w*|секционн\w*\s+тарелк\w*|менажниц\w*"),
+    ("platter", r"сервировочн\w*\s+блюд\w*|больш\w*\s+блюд\w*"),
+    ("ramekin", r"рамекин\w*|форм\w*\s+для\s+запекания"),
     ("deep_plate", r"глубок\w*\s+тарелк\w*|суповая\s+тарелк\w*|тарелк\w*\s+для\s+супа"),
     ("plate", r"тарелк\w*"),
     ("salad_bowl", r"салатник\w*|боул\w*"),
@@ -37,7 +49,7 @@ _QUOTED = re.compile(r"[«\"“„]([^»\"”“]{1,40})[»\"”“]")
 _DEPTH = [re.compile(rf"глубин\w*\s*{_NUM}\s*(см|мм)", re.IGNORECASE),
           re.compile(rf"{_NUM}\s*(см|мм)\s*глубин\w*", re.IGNORECASE)]
 _VOLUME = re.compile(rf"{_NUM}\s*(мл|миллилитр\w*|л|литр\w*)(?![а-яa-z])", re.IGNORECASE)
-_DIAMETER = [re.compile(rf"(?:диаметр\w*|ø|⌀)\s*{_NUM}\s*(см|мм)?", re.IGNORECASE),
+_DIAMETER = [re.compile(rf"(?:диаметр\w*|сторон\w*|длин\w*|ø|⌀)\s*{_NUM}\s*(см|мм)?", re.IGNORECASE),
              re.compile(rf"{_NUM}\s*(см|мм)(?![а-яa-z])", re.IGNORECASE)]
 _DEFAULT = re.compile(r"по\s+умолчанию|основн\w+|главн\w+", re.IGNORECASE)
 
@@ -66,7 +78,9 @@ def describe_dish(dish) -> str:
     head = kind if not name or name.lower() == kind else f"{kind} «{name}»"
     parts = [head]
     if _get(dish, "diameter_cm"):
-        parts.append(f"Ø{_num(_get(dish, 'diameter_cm'))} см")
+        shape = _get(dish, 'kind')
+        dimension = 'сторона ' if shape == 'square_plate' else 'длина ' if shape in ('oval_plate', 'rectangular_plate', 'platter') else 'Ø'
+        parts.append(f"{dimension}{_num(_get(dish, 'diameter_cm'))} см")
     if _get(dish, "depth_cm"):
         parts.append(f"глубина {_num(_get(dish, 'depth_cm'))} см")
     if _get(dish, "volume_ml"):

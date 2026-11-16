@@ -1,12 +1,12 @@
 // "Моя посуда" list
 import { api } from '../api.js';
 import { dishPic } from '../pics.js';
-import { h, icon, tile, nav, pageHead, skeletonCards, emptyState, errorState, photoImg, dishKind, fmtN } from '../ui.js';
+import { h, icon, tile, nav, pageHead, skeletonCards, emptyState, errorState, photoImg, dishKind, dishDimension, fmtN } from '../ui.js';
 import { t } from '../i18n.js';
 
 export function dishInfo(d) {
   const parts = [];
-  if (d.diameter_cm) parts.push('Ø' + fmtN(d.diameter_cm) + ' ' + t('unit.cm'));
+  if (d.diameter_cm) parts.push((dishDimension(d.kind) === 'diam' ? 'Ø' : t('dish.' + dishDimension(d.kind)) + ' ') + fmtN(d.diameter_cm) + ' ' + t('unit.cm'));
   if (d.depth_cm) parts.push(t('dish.depth') + ' ' + fmtN(d.depth_cm) + ' ' + t('unit.cm'));
   if (d.volume_ml) parts.push(fmtN(d.volume_ml) + ' ' + t('unit.ml'));
   return parts.join(' · ') || dishKind(d.kind).label;

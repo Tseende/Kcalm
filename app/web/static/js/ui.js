@@ -186,6 +186,14 @@ export const mealType = (ty) => MEAL_TYPES[ty] || { label: t('meal.generic'), ic
 export const DISH_KINDS = {
   plate: { label: t('dish.plate'), icon: 'tools-kitchen-2', color: 'blue' },
   deep_plate: { label: t('dish.deep_plate'), icon: 'soup', color: 'teal' },
+  dessert_plate: { label: t('dish.dessert_plate'), icon: 'tools-kitchen-2', color: 'blue' },
+  square_plate: { label: t('dish.square_plate'), icon: 'tools-kitchen-2', color: 'blue' },
+  oval_plate: { label: t('dish.oval_plate'), icon: 'tools-kitchen-2', color: 'blue' },
+  rectangular_plate: { label: t('dish.rectangular_plate'), icon: 'tools-kitchen-2', color: 'blue' },
+  pasta_plate: { label: t('dish.pasta_plate'), icon: 'tools-kitchen-2', color: 'blue' },
+  divided_plate: { label: t('dish.divided_plate'), icon: 'tools-kitchen-2', color: 'blue' },
+  platter: { label: t('dish.platter'), icon: 'tools-kitchen-2', color: 'blue' },
+  ramekin: { label: t('dish.ramekin'), icon: 'tools-kitchen-2', color: 'blue' },
   bowl: { label: t('dish.bowl'), icon: 'bowl', color: 'green' },
   salad_bowl: { label: t('dish.salad_bowl'), icon: 'bowl', color: 'green' },
   mug: { label: t('dish.mug'), icon: 'coffee', color: 'orange' },
@@ -198,6 +206,7 @@ export const DISH_KINDS = {
   thermos: { label: t('dish.thermos'), icon: 'cup', color: 'green' },
   other: { label: t('dish.other'), icon: 'tools-kitchen', color: 'gray' },
 };
+export const dishDimension = (kind) => kind === 'square_plate' ? 'side' : ['oval_plate', 'rectangular_plate', 'platter'].includes(kind) ? 'length' : 'diam';
 export const dishKind = (k) => DISH_KINDS[k] || DISH_KINDS.other;
 
 export function macroLine(o) {
