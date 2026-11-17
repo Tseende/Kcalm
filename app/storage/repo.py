@@ -705,7 +705,7 @@ def set_meal_photos_dish(conn: sqlite3.Connection, meal_id: int, dish_id: int | 
 DISH_KINDS = ("plate", "deep_plate", "bowl", "salad_bowl", "mug", "cup", "glass", "pan", "pot", "container", "jar", "thermos",
               "dessert_plate", "square_plate", "oval_plate", "rectangular_plate",
               "pasta_plate", "divided_plate", "platter", "ramekin", "other")
-_DISH_FIELDS = ("name", "kind", "diameter_cm", "depth_cm", "volume_ml", "photo_path")
+_DISH_FIELDS = ("name", "kind", "diameter_cm", "depth_cm", "volume_ml", "photo_path", "width_cm")
 
 
 def _check_dish(name: str | None, kind: str | None) -> None:
@@ -718,22 +718,22 @@ def _check_dish(name: str | None, kind: str | None) -> None:
 def create_dish(conn: sqlite3.Connection, user_id: int, name: str, kind: str,
                 diameter_cm: float | None = None, depth_cm: float | None = None,
                 volume_ml: float | None = None, photo_path: str | None = None,
-                is_default: bool = False) -> int:
+                is_default: bool = False, width_cm: float | None = None) -> int:
     """Новая посуда. Умолчание у пользователя только одно: новое снимает прежнее."""
     _check_dish(name, kind)
     if is_default:
         conn.execute("UPDATE dishes SET is_default=0 WHERE user_id=?", (user_id,))
     cur = conn.execute(
         """INSERT INTO dishes (user_id, name, kind, diameter_cm, depth_cm, volume_ml,
-           photo_path, is_default) VALUES (?,?,?,?,?,?,?,?)""",
+           photo_path, is_default, width_cm) VALUES (?,?,?,?,?,?,?,?,?)""",
         (user_id, str(name).strip()[:60], kind, diameter_cm, depth_cm, volume_ml,
-         photo_path, int(bool(is_default))))
+         photo_path, int(bool(is_default)), width_cm))
     conn.commit()
     return cur.lastrowid
 
 
 def update_dish(conn: sqlite3.Connection, user_id: int, dish_id: int, **fields) -> bool:
-    """Частичное обновление: name, kind, diameter_cm, depth_cm, volume_ml, photo_path,
+    """Частичное обновление: name, kind, diameter_cm, width_cm, depth_cm, volume_ml, photo_path,
     is_default. Чужая или удалённая посуда не меняется (False)."""
     if get_dish(conn, user_id, dish_id) is None:
         return False

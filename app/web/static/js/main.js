@@ -1,7 +1,7 @@
 // Router + tab bar + Telegram bootstrap.
 import { api, isMock, onMockEnabled, tg, inTelegram } from './api.js';
 import { initKeyboard } from './keyboard.js';
-import { h, $, icon, tile, sheet, nav, mainButton, backButton, emptyState, errorState, sessionExpiredButton, haptic, closeAllSheets, getThemePref, staggerIn } from './ui.js';
+import { h, $, icon, tile, sheet, nav, mainButton, backButton, emptyState, errorState, sessionExpiredButton, haptic, closeAllSheets, getThemePref, staggerIn, skeletonCards } from './ui.js';
 import { mealPic } from './pics.js';
 import { t } from './i18n.js';
 
@@ -128,13 +128,14 @@ async function render() {
   setActiveTab(r.tab || null);
   if (r.tab) backButton.hide();
   else backButton.show(() => nav.back(r.parent || '/today'));
-  view.replaceChildren();
+  view.replaceChildren(h('div', { class: 'screen' }, skeletonCards(3, 100)));
   window.scrollTo(0, 0);
   document.body.classList.remove('scrolled');
   const ctx = { params, query, alive: () => my === rid, parent: r.parent, prev };
   try {
     const mod = await r.load();
     if (my !== rid) return;
+    view.replaceChildren();
     const res = await mod.default(view, ctx);
     if (my !== rid) { if (typeof res === 'function') res(); return; }
     if (typeof res === 'function') cleanup = res;

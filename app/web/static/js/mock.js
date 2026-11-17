@@ -567,7 +567,7 @@ const routes = [
     const f = new FormLike(b);
     const num = (k) => (f.get(k) ? +f.get(k) : null);
     const file = f.get('photo');
-    const d = { id: nid(), name: f.get('name'), kind: f.get('kind') || 'other', diameter_cm: num('diameter_cm'), depth_cm: num('depth_cm'), volume_ml: num('volume_ml'), photo_url: file && file.size ? URL.createObjectURL(file) : null, is_default: f.get('is_default') === 'true' };
+    const d = { id: nid(), name: f.get('name'), kind: f.get('kind') || 'other', diameter_cm: num('diameter_cm'), width_cm: num('width_cm'), depth_cm: num('depth_cm'), volume_ml: num('volume_ml'), photo_url: file && file.size ? URL.createObjectURL(file) : null, is_default: f.get('is_default') === 'true' };
     if (d.is_default) dishes.forEach((x) => { x.is_default = false; });
     dishes.push(d);
     return d;

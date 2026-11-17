@@ -28,16 +28,31 @@ export default async function render(root, ctx) {
   let photoFile = null;
   const name = h('input', { type: 'text', value: val(dish.name), maxLength: 60, placeholder: t('dish.ph_name'), 'aria-label': t('common.name') });
   let kindVal = DISH_KINDS[dish.kind] ? dish.kind : 'plate';
-  const kindGrid = h('div', { class: 'kind-grid', role: 'radiogroup', 'aria-label': t('dish.kind') });
+  let kindsOpen = isNew;
+  const kindGrid = h('div', { id: 'dish-kinds', class: 'kind-grid', role: 'radiogroup', 'aria-label': t('dish.kind') });
+  const kindToggle = h('button', {
+    type: 'button', class: 'dish-kind-toggle', 'aria-controls': 'dish-kinds',
+    onclick: () => { kindsOpen = !kindsOpen; paintKinds(); },
+  });
   function paintKinds() {
+    kindGrid.hidden = !kindsOpen;
+    widthRow.hidden = kindVal !== 'container';
+    kindToggle.setAttribute('aria-expanded', String(kindsOpen));
+    kindToggle.replaceChildren(
+      dishPic(kindVal, 40) || icon(dishKind(kindVal).icon, 28),
+      h('span', { class: 'grow' }, dishKind(kindVal).label),
+      h('span', { class: 'dish-kind-action' }, t(kindsOpen ? 'dish.kind_hide' : 'dish.kind_change')),
+      icon('next', 18));
     kindGrid.replaceChildren(...Object.entries(DISH_KINDS).map(([k, v]) => h('button', {
       type: 'button', class: 'kind-opt' + (kindVal === k ? ' on' : ''), role: 'radio', 'aria-checked': String(kindVal === k),
-      onclick: () => { kindVal = k; dimensionLabel.textContent = t('dish.f_' + dishDimension(k)); diam.setAttribute('aria-label', dimensionLabel.textContent); haptic('light'); paintKinds(); if (!photoFile && !dish.photo_url) paintPhoto(null); },
+      onclick: () => { kindVal = k; kindsOpen = false; dimensionLabel.textContent = t('dish.f_' + dishDimension(k)); diam.setAttribute('aria-label', dimensionLabel.textContent); haptic('light'); paintKinds(); kindToggle.focus({ preventScroll: true }); if (!photoFile && !dish.photo_url) paintPhoto(null); },
     }, dishPic(k, 44) || h('span', { class: 'pic', style: { width: '44px', height: '44px' } }, icon(v.icon, 24)), h('span', { class: 'kind-lbl' }, v.label))));
   }
   const diam = numInput({ value: val(dish.diameter_cm), min: 1, max: 80, step: 0.5, placeholder: '20', 'aria-label': t('dish.a_diam') });
   const dimensionLabel = h('span', null, t('dish.f_' + dishDimension(kindVal)));
   diam.setAttribute('aria-label', dimensionLabel.textContent);
+  const width = numInput({ value: val(dish.width_cm), min: 3, max: 60, step: 0.5, placeholder: '15', 'aria-label': t('dish.f_width') });
+  const widthRow = frow(t('dish.f_width'), width);
   const depth = numInput({ value: val(dish.depth_cm), min: 0.5, max: 50, step: 0.5, placeholder: '5', 'aria-label': t('dish.a_depth') });
   const vol = numInput({ value: val(dish.volume_ml), min: 10, max: 10000, step: 10, placeholder: '500', inputmode: 'numeric', 'aria-label': t('dish.volume') });
   const preview = h('div', { class: 'photo-pick' });
@@ -61,8 +76,9 @@ export default async function render(root, ctx) {
     if (busy) return;
     const n = name.value.trim();
     if (!n) { toast(t('pf.v_name'), 'error'); name.focus(); return; }
+    const w = kindVal === 'container' ? numVal(width) : null;
     const d = numVal(diam), dp = numVal(depth), v = numVal(vol);
-    const bad = numCheck(diam, dimensionLabel.textContent) || numCheck(depth, t('dish.f_depth')) || numCheck(vol, t('dish.f_vol'));
+    const bad = (kindVal === 'container' ? numCheck(width, t('dish.f_width')) : null) || numCheck(diam, dimensionLabel.textContent) || numCheck(depth, t('dish.f_depth')) || numCheck(vol, t('dish.f_vol'));
     if (bad) { toast(bad, 'error'); return; }
     busy = true; mainButton.setLoading(true);
     try {
@@ -70,13 +86,14 @@ export default async function render(root, ctx) {
         const fd = new FormData();
         fd.append('name', n); fd.append('kind', kindVal);
         if (d !== null) fd.append('diameter_cm', d);
+        if (w !== null) fd.append('width_cm', w);
         if (dp !== null) fd.append('depth_cm', dp);
         if (v !== null) fd.append('volume_ml', Math.round(v));
         fd.append('is_default', isDefault ? 'true' : 'false');
         if (photoFile) fd.append('photo', photoFile, photoFile.name || 'dish.jpg');
         await api.post('/dishes', fd);
       } else {
-        await api.patch('/dishes/' + dish.id, { name: n, kind: kindVal, diameter_cm: d, depth_cm: dp, volume_ml: v === null ? null : Math.round(v), is_default: isDefault });
+        await api.patch('/dishes/' + dish.id, { name: n, kind: kindVal, diameter_cm: d, width_cm: w, depth_cm: dp, volume_ml: v === null ? null : Math.round(v), is_default: isDefault });
       }
       haptic('success'); toast(t('dish.saved'), 'ok'); mainButton.hide(); nav.replace('/menu/dishes');
     } catch (e) { busy = false; mainButton.setLoading(false); toast(e.message, 'error'); }
@@ -92,9 +109,10 @@ export default async function render(root, ctx) {
       preview,
       group([frow(t('common.name'), name)]),
       h('div', { class: 'section-title' }, h('span', null, t('dish.kind'))),
+      kindToggle,
       kindGrid,
       h('div', { class: 'footnote' }, t('dish.shape_hint')),
-      group([frow(dimensionLabel, diam), frow(t('dish.f_depth'), depth), frow(t('dish.f_vol'), vol)]),
+      group([frow(dimensionLabel, diam), widthRow, frow(t('dish.f_depth'), depth), frow(t('dish.f_vol'), vol)]),
       group([h('div', { class: 'frow' },
         h('span', { class: 'grow' }, h('span', { class: 'row-title' }, t('dish.default')), h('span', { class: 'row-sub' }, t('dish.default_sub'))),
         toggle(isDefault, (c) => { isDefault = c; }, t('dish.default_aria')))]),

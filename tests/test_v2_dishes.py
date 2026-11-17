@@ -465,3 +465,32 @@ def test_save_dish_photo_under_photos_dishes(tmp_path):
     assert dishsvc.photo_b64({"photo_path": path})
     assert dishsvc.photo_b64({"photo_path": None}) is None
     assert dishsvc.photo_b64({"photo_path": "/нет/файла"}) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('photo_count', [1, 2])
+@pytest.mark.parametrize('selection', ['explicit', 'default', 'none'])
+async def test_container_dimensions_reach_model(monkeypatch, plain_db, photo_count, selection):
+    from app.services import meals
+
+    calls = []
+    monkeypatch.setattr(llm, 'chat_json', _fake_chat(calls))
+    uid = repo.create_user(plain_db, 1)
+    did = repo.create_dish(plain_db, uid, 'Ланчбокс', 'container', diameter_cm=22,
+                           width_cm=14, depth_cm=6, volume_ml=1200, is_default=True)
+    ids = None if selection == 'default' else [did if selection == 'explicit' else None] * photo_count
+    selected = meals.resolve_dishes(plain_db, uid, ids, photo_count)
+    await meals.parse_images(['AAAA'] * photo_count, 'Мой обед', uid, plain_db, selected)
+    assert len(calls) == 1
+    assert calls[0]['purpose'] == 'food_vision'
+    text = _parts(calls[0])[0]['text']
+    description = 'контейнер «Ланчбокс», длина 22 см, ширина 14 см, глубина 6 см, объём 1200 мл'
+    if selection == 'none':
+        assert description not in text
+        assert 'Используй её размер как масштаб' not in text
+    else:
+        assert description in text
+        assert 'Используй её размер как масштаб' in text
+        if photo_count > 1:
+            for i in range(1, photo_count + 1):
+                assert f'Посуда на фото {i}: {description}' in text

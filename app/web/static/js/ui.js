@@ -206,7 +206,7 @@ export const DISH_KINDS = {
   thermos: { label: t('dish.thermos'), icon: 'cup', color: 'green' },
   other: { label: t('dish.other'), icon: 'tools-kitchen', color: 'gray' },
 };
-export const dishDimension = (kind) => kind === 'square_plate' ? 'side' : ['oval_plate', 'rectangular_plate', 'platter'].includes(kind) ? 'length' : 'diam';
+export const dishDimension = (kind) => kind === 'square_plate' ? 'side' : ['oval_plate', 'rectangular_plate', 'platter', 'container'].includes(kind) ? 'length' : 'diam';
 export const dishKind = (k) => DISH_KINDS[k] || DISH_KINDS.other;
 
 export function macroLine(o) {
@@ -828,9 +828,14 @@ export function debounce(fn, ms = 300) {
 export function busyOverlay(text, sub) {
   const t0 = Date.now();
   const timer = h('div', { class: 'muted' }, t('busy.sec', { n: 0 }));
-  const iv = setInterval(() => { timer.textContent = t('busy.sec', { n: Math.round((Date.now() - t0) / 1000) }); }, 1000);
+  const detail = h('div', { class: 'muted', hidden: !sub }, sub);
+  const iv = setInterval(() => {
+    const seconds = Math.round((Date.now() - t0) / 1000);
+    timer.textContent = t('busy.sec', { n: seconds });
+    if (seconds >= 15) { detail.hidden = false; detail.textContent = t('busy.waiting'); }
+  }, 1000);
   const el = h('div', { class: 'busy', role: 'alert', 'aria-live': 'assertive' },
-    h('div', { class: 'busy-box' }, h('div', { class: 'spinner' }), h('div', { class: 'busy-title' }, text), sub ? h('div', { class: 'muted' }, sub) : null, timer));
+    h('div', { class: 'busy-box' }, h('div', { class: 'spinner' }), h('div', { class: 'busy-title' }, text), detail, timer));
   $('#overlay').append(el);
   return () => { clearInterval(iv); el.remove(); };
 }

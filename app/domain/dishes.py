@@ -53,7 +53,7 @@ _DIAMETER = [re.compile(rf"(?:диаметр\w*|сторон\w*|длин\w*|ø|�
              re.compile(rf"{_NUM}\s*(см|мм)(?![а-яa-z])", re.IGNORECASE)]
 _DEFAULT = re.compile(r"по\s+умолчанию|основн\w+|главн\w+", re.IGNORECASE)
 
-LIMITS = {"diameter_cm": (3.0, 60.0), "depth_cm": (0.5, 40.0), "volume_ml": (20.0, 5000.0)}
+LIMITS = {"width_cm": (3.0, 60.0), "diameter_cm": (3.0, 60.0), "depth_cm": (0.5, 40.0), "volume_ml": (20.0, 5000.0)}
 
 
 def _f(value) -> float:
@@ -79,8 +79,10 @@ def describe_dish(dish) -> str:
     parts = [head]
     if _get(dish, "diameter_cm"):
         shape = _get(dish, 'kind')
-        dimension = 'сторона ' if shape == 'square_plate' else 'длина ' if shape in ('oval_plate', 'rectangular_plate', 'platter') else 'Ø'
+        dimension = 'сторона ' if shape == 'square_plate' else 'длина ' if shape in ('oval_plate', 'rectangular_plate', 'platter', 'container') else 'Ø'
         parts.append(f"{dimension}{_num(_get(dish, 'diameter_cm'))} см")
+    if _get(dish, "width_cm"):
+        parts.append(f"ширина {_num(_get(dish, 'width_cm'))} см")
     if _get(dish, "depth_cm"):
         parts.append(f"глубина {_num(_get(dish, 'depth_cm'))} см")
     if _get(dish, "volume_ml"):

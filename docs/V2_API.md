@@ -36,8 +36,10 @@ Single source of truth for the frontend (`app/web/static/`) and the backend
  "items":[Item], "comment":"..."|null}
 
 // Dish (посуда)
+// diameter_cm is the primary dimension: diameter for round dishes, length for containers.
+// width_cm is the independent container width; null means unknown.
 {"id":2,"name":"Глубокая тарелка","kind":"deep_plate",  // plate|deep_plate|bowl|mug|cup|glass|pan|container|other
- "diameter_cm":20.0|null,"depth_cm":5.0|null,"volume_ml":500|null,
+ "diameter_cm":20.0|null,"width_cm":15.0|null,"depth_cm":5.0|null,"volume_ml":500|null,
  "photo_url":"/api/dishes/2/photo"|null,"is_default":false}
 
 // Product (свой продукт)

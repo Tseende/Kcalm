@@ -60,7 +60,7 @@ def dish_json(dish: sqlite3.Row) -> dict:
             return None
         return int(value) if float(value).is_integer() and key == "volume_ml" else round(float(value), 1)
     return {"id": dish["id"], "name": dish["name"], "kind": dish["kind"],
-            "diameter_cm": size("diameter_cm"), "depth_cm": size("depth_cm"),
+            "diameter_cm": size("diameter_cm"), "width_cm": size("width_cm"), "depth_cm": size("depth_cm"),
             "volume_ml": size("volume_ml"),
             "photo_url": f"/api/dishes/{dish['id']}/photo" if dish["photo_path"] else None,
             "is_default": bool(dish["is_default"])}

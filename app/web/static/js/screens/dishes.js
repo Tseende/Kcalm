@@ -7,6 +7,7 @@ import { t } from '../i18n.js';
 export function dishInfo(d) {
   const parts = [];
   if (d.diameter_cm) parts.push((dishDimension(d.kind) === 'diam' ? 'Ø' : t('dish.' + dishDimension(d.kind)) + ' ') + fmtN(d.diameter_cm) + ' ' + t('unit.cm'));
+  if (d.width_cm) parts.push(t('dish.width') + ' ' + fmtN(d.width_cm) + ' ' + t('unit.cm'));
   if (d.depth_cm) parts.push(t('dish.depth') + ' ' + fmtN(d.depth_cm) + ' ' + t('unit.cm'));
   if (d.volume_ml) parts.push(fmtN(d.volume_ml) + ' ' + t('unit.ml'));
   return parts.join(' · ') || dishKind(d.kind).label;
@@ -16,9 +17,10 @@ export default async function render(root, ctx) {
   const view = h('div', { class: 'screen' });
   const list = h('div', { class: 'stack' });
   view.append(
-    pageHead(t('dishes.title'), { parent: '/menu', right: h('button', { class: 'icon-btn accent', type: 'button', 'aria-label': t('dishes.add'), onclick: () => nav.go('/menu/dish/new') }, icon('plus')) }),
+    pageHead(t('dishes.title'), { parent: '/menu' }),
     h('div', { class: 'hint-card small' }, icon('tools-kitchen-2', 18), h('span', null, t('dishes.hint'))),
-    list);
+    list,
+    h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: () => nav.go('/menu/dish/new') }, t('dishes.add')));
   root.append(view);
 
   async function load() {
@@ -27,8 +29,7 @@ export default async function render(root, ctx) {
       const { dishes } = await api.get('/dishes');
       if (!ctx.alive()) return;
       if (!dishes.length) {
-        list.replaceChildren(emptyState('soup', t('dishes.empty_title'), t('dishes.empty_text'),
-          h('button', { class: 'btn btn-primary', type: 'button', onclick: () => nav.go('/menu/dish/new') }, t('dishes.add'))));
+        list.replaceChildren(emptyState('soup', t('dishes.empty_title'), t('dishes.empty_text')));
         return;
       }
       list.replaceChildren(h('div', { class: 'list tiles' }, dishes.map((d) => h('button', { class: 'row', type: 'button', onclick: () => nav.go('/menu/dish/' + d.id) },

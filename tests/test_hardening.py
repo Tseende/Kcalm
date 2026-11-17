@@ -481,13 +481,14 @@ def test_migration_026_keeps_dishes_and_allows_new_kinds(tmp_path):
                  "'lunch', 'text', 100)", (uid,))
     conn.execute("INSERT INTO meal_photos (meal_id, path, dish_id) VALUES (1, 'a.jpg', 7)")
     conn.commit()
-    before = [tuple(r) for r in conn.execute("SELECT * FROM dishes ORDER BY id")]
+    before = [dict(r) for r in conn.execute("SELECT * FROM dishes ORDER BY id")]
     with pytest.raises((sqlite3.IntegrityError, ValueError)):      # libsql-обёртка бросает ValueError
         conn.execute("INSERT INTO dishes (user_id, name, kind) VALUES (?, 'Х', 'salad_bowl')", (uid,))
     conn.rollback()
 
     assert migrate(conn) >= 26
-    assert [tuple(r) for r in conn.execute("SELECT * FROM dishes ORDER BY id")] == before
+    assert [dict(r) for r in conn.execute("SELECT * FROM dishes ORDER BY id")] == [
+        {**row, "width_cm": None} for row in before]
     assert conn.execute("SELECT dish_id FROM meal_photos").fetchone()[0] == 7
     assert not conn.execute("PRAGMA foreign_key_check").fetchall()
     assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"

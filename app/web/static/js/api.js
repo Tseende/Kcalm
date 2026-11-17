@@ -139,12 +139,15 @@ export function imageUrl(url) {
   if (mockMode) return Promise.resolve(url);
   if (!inTelegram) return Promise.resolve(url); // dev mode (localhost) needs no header
   if (imgCache.has(url)) return imgCache.get(url);
-  const p = fetch(url, { headers: authHeaders() })
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 30000);
+  const p = fetch(url, { headers: authHeaders(), signal: ctrl.signal })
     .then((r) => {
       if (!r.ok) throw new Error('img ' + r.status);
       return r.blob();
     })
-    .then((b) => URL.createObjectURL(b));
+    .then((b) => URL.createObjectURL(b))
+    .finally(() => clearTimeout(timer));
   imgCache.set(url, p);
   p.catch(() => imgCache.delete(url));
   return p;

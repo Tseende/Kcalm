@@ -598,7 +598,7 @@ async def test_dishes_crud_with_photo(client):
     assert resp.status == 201
     dish = await resp.json()
     assert dish == {"id": dish["id"], "name": "Глубокая тарелка", "kind": "deep_plate",
-                    "diameter_cm": 20.0, "depth_cm": 5.0, "volume_ml": 500,
+                    "diameter_cm": 20.0, "width_cm": None, "depth_cm": 5.0, "volume_ml": 500,
                     "photo_url": f"/api/dishes/{dish['id']}/photo", "is_default": True}
     photo = await client.get(dish["photo_url"], headers=H)
     assert photo.status == 200 and (await photo.read()) == jpeg("dish")

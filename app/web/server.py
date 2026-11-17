@@ -1527,7 +1527,7 @@ def _dish_fields(data: dict, *, partial: bool) -> dict:
         out["kind"] = kind
     for key, (low, high) in dishdom.LIMITS.items():
         if key in data:
-            out[key] = number(data, key, low, high) if str(data[key] or "").strip() else None
+            out[key] = number(data, key, low, high) if data[key] is not None and str(data[key]).strip() else None
     if "is_default" in data:
         out["is_default"] = str(data["is_default"]).lower() in ("1", "true", "yes", "on")
     return out
