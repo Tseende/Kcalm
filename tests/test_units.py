@@ -177,7 +177,7 @@ def test_matching_exact_and_synonym(db):
     ref = matching.find_food(db, "buckwheat", "гречка")
     assert ref and "Гречка" in ref.name_ru
     ref2 = matching.find_food(db, "chicken breast", "куриная грудка жареная")
-    assert ref2 and ref2.kcal_100g == 165
+    assert ref2 and ref2.kcal_100g == 187
 
 
 def test_matching_user_food_priority(db):

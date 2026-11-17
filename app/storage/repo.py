@@ -113,7 +113,7 @@ def user_default_grams(conn: sqlite3.Connection, user_id: int, food_id: int) -> 
 # ------------------------------------------------------------------- свои продукты
 
 PRODUCT_FIELDS = ("name", "brand", "kcal", "protein", "fat", "carbs", "default_grams",
-                  "unit_name", "unit_grams", "barcode", "icon")
+                  "unit_name", "unit_grams", "barcode", "icon", "nutrition_source")
 _PRODUCT_COLS = {"name": "name_ru", "brand": "brand", "kcal": "kcal_100g",
                  "protein": "protein_100g", "fat": "fat_100g", "carbs": "carbs_100g",
                  "default_grams": "default_grams", "unit_name": "unit_name",
@@ -151,7 +151,7 @@ def create_product(conn: sqlite3.Connection, user_id: int, name: str, kcal: floa
                    protein: float, fat: float, carbs: float, brand: str | None = None,
                    default_grams: float | None = None, unit_name: str | None = None,
                    unit_grams: float | None = None, barcode: str | None = None,
-                   icon: str | None = None) -> int:
+                   icon: str | None = None, nutrition_source: str | None = None) -> int:
     """Свой продукт (КБЖУ на 100 г). ValueError — значения вне допустимых границ."""
     import uuid
     name = (name or "").strip()
@@ -165,10 +165,10 @@ def create_product(conn: sqlite3.Connection, user_id: int, name: str, kcal: floa
     cur = conn.execute(
         """INSERT INTO foods (name_ru, name_en, kcal_100g, protein_100g, fat_100g, carbs_100g,
            source, barcode, external_id, owner_user_id, default_grams, unit_name, unit_grams,
-           brand, created_at, icon) VALUES (?,?,?,?,?,?, 'user', ?,?,?,?,?,?,?,?,?)""",
+           brand, created_at, icon, nutrition_source) VALUES (?,?,?,?,?,?, 'user', ?,?,?,?,?,?,?,?,?,?)""",
         (name, full_name, kcal, protein, fat, carbs, barcode,
          f"u{user_id}-{uuid.uuid4().hex}", user_id, default_grams, unit_name, unit_grams,
-         brand, utcnow_iso(), icon))
+         brand, utcnow_iso(), icon, nutrition_source))
     food_id = cur.lastrowid
     _set_product_aliases(conn, user_id, food_id, name, brand)
     conn.commit()
@@ -195,7 +195,11 @@ def update_product(conn: sqlite3.Connection, user_id: int, product_id: int,
         "protein": row["protein_100g"], "fat": row["fat_100g"], "carbs": row["carbs_100g"],
         "default_grams": row["default_grams"], "unit_name": row["unit_name"],
         "unit_grams": row["unit_grams"], "barcode": row["barcode"], "icon": row["icon"],
+        "nutrition_source": row["nutrition_source"],
     }
+    if "nutrition_source" not in fields and any(
+            fields[k] != merged[k] for k in ("kcal", "protein", "fat", "carbs") if k in fields):
+        merged["nutrition_source"] = None
     merged.update(fields)
     merged["name"] = (merged["name"] or "").strip()
     if not merged["name"]:
@@ -205,11 +209,13 @@ def update_product(conn: sqlite3.Connection, user_id: int, product_id: int,
     full_name = f"{merged['name']} {merged['brand']}" if merged["brand"] else merged["name"]
     conn.execute(
         """UPDATE foods SET name_ru=?, name_en=?, brand=?, kcal_100g=?, protein_100g=?,
-           fat_100g=?, carbs_100g=?, default_grams=?, unit_name=?, unit_grams=?, barcode=?, icon=?
+           fat_100g=?, carbs_100g=?, default_grams=?, unit_name=?, unit_grams=?, barcode=?, icon=?,
+           nutrition_source=?
            WHERE id=? AND owner_user_id=?""",
         (merged["name"], full_name, merged["brand"], merged["kcal"], merged["protein"],
          merged["fat"], merged["carbs"], merged["default_grams"], merged["unit_name"],
-         merged["unit_grams"], merged["barcode"], merged["icon"], product_id, user_id))
+         merged["unit_grams"], merged["barcode"], merged["icon"],
+         merged["nutrition_source"], product_id, user_id))
     _set_product_aliases(conn, user_id, product_id, merged["name"], merged["brand"])
     conn.commit()
     return get_product(conn, user_id, product_id)
@@ -878,7 +884,7 @@ def edit_item_grams(conn: sqlite3.Connection, item_id: int, new_grams: float) ->
     conn.commit()
 
 
-EXACT_SOURCES = ("manual", "barcode", "user")
+EXACT_SOURCES = ("manual", "barcode", "user", "label")
 
 
 def is_exact_item(item) -> bool:
@@ -948,7 +954,8 @@ def edit_item_manual(conn: sqlite3.Connection, item_id: int, *, name: str | None
             kcal=kcal, protein_g=protein, fat_g=fat, carbs_g=carbs, kcal_100g=k100,
             protein_100g=p100, fat_100g=f100, carbs_100g=c100, confidence=1.0,
             food_ref_id=food["id"] if food is not None else None,
-            source=("user" if owned else food["source"]) if food is not None else "manual")
+            source=(food["nutrition_source"] or ("user" if owned else food["source"]))
+            if food is not None else "manual")
     elif grams is not None:
         kcal, protein, fat, carbs = _scaled_values(item, new_grams)
         cols.update(kcal=kcal, protein_g=protein, fat_g=fat, carbs_g=carbs)
@@ -964,7 +971,10 @@ def edit_item_manual(conn: sqlite3.Connection, item_id: int, *, name: str | None
             before[field], after[field] = item[col], cols[col]
             conn.execute("INSERT INTO meal_edits (meal_item_id, field, old_value, new_value) "
                          "VALUES (?,?,?,?)", (item_id, field, str(item[col]), str(cols[col])))
-    _resum_meal(conn, meal_id)
+    if grams is not None or macros is not None:
+        _resum_meal(conn, meal_id)
+    else:
+        sync_meal_water(conn, meal_id)
     if macros is not None:
         _refresh_range(conn, meal_id, old_total)
     conn.execute(
@@ -1045,8 +1055,10 @@ def day_totals(conn: sqlite3.Connection, user_id: int, local_date: str) -> sqlit
                   COALESCE(SUM(protein_g),0) AS protein,
                   COALESCE(SUM(fat_g),0) AS fat,
                   COALESCE(SUM(carbs_g),0) AS carbs,
-                  COUNT(*) AS meals
-           FROM meals WHERE user_id=? AND local_date=? AND deleted_at IS NULL""",
+                  COUNT(*) AS meals,
+                  COALESCE(SUM((SELECT COUNT(*) FROM meal_items i
+                               WHERE i.meal_id=m.id AND i.source='unresolved')),0) AS unresolved_items
+           FROM meals m WHERE user_id=? AND local_date=? AND deleted_at IS NULL""",
         (user_id, local_date),
     ).fetchone()
 
@@ -1062,7 +1074,9 @@ def day_meals(conn: sqlite3.Connection, user_id: int, local_date: str) -> list[s
 def range_meals(conn: sqlite3.Connection, user_id: int, from_date: str,
                 to_date: str) -> list[sqlite3.Row]:
     return conn.execute(
-        """SELECT * FROM meals WHERE user_id=? AND local_date BETWEEN ? AND ?
+        """SELECT m.*, EXISTS(SELECT 1 FROM meal_items i
+                              WHERE i.meal_id=m.id AND i.source='unresolved') AS incomplete
+           FROM meals m WHERE user_id=? AND local_date BETWEEN ? AND ?
            AND deleted_at IS NULL ORDER BY local_date, local_time""",
         (user_id, from_date, to_date),
     ).fetchall()

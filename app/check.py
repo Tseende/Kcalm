@@ -203,7 +203,7 @@ def t_matching():
         ref = matching.find_food(conn, "buckwheat", "гречка", user_id=None)
         assert ref and "речка" in ref.name_ru, ref
         ref2 = matching.find_food(conn, "chicken breast", "куриная грудка жареная")
-        assert ref2 and ref2.kcal_100g == 165
+        assert ref2 and ref2.kcal_100g == 187
         # отсутствует в базе → None (идти в LLM-оценку)
         none = matching.find_food(conn, "holy grail chalice", "чаша грааля")
         assert none is None

@@ -58,3 +58,27 @@ def test_generic_word_does_not_pick_own_product(conn, query):
     conn, uid = conn
     ref = matching.find_food(conn, "", query, user_id=uid)
     assert ref is None or ref.source != "user"
+
+
+@pytest.mark.parametrize("query", ["киноа сухая", "сухарики ржаные", "салат", "суп", "сметана",
+                                   "сметана 7%", "йогурт греческий 2%"])
+def test_matcher_declines_unrelated_or_underspecified_product(conn, query):
+    db, uid = conn
+    assert matching.find_food(db, "", query, user_id=uid) is None
+
+
+def test_matcher_keeps_exact_short_name_and_respects_preparation(conn):
+    db, uid = conn
+    assert matching.find_food(db, "", "уха", user_id=uid).name_ru == "Уха"
+    assert matching.find_food(db, "", "гречка сухая", user_id=uid).name_ru == "Гречка сухая"
+    assert matching.find_food(db, "", "гречка варёная", user_id=uid).name_ru == "Гречка варёная"
+    assert matching.find_food(db, "", "гречка варёная", user_id=uid, preparation="raw").name_ru == "Гречка варёная"
+    assert matching.find_food(db, "", "сметана 10%", user_id=uid).name_ru == "Сметана 10%"
+
+
+def test_label_source_survives_lookup_and_is_cleared_after_manual_nutrition_edit(conn):
+    db, uid = conn
+    pid = repo.create_product(db, uid, "Йогурт Домашний", 65, 5, 3, 4, nutrition_source="label")
+    assert matching.find_food(db, "", "Йогурт Домашний", user_id=uid).source == "label"
+    repo.update_product(db, uid, pid, kcal=67)
+    assert matching.find_food(db, "", "Йогурт Домашний", user_id=uid).source == "user"

@@ -20,7 +20,7 @@ def gather(db: sqlite3.Connection, user, today: date) -> dom.SafetyInputs:
         totals = repo.day_totals(db, uid, day)
         if totals["meals"]:
             logged += 1
-        if totals["meals"] >= 2 and totals["kcal"] < dom.VERY_LOW_KCAL:
+        if totals["meals"] >= 2 and not totals["unresolved_items"] and totals["kcal"] < dom.VERY_LOW_KCAL:
             very_low += 1
     events14 = repo.cravings_range(db, uid, frm14, to)
     events30 = repo.cravings_range(db, uid, (today - timedelta(days=29)).isoformat(), to)

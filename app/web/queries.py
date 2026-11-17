@@ -114,7 +114,8 @@ def day_activity(db: sqlite3.Connection, user_id: int, local_date: str) -> dict 
 def day_totals(db: sqlite3.Connection, user_id: int, local_date: str) -> dict:
     t = repo.day_totals(db, user_id, local_date)
     return {"kcal": int(t["kcal"]), "protein": round(float(t["protein"]), 1),
-            "fat": round(float(t["fat"]), 1), "carbs": round(float(t["carbs"]), 1)}
+            "fat": round(float(t["fat"]), 1), "carbs": round(float(t["carbs"]), 1),
+            "unresolved_items": t["unresolved_items"]}
 
 
 # ------------------------------------------------------------------ статистика
@@ -134,7 +135,10 @@ def series(db: sqlite3.Connection, user: sqlite3.Row, start: date, n: int) -> li
     f, t = start.isoformat(), end.isoformat()
 
     meals: dict[str, dict] = {}
+    incomplete_days = set()
     for m in repo.range_meals(db, uid, f, t):
+        if m["incomplete"]:
+            incomplete_days.add(m["local_date"])
         d = meals.setdefault(m["local_date"], {"kcal": 0, "protein": 0.0, "fat": 0.0, "carbs": 0.0, "late": 0})
         d["kcal"] += m["kcal_total"]
         d["protein"] += m["protein_g"]
@@ -168,7 +172,7 @@ def series(db: sqlite3.Connection, user: sqlite3.Row, start: date, n: int) -> li
     for i in range(n):
         d = start + timedelta(days=i)
         key = d.isoformat()
-        eaten = meals.get(key)
+        eaten = meals.get(key) if key not in incomplete_days else None
         trend = value_at_or_before(smooth, d.toordinal())
         days.append({
             "date": key,

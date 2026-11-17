@@ -1039,6 +1039,11 @@ export default {
   "today.no_items": "Без позиций",
   // unit
   "unit.g": "г",
+  "nutrition.label": "С этикетки",
+  "nutrition.estimate": "Примерная оценка",
+  "nutrition.counted": "Учтено",
+  "nutrition.incomplete": "Позиций без расчёта: {n}",
+  "nutrition.unknown": "Уточни продукт или КБЖУ",
   "unit.kcal": "ккал",
   "unit.ml": "мл",
   "unit.kg": "кг",

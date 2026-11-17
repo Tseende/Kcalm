@@ -45,15 +45,17 @@ def build_context(db: sqlite3.Connection, user, today: date | None = None) -> di
         act = db.execute("SELECT steps FROM activity_daily WHERE user_id=? AND local_date=?",
                          (uid, d)).fetchone()
         day_rows.append({
-            "date": d, "kcal": day["kcal"], "meals": day["meals"], "late_kcal": late,
-            "protein": day["protein"], "sleep_min": sl["duration_min"] if sl else None,
+            "date": d, "kcal": None if day["unresolved_items"] else day["kcal"],
+            "meals": day["meals"], "late_kcal": late if not day["unresolved_items"] else 0,
+            "unresolved_items": day["unresolved_items"],
+            "protein": None if day["unresolved_items"] else day["protein"], "sleep_min": sl["duration_min"] if sl else None,
             "steps": act["steps"] if act and act["steps"] is not None else None,
         })
     tgt = repo.current_target(db, uid)
     target = tgt["kcal_target"] if tgt else 2100
     weights, _ = repo.trend_weight_series(db, uid, (today - timedelta(days=13)).strftime("%Y-%m-%d"),
                                           today.strftime("%Y-%m-%d"))
-    week_kcal = [r["kcal"] for r in day_rows if r["meals"]]
+    week_kcal = [r["kcal"] for r in day_rows if r["meals"] and r["kcal"] is not None]
     avg = int(sum(week_kcal) / len(week_kcal)) if week_kcal else 0
     from app.services import insights
     facts = insights.day_facts(db, user, today.isoformat())
@@ -103,12 +105,15 @@ def check_numbers(text: str, context: dict) -> list[str]:
 def format_review(ctx: dict, out: dict) -> str:
     """4 блока, ≤ 1200 символов. Числа — из Python-контекста."""
     today = ctx["days"][-1]
-    from app.domain.targets import round10_kcal
-    left = ctx["target_kcal"] - today["kcal"]
+    if today["kcal"] is None:
+        calories = f"Позиций без расчёта: {today['unresolved_items']}."
+    else:
+        left = ctx["target_kcal"] - today["kcal"]
+        calories = f"{today['kcal']} / {ctx['target_kcal']} ккал · осталось {left}"
     sleep = analytics.format_minutes(today["sleep_min"]) if today["sleep_min"] else "—"
     lines = [
         "📊 Итог дня",
-        f"{today['kcal']} / {ctx['target_kcal']} ккал · осталось {left} · "
+        f"{calories} · "
         f"шаги {today['steps'] if today['steps'] is not None else '—'} · сон {sleep}",
     ]
     if today["late_kcal"]:
@@ -194,6 +199,9 @@ def _yesterday_food_lines(db: sqlite3.Connection, user, yesterday: str, today_s:
     night = [m for m in repo.day_meals(db, user["id"], today_s) if m["local_time"] < "04:00"]
     night_kcal = int(sum(m["kcal_total"] for m in night))
     night_protein = round(sum(m["protein_g"] or 0 for m in night))
+    if f["unresolved_items"] or any(
+            i["source"] == "unresolved" for m in night for i in repo.get_meal_items(db, m["id"])):
+        return ["🍽 Итог за вчера неполный. Уточни позиции без расчёта в дневнике."]
     if not f["meals"] and not night:
         return ["🍽 Вчера еда не записана."]
     kcal, protein = f["kcal"] + night_kcal, f["protein"] + night_protein

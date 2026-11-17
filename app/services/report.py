@@ -65,12 +65,12 @@ def day_doc(db: sqlite3.Connection, user, day: str, coach: dict | None = None,
     f = insights.day_facts(db, user, day)
     doc = Doc().text(f"📊 <b>{title}</b> · {day[5:]}").image(chart)
     doc.table(["Показатель", "Факт", "Цель", ""], insights.scorecard_rows(f), align="lrrc")
-    if f["meals"]:
+    if f["meals"] or f["unresolved_items"]:
         meals = repo.day_meals(db, user["id"], day)
         doc.heading("🍽 Что съедено")
         doc.table(["Время", "Приём", "ккал"],
                   [[m["local_time"], meal_type_ru(m["meal_type"]), str(m["kcal_total"])]
-                   for m in meals], align="llr", total=["", "Всего", str(f["kcal"])])
+                   for m in meals], align="llr", total=["", "Учтено" if f["unresolved_items"] else "Всего", str(f["kcal"])])
         doc.text(f"Б {f['protein']} · Ж {f['fat']} · У {f['carbs']} г")
     good, tips = insights.day_tips(f, closed=closed)
     if good:

@@ -679,7 +679,7 @@ async def api_day(request: web.Request) -> web.Response:
     totals = q.day_totals(db, uid, key)
     return ok({
         "date": key, "targets": targets, "totals": totals,
-        "remaining_kcal": targets["kcal"] - totals["kcal"],
+        "remaining_kcal": None if totals["unresolved_items"] else targets["kcal"] - totals["kcal"],
         "water_ml": repo.day_water_ml(db, uid, key),
         "meals": [meal_json(db, m) for m in repo.day_meals(db, uid, key)],
         "sleep": q.day_sleep(db, uid, key),
@@ -804,7 +804,8 @@ def _manual_entry(db, user, raw):
         owned = food["owner_user_id"] is not None
         item = manualdom.make_item(
             _food_label(food), grams, food["kcal_100g"], food["protein_100g"], food["fat_100g"],
-            food["carbs_100g"], "100g", source="user" if owned else food["source"],
+            food["carbs_100g"], "100g",
+            source=food["nutrition_source"] or ("user" if owned else food["source"]),
             food_ref_id=food["id"], name_en=food["name_en"])
         return item, food, False
     name = _clean_name(raw, required=True)
@@ -1340,6 +1341,8 @@ def clean_product(data: dict, *, partial: bool) -> dict:
             if key == "icon" and text and not re.fullmatch(r"[a-z_]{1,24}", text):
                 raise bad("Неизвестная иконка.", "bad_field")
             out[key] = text or None
+    if not partial and data.get("nutrition_source") in ("label", "off"):
+        out["nutrition_source"] = data["nutrition_source"]
     if not partial and not out.get("name"):
         raise bad("У продукта должно быть название.", "bad_field")
     return out
@@ -1408,7 +1411,8 @@ async def api_product_label(request: web.Request) -> web.Response:
     except llm.LLMError as e:
         raise llm_failure(e, "Нет связи с моделью. Попробуйте ещё раз чуть позже.") from None
     draft, notes = await call(service("products", "enrich_with_off"), draft, notes)
-    return ok({"draft": {**product_json(draft), "id": None}, "confidence": confidence,
+    return ok({"draft": {**product_json(draft), "id": None,
+                         "nutrition_source": draft.get("nutrition_source")}, "confidence": confidence,
                "notes": notes})
 
 
@@ -1499,8 +1503,9 @@ async def api_product_barcode(request: web.Request) -> web.Response:
         raise ApiError(404, "not_found", "В Open Food Facts такого штрихкода нет. "
                                          "Сфотографируйте этикетку или введите вручную.")
     draft, existing_id = result
-    return ok({"draft": {**product_json(draft), "id": None}, "existing_id": existing_id,
-               "source": "off"})
+    return ok({"draft": {**product_json(draft), "id": None,
+                         "nutrition_source": draft.get("nutrition_source")}, "existing_id": existing_id,
+               "source": draft.get("nutrition_source") or "user"})
 
 
 # ------------------------------------------------------------------ посуда

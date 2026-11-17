@@ -12,8 +12,18 @@ from app.domain.nutrition import FoodRef
 
 STOP_TOKENS = {"и", "с", "со", "на", "в", "по", "из", "a", "the", "with", "and", "of", "de"}
 
-# способ приготовления в запросе отсутствует, но есть у кандидата → штраф
-MISMATCH_PREP = {"baked", "breaded", "dried", "powdered"}
+PREPARATION_TERMS = {
+    "raw": {"сырой", "сырая", "сырое", "сырые", "raw", "uncooked"},
+    "dry": {"сухой", "сухая", "сухое", "сухие", "dry", "dried"},
+    "boiled": {"вареный", "вареная", "вареное", "вареные", "отварной", "отварная", "boiled"},
+    "baked": {"запеченный", "запеченная", "запеченное", "запеченные", "baked", "roasted"},
+    "fried": {"жареный", "жареная", "жареное", "жареные", "fried"},
+    "steamed": {"паровой", "паровая", "steamed"},
+    "stewed": {"тушеный", "тушеная", "тушеное", "тушеные", "stewed"},
+}
+AMBIGUOUS_FAMILIES = {"салат", "суп", "сметана", "рыба", "сыр", "соус", "йогурт",
+                      "salad", "soup", "sour cream", "fish", "cheese", "sauce", "yogurt"}
+FAT_PERCENT = re.compile(r"(\d+(?:[.,]\d+)?)\s*%")
 
 # приоритет источника зависит от типа запроса (блюдо / простой ингредиент / бренд)
 SOURCE_BONUS = {
@@ -113,6 +123,23 @@ def _name_overlap(name_en: str, name_ru: str, query_tokens: list[str]) -> float:
     return hit / len(query_tokens)
 
 
+def _preparations(text: str) -> set[str]:
+    tokens = _clean(text).split()
+    return {kind for kind, terms in PREPARATION_TERMS.items() if any(t in terms for t in tokens)}
+
+
+def _compatible(query: str, preparation: str | None, row: sqlite3.Row) -> bool:
+    names = f"{row['name_ru']} {row['name_en']}"
+    named_preparation = _preparations(query)
+    requested = named_preparation or _preparations(preparation or "")
+    provided = _preparations(names)
+    if requested and (named_preparation or provided) and requested.isdisjoint(provided):
+        return False
+    fat = {float(f.replace(",", ".")) for f in FAT_PERCENT.findall(query)}
+    candidate_fat = {float(f.replace(",", ".")) for f in FAT_PERCENT.findall(names)}
+    return not fat or bool(fat & candidate_fat)
+
+
 def score_candidate(query: str, query_type: str, brand: str | None,
                     row: sqlite3.Row) -> float:
     q_tokens = _tokens(query)
@@ -121,18 +148,18 @@ def score_candidate(query: str, query_type: str, brand: str | None,
     name_en_norm = normalize(row["name_en"])
 
     cand_ru = _tokens(row["name_ru"])
-    if name_norm == normalize(query) or name_en_norm == normalize(query):
+    if _clean(query) in (_clean(row["name_ru"]), _clean(row["name_en"])):
+        score += 0.40
+    elif name_norm == normalize(query) or name_en_norm == normalize(query):
         score += 0.34
     elif cand_ru and len(cand_ru) == len(q_tokens) and \
             all(any(tokens_match(a, b) for b in q_tokens) for a in cand_ru):
         score += 0.34          # те же слова в другом числе/падеже/порядке: «сосиски» = «Сосиска»
-    elif name_norm in normalize(query) or name_en_norm in normalize(query) \
-            or normalize(query) in name_norm:
-        score += 0.26
     else:
         overlap = _name_overlap(row["name_en"], row["name_ru"], q_tokens)
-        if overlap >= 0.5:
-            score += 0.18 + 0.20 * (overlap - 0.5)
+        if overlap == 0:
+            return 0.0
+        score += 0.28 * overlap
 
     if brand:
         score += 0.18 if brand.lower() in name_norm or brand.lower() in name_en_norm else -0.08
@@ -144,8 +171,7 @@ def score_candidate(query: str, query_type: str, brand: str | None,
     # пропущен главный токен запроса
     # (с учётом падежа и числа: «сосиски» находят «Сосиска»)
     cand_tokens = set(_tokens(row["name_ru"])) | set(_tokens(row["name_en"]))
-    missing = [t for t in q_tokens if t not in name_norm and t not in name_en_norm
-               and not any(tokens_match(t, h) for h in cand_tokens)]
+    missing = [t for t in q_tokens if not any(tokens_match(t, h) for h in cand_tokens)]
     if q_tokens and len(missing) == len(q_tokens):
         score -= 0.36
     elif missing:
@@ -155,10 +181,6 @@ def score_candidate(query: str, query_type: str, brand: str | None,
              if not any(tokens_match(t, q) for q in q_tokens)]
     if missing and extra and len(missing) < len(q_tokens):
         score -= 0.5          # лучше честная LLM-оценка, чем уверенно не тот продукт
-
-    if any(p in name_en_norm for p in MISMATCH_PREP) and \
-            not any(p in normalize(query) for p in MISMATCH_PREP):
-        score -= 0.12
 
     score += SOURCE_BONUS.get(query_type, SOURCE_BONUS["dish"]).get(row["source"], 0.0)
     return score
@@ -189,7 +211,7 @@ def _own_product_score(query: str, query_type: str, brand: str | None, row: sqli
 def find_food(conn: sqlite3.Connection, name_en: str, name_ru: str = "",
               brand: str | None = None, query_type: str = "dish",
               user_id: int | None = None, top: int = 5,
-              threshold: float = 0.15) -> FoodRef | None:
+              threshold: float = 0.15, preparation: str | None = None) -> FoodRef | None:
     """Поиск в базе: user_foods → алиасы → foods по токенам. None = идти в LLM-оценку."""
     query = name_ru or name_en
     if not query:
@@ -206,8 +228,11 @@ def find_food(conn: sqlite3.Connection, name_en: str, name_ru: str = "",
                ORDER BY (a.user_id IS NULL), a.id DESC""",
             (norm, user_id, user_id),
         ).fetchone()
-        if row:
+        if row and _compatible(query, preparation, row):
             return _to_ref(row, confidence=0.95)
+
+    if _clean(query) in AMBIGUOUS_FAMILIES:
+        return None
 
     # 2. скоринг по всем кандидатам (база маленькая: seed ~200 + user-записи;
     #    LIKE не годится — SQLite не сравнивает регистр кириллицы)
@@ -228,6 +253,8 @@ def find_food(conn: sqlite3.Connection, name_en: str, name_ru: str = "",
             alias_phrases.setdefault(a["food_id"], []).append(_split_tokens(a["alias_text"]))
     scored_all = []
     for r in candidates:
+        if not _compatible(query, preparation, r):
+            continue
         if r["owner_user_id"] is not None:
             own = _own_product_score(query, query_type, brand, r, q_tokens,
                                      alias_phrases.get(r["id"], ()))
@@ -241,6 +268,12 @@ def find_food(conn: sqlite3.Connection, name_en: str, name_ru: str = "",
     if not scored or scored[0][0] < threshold:
         return None
     best_score, best = scored[0]
+    if len(scored) > 1 and best_score - scored[1][0] < 0.04:
+        exact = norm in (normalize(best["name_ru"]), normalize(best["name_en"]))
+        runner_up = scored[1][1]
+        other_exact = norm in (normalize(runner_up["name_ru"]), normalize(runner_up["name_en"]))
+        if (not exact or other_exact) and abs(best["kcal_100g"] - runner_up["kcal_100g"]) >= 25:
+            return None
     conf = min(0.95, 0.5 + best_score / 2)
     return _to_ref(best, confidence=round(conf, 2))
 
@@ -254,6 +287,6 @@ def _to_ref(row: sqlite3.Row, confidence: float) -> FoodRef:
         protein_100g=row["protein_100g"],
         fat_100g=row["fat_100g"],
         carbs_100g=row["carbs_100g"],
-        source=row["source"],
+        source=row["nutrition_source"] or row["source"],
         confidence=confidence,
     )

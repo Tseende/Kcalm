@@ -1,0 +1,356 @@
+﻿name_ru,name_en,kcal_100g,protein_100g,fat_100g,carbs_100g,source
+Абрикос,apricot,48.0,1.4,0.4,11.1,seed
+Авокадо,avocado,160.0,2.0,14.7,8.5,seed
+Ананас,pineapple,50.0,0.5,0.1,13.0,seed
+Апельсин,orange,47.0,0.9,0.1,11.8,seed
+Арахис жареный,roasted peanuts,587.0,24.0,50.0,21.0,seed
+Арахисовая паста,peanut butter,588.0,25.0,50.0,20.0,seed
+Арбуз,watermelon,30.0,0.6,0.2,7.6,seed
+Багет,baguette,274.0,8.8,2.5,55.0,seed
+Баклажан свежий,raw eggplant,24.0,1.2,0.1,4.5,seed
+Баклажаны жареные,fried eggplant,120.0,1.0,9.0,7.0,seed
+Банан,banana,89.0,1.1,0.3,22.8,seed
+Баранина тушёная,stewed lamb,267.0,22.0,19.0,0.0,seed
+Батон нарезной,sliced loaf,264.0,7.8,3.0,51.0,seed
+Батончик протеиновый,protein bar,350.0,30.0,12.0,30.0,seed
+Батончик шоколадный,chocolate bar snack,490.0,8.0,24.0,60.0,seed
+Бекон жареный,fried bacon,500.0,37.0,42.0,1.4,seed
+Бефстроганов,beef stroganoff,190.0,14.0,13.0,4.0,seed
+Бигмак,big mac,250.0,12.0,12.0,23.0,seed
+Блины,pancakes (blini),189.0,6.1,8.4,23.0,seed
+Борщ,borscht,49.0,1.6,2.7,5.0,seed
+Брокколи варёная,boiled broccoli,35.0,2.4,0.4,7.0,seed
+Булгур варёный,bulgur boiled,83.0,3.1,0.2,18.6,seed
+Булочка сдобная,sweet bun,330.0,8.0,8.0,55.0,seed
+Бутерброд с колбасой,sausage sandwich,280.0,10.0,16.0,25.0,seed
+Бутерброд с сыром,cheese sandwich,250.0,11.0,12.0,24.0,seed
+Вареники с картошкой,potato vareniki,190.0,4.0,3.5,36.0,seed
+Вареники с творогом,curd vareniki,210.0,9.0,4.0,35.0,seed
+Варенье,jam,278.0,0.3,0.0,70.0,seed
+Вафли,waffles,420.0,7.0,15.0,62.0,seed
+Ветчина,ham,270.0,15.0,23.0,2.0,seed
+Винегрет,vinaigrette salad,76.0,1.6,5.6,5.0,seed
+Вино белое сухое,dry white wine,66.0,0.1,0.0,0.6,seed
+Вино красное сухое,dry red wine,85.0,0.1,0.0,2.6,seed
+Виноград,grapes,69.0,0.7,0.2,18.0,seed
+Вишня,cherry sour,52.0,0.9,0.4,10.6,seed
+Водка,vodka,235.0,0.0,0.0,0.0,seed
+Говядина жареная,fried beef,220.0,26.0,12.0,0.0,seed
+Говядина отварная,boiled beef,220.0,27.0,11.5,0.0,seed
+Голубцы,cabbage rolls,110.0,7.0,5.0,9.0,seed
+Горбуша запечённая,baked pink salmon,168.0,23.0,8.0,0.0,seed
+Гороховый суп,pea soup,66.0,4.4,1.6,9.0,seed
+Горошек зелёный,green peas canned,72.0,5.4,0.4,10.0,seed
+Горчица,mustard,66.0,5.7,4.4,5.3,seed
+Гранат,pomegranate,83.0,1.7,1.2,18.7,seed
+Гранола,granola,450.0,9.0,18.0,64.0,seed
+Грейпфрут,grapefruit,35.0,0.7,0.1,8.5,seed
+Грецкий орех,walnuts,654.0,15.0,65.0,14.0,seed
+Греческий йогурт,greek yogurt,59.0,10.0,0.7,3.6,seed
+Гречка варёная,buckwheat boiled,110.0,4.2,1.1,21.3,seed
+Гречка сухая,dry buckwheat,313.0,12.6,3.3,62.0,seed
+Грибной суп,mushroom soup,32.0,1.3,1.5,3.0,seed
+Грибы жареные с луком,fried mushrooms with onion,110.0,3.0,9.0,4.0,seed
+Грудка куриная копчёная,smoked chicken breast,120.0,22.0,3.0,0.0,seed
+Груша,pear,57.0,0.4,0.1,15.2,seed
+Гуляш говяжий,beef goulash,165.0,15.0,10.0,4.0,seed
+Гусь запечённый,roast goose,338.0,28.0,24.0,0.0,seed
+Драники,potato pancakes,200.0,3.5,10.0,24.0,seed
+Дыня,melon,36.0,0.6,0.2,8.2,seed
+Запеканка творожная,cottage cheese casserole,168.0,14.0,8.0,12.0,seed
+Зелень укроп петрушка,fresh herbs dill parsley,40.0,3.0,0.5,6.0,seed
+Зефир,marshmallow (zefir),326.0,0.8,0.1,80.0,seed
+Изюм,raisins,299.0,3.1,0.5,79.0,seed
+Икра красная,red caviar,250.0,32.0,13.0,0.0,seed
+Индейка бедро запечённое,baked turkey thigh,145.0,24.0,5.0,0.0,seed
+Индейка грудка варёная,boiled turkey breast,115.0,25.0,1.5,0.0,seed
+Индейка филе жареное,fried turkey breast,135.0,29.0,1.7,0.0,seed
+Йогурт натуральный,plain yogurt,60.0,4.3,2.0,6.0,seed
+Йогурт питьевой с сахаром,drinking yogurt sweetened,85.0,2.8,2.5,12.0,seed
+Йогурт фруктовый,fruit yogurt,95.0,3.5,2.5,14.0,seed
+Кабачок жареный,fried zucchini,88.0,1.2,6.0,4.5,seed
+Кабачок свежий,raw zucchini,24.0,0.6,0.3,4.6,seed
+Какао на молоке,cocoa with milk,85.0,3.0,2.5,13.0,seed
+Кальмар варёный,boiled squid,98.0,18.0,2.2,3.0,seed
+Капуста белая свежая,raw cabbage,28.0,1.8,0.1,4.7,seed
+Капуста тушёная,stewed cabbage,68.0,1.9,4.6,5.0,seed
+Капучино,cappuccino,45.0,2.3,2.3,3.7,seed
+Картофель варёный,potato boiled,87.0,2.0,0.1,19.9,seed
+Картофель жареный,potato fried,192.0,2.8,9.5,23.0,seed
+Картофель запечённый,baked potato,95.0,2.5,0.1,21.0,seed
+Картофель сырой,raw potato,77.0,2.0,0.4,16.0,seed
+Картофель фри,french fries,312.0,3.4,15.0,41.0,seed
+Картофельное пюре,mashed potato with milk and butter,106.0,2.1,4.2,14.7,seed
+Квас,kvass,27.0,0.2,0.0,5.5,seed
+Квашеная капуста,sauerkraut,19.0,1.9,0.1,4.4,seed
+Кекс,muffin,400.0,6.0,17.0,55.0,seed
+Кетчуп,ketchup,101.0,1.3,0.1,22.0,seed
+Кефир 1%,kefir 1%,40.0,3.0,1.0,4.0,seed
+Кефир 2.5%,kefir 2.5%,50.0,2.8,2.5,4.0,seed
+Кефир 3.2%,kefir 3.2%,59.0,2.9,3.2,4.0,seed
+Кешью,cashews,553.0,18.0,44.0,30.0,seed
+Киви,kiwi,61.0,1.1,0.5,14.7,seed
+Киноа варёная,quinoa boiled,120.0,4.4,1.9,21.3,seed
+Кисель,kissel,60.0,0.1,0.0,15.0,seed
+Клубника,strawberry,32.0,0.7,0.3,7.7,seed
+Кока-кола,cola,42.0,0.0,0.0,10.6,seed
+Колбаса варёная,boiled sausage (doctor style),301.0,13.0,27.0,2.0,seed
+Колбаса докторская,doctor sausage,257.0,12.8,22.2,1.5,seed
+Колбаса полукопчёная,semi-smoked sausage,366.0,16.0,33.0,1.0,seed
+Колбаса сервелат,cervelat sausage,460.0,24.0,40.0,0.0,seed
+Колбаса сырокопчёная,dry cured sausage,470.0,25.0,41.0,1.0,seed
+Компот,compote,60.0,0.3,0.1,14.8,seed
+Конфета шоколадная,chocolate candy,480.0,5.0,25.0,60.0,seed
+Котлета куриная,chicken cutlet fried,195.0,19.0,11.0,6.0,seed
+Котлета свино-говяжья,mixed meat cutlet fried,250.0,15.0,19.0,7.0,seed
+Кофе без сахара,black coffee,2.0,0.1,0.0,0.3,seed
+Кофе с молоком и сахаром,coffee with milk and sugar,55.0,1.5,1.5,9.0,seed
+Крабовые палочки,crab sticks,95.0,6.0,1.0,13.0,seed
+Креветки варёные,boiled shrimp,99.0,24.0,0.3,0.2,seed
+Кролик тушёный,stewed rabbit,183.0,21.0,10.0,0.0,seed
+Круассан,croissant,406.0,8.2,21.0,45.0,seed
+Кукуруза варёная в початках,boiled corn on the cob,123.0,4.1,2.3,22.5,seed
+Кукуруза консервированная,canned corn,119.0,3.3,1.4,22.0,seed
+Курага,dried apricots,241.0,3.4,0.5,63.0,seed
+Куриная голень запечённая,baked chicken drumstick,184.0,24.0,9.0,0.0,seed
+Куриная грудка варёная,boiled chicken breast,153.0,30.0,2.5,0.0,seed
+Куриная грудка жареная,pan-fried chicken breast,165.0,31.0,3.6,0.0,seed
+Куриная грудка сырая,raw chicken breast,113.0,23.6,1.9,0.0,seed
+Куриное бедро варёное,boiled chicken thigh,190.0,25.0,10.0,0.0,seed
+Куриное бедро жареное,fried chicken thigh,209.0,26.0,11.0,0.0,seed
+Куриные крылышки жареные,fried chicken wings,245.0,24.0,16.0,0.0,seed
+Куриные стрипсы,chicken strips,260.0,18.0,15.0,13.0,seed
+Курица гриль,grilled chicken,190.0,20.0,12.0,0.0,seed
+Кускус варёный,couscous boiled,112.0,3.8,0.2,23.2,seed
+Лаваш,lavash,236.0,7.9,1.0,49.0,seed
+Лазанья,lasagna,150.0,8.0,8.0,12.0,seed
+Латте,latte,50.0,3.0,2.5,4.5,seed
+Лимон,lemon,35.0,1.1,0.3,9.3,seed
+Лимонад,lemonade,45.0,0.0,0.0,11.0,seed
+Лосось жареный,fried salmon,206.0,22.0,12.0,0.0,seed
+Лосось запечённый,baked salmon,190.0,22.0,11.0,0.0,seed
+Лук репчатый,onion,41.0,1.4,0.1,9.1,seed
+Майонез,mayonnaise,680.0,2.4,75.0,3.7,seed
+Макароны варёные,pasta boiled,158.0,5.8,0.9,30.9,seed
+Макароны варёные из твёрдых сортов,pasta durum boiled,140.0,5.5,1.1,27.0,seed
+Макароны сухие,dry pasta,350.0,12.0,1.5,71.0,seed
+Малина,raspberry,52.0,1.2,0.7,12.0,seed
+Манго,mango,60.0,0.8,0.4,15.0,seed
+Мандарин,mandarin,53.0,0.8,0.3,13.3,seed
+Манная каша на молоке,semolina porridge milk,98.0,3.0,3.0,15.0,seed
+Манты,manti dumplings,217.0,11.0,12.0,17.0,seed
+Мармелад,marmalade,300.0,0.4,0.1,76.0,seed
+Масло оливковое,olive oil,884.0,0.0,100.0,0.0,seed
+Масло подсолнечное,sunflower oil,900.0,0.0,100.0,0.0,seed
+Масло растительное,sunflower oil,899.0,0.0,99.9,0.0,seed
+Масло сливочное,butter,748.0,0.5,82.5,0.8,seed
+Мидии варёные,boiled mussels,77.0,11.5,2.0,3.0,seed
+Миндаль,almonds,579.0,21.0,50.0,22.0,seed
+Минтай запечённый,baked pollock,90.0,16.0,2.0,0.0,seed
+Молоко 1.5%,milk 1.5%,44.0,2.8,1.5,4.7,seed
+Молоко 2.5%,milk 2.5%,52.0,2.8,2.5,4.7,seed
+Молоко 3.2%,milk 3.2%,60.0,2.9,3.2,4.7,seed
+Молоко миндальное,almond milk,24.0,0.7,1.4,2.7,seed
+Молоко овсяное,oat milk,45.0,1.0,1.5,7.0,seed
+Молоко сгущённое,condensed milk,320.0,7.2,8.5,56.0,seed
+Молоко соевое,soy milk,40.0,3.3,1.8,1.6,seed
+Молочный коктейль,milkshake,110.0,3.0,3.5,17.0,seed
+Морковь варёная,boiled carrot,35.0,0.8,0.3,8.0,seed
+Морковь по-корейски,korean carrot salad,112.0,1.2,8.0,9.0,seed
+Морковь свежая,raw carrot,35.0,1.3,0.1,8.2,seed
+Мороженое сливочное,ice cream,207.0,3.5,14.0,21.0,seed
+Морс клюквенный,cranberry drink,40.0,0.0,0.0,10.0,seed
+Мюсли,muesli,380.0,9.0,8.0,68.0,seed
+Мёд,honey,304.0,0.3,0.0,82.0,seed
+Наггетсы,chicken nuggets,296.0,15.0,19.0,16.0,seed
+Нектарин,nectarine,44.0,1.1,0.3,10.6,seed
+Нут варёный,chickpeas boiled,164.0,8.9,2.6,27.4,seed
+Овощное рагу,vegetable stew,60.0,1.8,3.0,7.0,seed
+Овсянка на воде,oatmeal water,88.0,3.0,1.7,15.0,seed
+Овсянка на молоке,oatmeal milk,105.0,4.4,3.2,15.7,seed
+Овсяные хлопья сухие,dry oat flakes,366.0,12.0,6.0,62.0,seed
+Огурец,cucumber,15.0,0.8,0.1,2.8,seed
+Огурец солёный,pickled cucumber,12.0,0.4,0.2,1.7,seed
+Окрошка на кефире,okroshka,60.0,3.5,2.5,6.0,seed
+Оладьи,oladyi fritters,168.0,5.0,6.0,23.0,seed
+Оливки,olives,115.0,0.8,11.0,6.0,seed
+Омлет,omelette,184.0,11.0,14.0,2.0,seed
+Паста болоньезе,pasta bolognese,150.0,7.0,5.0,20.0,seed
+Паста карбонара,pasta carbonara,190.0,7.0,9.0,20.0,seed
+Пастила,pastila,310.0,0.5,0.0,80.0,seed
+Паштет печёночный,liver pate,300.0,15.0,26.0,3.0,seed
+Пельмени варёные,dumplings boiled,210.0,11.9,9.9,16.5,seed
+Перец болгарский,bell pepper,27.0,1.3,0.1,6.0,seed
+Перловка варёная,pearl barley boiled,109.0,3.1,1.2,22.2,seed
+Персик,peach,39.0,0.9,0.3,9.5,seed
+Печень говяжья тушёная,stewed beef liver,156.0,25.0,5.0,2.0,seed
+Печень куриная жареная,fried chicken liver,172.0,26.0,6.0,2.0,seed
+Печенье овсяное,oatmeal cookies,437.0,6.0,15.0,68.0,seed
+Печенье сахарное,sugar cookies,417.0,7.0,10.0,75.0,seed
+Пиво светлое,light beer,43.0,0.5,0.0,3.6,seed
+Пирожок жареный с картошкой,fried patty with potato,240.0,4.7,12.0,27.0,seed
+Пирожок с капустой печёный,baked cabbage pie,230.0,5.0,8.0,35.0,seed
+Пирожок с мясом жареный,fried meat pie,280.0,9.0,14.0,29.0,seed
+Пицца Маргарита,pizza margherita,250.0,10.0,9.0,33.0,seed
+Пицца пепперони,pepperoni pizza,298.0,13.0,12.0,34.0,seed
+Плов с говядиной,beef pilaf,190.0,7.0,10.0,17.0,seed
+Плов с курицей,chicken plov,190.0,8.0,7.0,24.0,seed
+Помидор,tomato,20.0,0.9,0.2,3.9,seed
+Пончик,doughnut,380.0,6.0,20.0,45.0,seed
+Попкорн с маслом,buttered popcorn,500.0,8.0,28.0,58.0,seed
+Протеин сывороточный,whey protein powder,380.0,75.0,6.0,7.0,seed
+Протеиновый коктейль готовый,ready protein shake,60.0,10.0,1.0,3.0,seed
+Пряники,gingerbread,350.0,5.0,3.0,77.0,seed
+Пшённая каша,millet porridge,90.0,3.0,0.8,17.0,seed
+Рассольник,rassolnik,46.0,1.5,2.0,5.5,seed
+Редис,radish,16.0,1.2,0.1,3.4,seed
+Рис белый варёный,white rice boiled,130.0,2.7,0.3,28.0,seed
+Рис бурый варёный,brown rice boiled,123.0,2.7,1.0,25.6,seed
+Рис сухой,dry rice,344.0,6.7,0.7,78.0,seed
+Рисовая каша на молоке,rice porridge milk,97.0,3.0,1.7,17.0,seed
+Ролл Калифорния,california roll,180.0,5.0,5.0,28.0,seed
+Ролл Филадельфия,philadelphia roll,210.0,7.0,9.0,24.0,seed
+Рыбные палочки,fish sticks fried,230.0,12.0,13.0,18.0,seed
+Ряженка,ryazhenka,54.0,2.9,2.5,4.1,seed
+Рёбрышки свиные запечённые,baked pork ribs,320.0,19.0,27.0,0.0,seed
+Сайра консервированная,canned saury,280.0,18.0,24.0,0.0,seed
+Салат Мимоза,mimosa salad,200.0,8.0,17.0,4.0,seed
+Салат Цезарь с курицей,caesar salad with chicken,190.0,12.0,13.0,4.0,seed
+Салат греческий,greek salad,110.0,3.0,9.0,5.0,seed
+Салат из свежей капусты,fresh cabbage salad,28.0,1.8,0.1,5.0,seed
+Салат крабовый,crab salad,130.0,5.0,9.0,7.0,seed
+Салат листовой,lettuce,15.0,1.4,0.2,2.0,seed
+Салат овощной с маслом,vegetable salad with oil,90.0,1.2,7.5,4.5,seed
+Салат оливье,olivier salad,298.0,4.0,24.0,13.0,seed
+Сало солёное,salted pork fat,770.0,2.4,89.0,0.0,seed
+Самса,samsa,290.0,10.0,17.0,26.0,seed
+Сардельки свиные,pork sardelki,280.0,11.0,26.0,2.0,seed
+Сардины в масле,sardines in oil,280.0,24.0,20.0,0.0,seed
+Сахар,sugar,387.0,0.0,0.0,99.8,seed
+Свинина жареная,fried pork,289.0,24.0,21.0,0.0,seed
+Свинина запечённая,baked pork,242.0,25.0,15.0,0.0,seed
+Свёкла варёная,boiled beetroot,44.0,1.7,0.1,10.0,seed
+Свёкла сырая,raw beetroot,43.0,1.6,0.2,9.6,seed
+Сельдерей стебель,celery,13.0,0.9,0.1,2.1,seed
+Сельдь солёная,salted herring,217.0,20.0,15.0,0.0,seed
+Селёдка под шубой,herring under fur coat,190.0,5.0,14.0,11.0,seed
+Семена льна,flax seeds,534.0,18.0,42.0,29.0,seed
+Семена чиа,chia seeds,486.0,17.0,31.0,42.0,seed
+Семечки подсолнечника,sunflower seeds,584.0,21.0,51.0,20.0,seed
+Семечки тыквенные,pumpkin seeds,559.0,30.0,49.0,11.0,seed
+Скумбрия запечённая,baked mackerel,191.0,18.0,13.0,0.0,seed
+Слива,plum,46.0,0.7,0.3,11.0,seed
+Сливки 10%,cream 10%,118.0,2.8,10.0,3.6,seed
+Сливки 33%,cream 33%,337.0,2.2,35.0,3.0,seed
+Слойка с яблоком,apple puff pastry,300.0,4.0,15.0,38.0,seed
+Сметана 10%,sour cream 10%,119.0,3.0,10.0,3.2,seed
+Сметана 15%,sour cream 15%,162.0,2.6,15.0,3.0,seed
+Сметана 20%,sour cream 20%,204.0,2.8,20.0,3.4,seed
+Сметанный соус,sour cream sauce,180.0,3.0,17.0,4.0,seed
+Смородина чёрная,blackcurrant,44.0,1.0,0.4,7.3,seed
+Смузи фруктовый,fruit smoothie,60.0,1.0,0.5,13.0,seed
+Соевый соус,soy sauce,53.0,8.0,0.6,5.0,seed
+Сок апельсиновый,orange juice,45.0,0.7,0.2,10.4,seed
+Сок мультифрукт,multifruit juice,48.0,0.5,0.1,11.5,seed
+Сок томатный,tomato juice,18.0,0.8,0.1,3.5,seed
+Сок яблочный,apple juice,46.0,0.1,0.1,11.0,seed
+Солянка мясная,meat solyanka,167.0,7.0,12.0,5.0,seed
+Сосиска,frankfurter sausage,266.0,12.0,24.0,2.0,seed
+Сосиски говяжьи,beef sausages,230.0,12.0,20.0,2.0,seed
+Сосиски из индейки,turkey sausages,180.0,14.0,13.0,1.5,seed
+Сосиски куриные,chicken sausages,220.0,12.0,18.0,2.0,seed
+Сосиски молочные,milk sausages,260.0,11.0,24.0,1.6,seed
+Соус сырный,cheese sauce,300.0,3.0,28.0,8.0,seed
+Соус цезарь,caesar dressing,430.0,2.0,45.0,4.0,seed
+Стейк говяжий,beef steak,250.0,26.0,16.0,0.0,seed
+Судак запечённый,baked pike-perch,105.0,21.0,2.0,0.0,seed
+Суп куриный с лапшой,chicken noodle soup,45.0,3.0,1.5,5.0,seed
+Суп с фрикадельками,meatball soup,60.0,3.5,3.0,5.0,seed
+Суп харчо,kharcho soup,90.0,4.5,4.5,8.0,seed
+Суп-пюре из тыквы,pumpkin cream soup,45.0,1.0,2.0,5.5,seed
+Сухарики со вкусами,flavored rye croutons,350.0,9.0,8.0,62.0,seed
+Сыр брынза,feta/brinza,260.0,14.0,22.0,2.0,seed
+Сыр голландский,gouda,352.0,26.0,27.0,0.0,seed
+Сыр моцарелла,mozzarella,280.0,22.0,21.0,2.2,seed
+Сыр пармезан,parmesan,392.0,33.0,28.0,0.0,seed
+Сыр плавленый,processed cheese,290.0,12.0,24.0,4.0,seed
+Сыр рикотта,ricotta,174.0,11.0,13.0,3.0,seed
+Сыр российский,russian cheese,363.0,24.0,30.0,0.0,seed
+Сыр сулугуни,suluguni,290.0,20.0,23.0,0.0,seed
+Сыр твёрдый,hard cheese (gouda),356.0,25.0,27.0,2.2,seed
+Сыр фета,feta,264.0,14.0,21.0,4.0,seed
+Сырники,syrniki fried,220.0,15.0,11.0,16.0,seed
+Сырный суп,cheese soup,100.0,4.0,6.0,7.0,seed
+Сырок творожный глазированный,glazed curd bar,400.0,8.5,24.0,38.0,seed
+Сёмга слабосолёная,lightly salted salmon,200.0,21.0,13.0,0.0,seed
+Творог 2%,cottage cheese 2%,103.0,18.0,2.0,3.3,seed
+Творог 5%,cottage cheese 5%,121.0,17.0,5.0,1.8,seed
+Творог 9%,cottage cheese 9%,159.0,18.0,9.0,3.3,seed
+Творог обезжиренный,low-fat cottage cheese,71.0,16.0,0.6,1.3,seed
+Творожный сыр,cream cheese,253.0,6.0,24.0,4.0,seed
+Телятина отварная,boiled veal,131.0,30.9,1.1,0.0,seed
+Тефтели в соусе,meatballs in sauce,170.0,10.0,11.0,7.0,seed
+Томатная паста,tomato paste,82.0,4.8,0.4,16.7,seed
+Торт бисквитный,sponge cake,350.0,5.0,15.0,50.0,seed
+Тортилья пшеничная,wheat tortilla,300.0,8.0,7.0,50.0,seed
+Тофу,tofu,76.0,8.0,4.8,1.9,seed
+Треска варёная,boiled cod,78.0,18.0,0.3,0.0,seed
+Тунец консервированный,canned tuna in water,116.0,26.0,1.0,0.0,seed
+Тушёнка говяжья,canned beef stew,220.0,15.0,17.0,0.0,seed
+Тыква запечённая,baked pumpkin,46.0,1.0,0.3,10.0,seed
+Тыква сырая,raw pumpkin,26.0,1.0,0.1,6.5,seed
+Утка запечённая,roast duck,337.0,19.0,28.0,0.0,seed
+Уха,ukha fish soup,40.0,4.0,1.5,2.5,seed
+Фалафель,falafel,333.0,13.0,18.0,32.0,seed
+Фарш говяжий жареный,fried ground beef,250.0,26.0,16.0,0.0,seed
+Фарш индейки сырой,raw ground turkey,150.0,19.0,8.0,0.0,seed
+Фарш куриный сырой,raw ground chicken,143.0,17.5,8.0,0.0,seed
+Фарш свиной сырой,raw ground pork,260.0,16.5,21.0,0.0,seed
+Фасоль варёная,white beans boiled,140.0,9.7,0.4,25.3,seed
+Фасоль стручковая,green beans,31.0,1.8,0.2,7.0,seed
+Финики,dates,282.0,2.5,0.4,75.0,seed
+Фисташки,pistachios,560.0,20.0,45.0,28.0,seed
+Форель запечённая,baked trout,150.0,21.0,7.0,0.0,seed
+Фундук,hazelnuts,628.0,15.0,61.0,17.0,seed
+Халва,halva,516.0,12.0,30.0,51.0,seed
+Хачапури,khachapuri,290.0,11.0,14.0,31.0,seed
+Хек запечённый,baked hake,110.0,17.0,4.5,0.0,seed
+Хлеб белый,white bread,266.0,8.0,3.2,49.0,seed
+Хлеб цельнозерновой,whole grain bread,247.0,13.0,3.4,41.0,seed
+Хлеб чёрный,rye bread,217.0,6.6,1.2,44.0,seed
+Хлебцы,crispbread,310.0,10.0,2.0,66.0,seed
+Хлопья кукурузные,corn flakes,360.0,7.0,1.0,84.0,seed
+Хот-дог,hot dog,280.0,10.0,15.0,26.0,seed
+Хумус,hummus,166.0,8.0,10.0,14.0,seed
+Хурма,persimmon,67.0,0.5,0.3,16.8,seed
+Цветная капуста варёная,boiled cauliflower,25.0,1.9,0.3,5.0,seed
+Чай без сахара,tea without sugar,1.0,0.0,0.0,0.2,seed
+Чай с сахаром,tea with sugar,30.0,0.0,0.0,7.5,seed
+Чебурек,chebureki,300.0,10.0,18.0,24.0,seed
+Черешня,sweet cherry,63.0,1.1,0.2,16.0,seed
+Черника,blueberry,57.0,0.7,0.3,14.0,seed
+Чернослив,prunes,240.0,2.2,0.4,64.0,seed
+Чеснок,garlic,143.0,6.5,0.5,29.9,seed
+Чечевица варёная,lentils boiled,116.0,9.0,0.4,20.1,seed
+Чизбургер,cheeseburger,300.0,15.0,14.0,28.0,seed
+Чизкейк,cheesecake,320.0,6.0,22.0,26.0,seed
+Чипсы,potato chips,536.0,7.0,33.0,53.0,seed
+Шампиньоны жареные,fried champignons,43.0,3.7,3.0,0.5,seed
+Шампиньоны свежие,raw mushrooms,27.0,4.3,1.0,0.1,seed
+Шаурма с курицей,chicken shawarma,210.0,12.0,9.0,20.0,seed
+Шашлык из курицы,chicken shashlik,180.0,22.0,9.0,0.0,seed
+Шашлык из свинины,pork shashlik,280.0,17.0,23.0,0.0,seed
+Шоколад молочный,milk chocolate,535.0,7.7,30.0,59.0,seed
+Шоколад тёмный,dark chocolate,546.0,7.8,35.0,47.0,seed
+Шоколадная паста,chocolate spread,539.0,6.0,31.0,56.0,seed
+Шпинат,spinach,23.0,2.9,0.4,3.6,seed
+Шпроты в масле,sprats in oil,363.0,17.4,32.4,0.0,seed
+Щи из свежей капусты,cabbage soup,38.0,1.3,2.0,3.5,seed
+Эклер,eclair,330.0,6.0,20.0,33.0,seed
+Энергетик,energy drink,45.0,0.0,0.0,11.0,seed
+Эскимо,ice cream bar chocolate,270.0,3.5,17.0,26.0,seed
+Яблоко,apple,52.0,0.3,0.2,13.8,seed
+Яйцо жареное,fried egg,196.0,14.0,15.0,1.0,seed
+Яйцо куриное варёное,boiled egg,155.0,13.0,11.0,1.1,seed
+Яйцо куриное сырое,raw egg,157.0,12.7,11.5,0.7,seed
+Яйцо перепелиное,quail egg,160.0,11.9,13.1,0.6,seed

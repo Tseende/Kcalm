@@ -64,7 +64,7 @@ class FoodRef(BaseModel):
     protein_100g: float
     fat_100g: float
     carbs_100g: float
-    source: Literal["off", "usda", "user", "seed", "llm"]
+    source: Literal["off", "usda", "user", "seed", "llm", "generic", "unresolved", "label"]
     confidence: float = 0.5
     unresolved: bool = False      # КБЖУ не определены: в сумме 0 ккал, это надо показать
 
@@ -132,7 +132,7 @@ def calculate_item(item: IngredientEstimate, ref: FoodRef) -> CalculatedItem:
     flags: list[str] = []
     if ref.unresolved:
         flags.append(f"не нашёл калорийность «{item.name_ru or item.name}» — "
-                     "в сумме 0 ккал, внеси вручную")
+                     "уточни продукт или внеси КБЖУ вручную")
     kcal_mid = ref.kcal_100g * scale
 
     # проверка 4/9/4: заявленная энергия против энергии из макросов, допуск 25 %
@@ -155,7 +155,7 @@ def calculate_item(item: IngredientEstimate, ref: FoodRef) -> CalculatedItem:
         kcal_low=round5(ref.kcal_100g * scale_lo),
         kcal_high=round5(ref.kcal_100g * scale_hi),
         food_ref_id=ref.food_id,
-        source=ref.source,
+        source="unresolved" if ref.unresolved else ref.source,
         confidence=ref.confidence,
         quality_flags=flags,
         kcal_100g=ref.kcal_100g,
@@ -169,9 +169,9 @@ def calculate_item(item: IngredientEstimate, ref: FoodRef) -> CalculatedItem:
 def calculate_meal(items: list[tuple[IngredientEstimate, FoodRef]]) -> MealCalculation:
     """Сумма позиций. Пересчёт всегда с нуля, не инкрементом."""
     calculated = [calculate_item(i, r) for i, r in items]
-    kcal_total = round10(sum(c.kcal for c in calculated))
-    kcal_low = round10(sum(c.kcal_low for c in calculated))
-    kcal_high = round10(sum(c.kcal_high for c in calculated))
+    kcal_total = sum(c.kcal for c in calculated)
+    kcal_low = sum(c.kcal_low for c in calculated)
+    kcal_high = sum(c.kcal_high for c in calculated)
     flags = [f for c in calculated for f in c.quality_flags]
 
     # проверка плотности макросов: составное блюдо ≥ 180 г не может быть чистым жиром
@@ -186,9 +186,10 @@ def calculate_meal(items: list[tuple[IngredientEstimate, FoodRef]]) -> MealCalcu
                     or (prot + fat + carb) / grams_mid * 100 > 95):
                 flags.append("порции выглядят завышенными")
 
-    if any(c.source == "llm" for c in calculated):
+    estimates = {"llm", "generic", "unresolved"}
+    if any(c.source in estimates for c in calculated):
         method: Literal["db", "mixed", "llm_prior"] = (
-            "mixed" if any(c.source != "llm" for c in calculated) else "llm_prior"
+            "mixed" if any(c.source not in estimates for c in calculated) else "llm_prior"
         )
     else:
         method = "db"

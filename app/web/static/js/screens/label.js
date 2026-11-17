@@ -112,7 +112,7 @@ export default async function render(root) {
       const r = await api.get('/products/barcode/' + code);
       stop();
       haptic('success');
-      draft({ draft: r.draft, notes: [t('lbl.off_note')], existing_id: r.existing_id });
+      draft({ draft: r.draft, notes: r.source === 'off' ? [t('lbl.off_note')] : [], existing_id: r.existing_id });
     } catch (e) {
       stop();
       toast(e.status === 404 ? t('lbl.not_in_db') : e.message, 'error');
@@ -128,7 +128,9 @@ export default async function render(root) {
       if (!data) return;
       busy = true; mainButton.setLoading(true);
       try {
-        await api.post('/products', data);
+        const source = r.draft?.nutrition_source;
+        const unchanged = ['kcal', 'protein', 'fat', 'carbs'].every((key) => data[key] === r.draft?.[key]);
+        await api.post('/products', { ...data, nutrition_source: unchanged ? source : null });
         haptic('success'); toast(t('pf.saved'), 'ok'); mainButton.hide(); nav.replace('/menu/products');
       } catch (e) { busy = false; mainButton.setLoading(false); toast(e.message, 'error'); }
     }

@@ -1039,6 +1039,11 @@ export default {
   "today.no_items": "No items",
   // unit
   "unit.g": "g",
+  "nutrition.label": "From the label",
+  "nutrition.estimate": "Estimated",
+  "nutrition.counted": "Counted",
+  "nutrition.incomplete": "Items without a calculation: {n}",
+  "nutrition.unknown": "Check the food or enter nutrition values",
   "unit.kcal": "kcal",
   "unit.ml": "ml",
   "unit.kg": "kg",

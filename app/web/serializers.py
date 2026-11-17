@@ -28,7 +28,7 @@ def _get(row, *keys):
 
 def item_json(row: sqlite3.Row) -> dict:
     per100 = None
-    if row["kcal_100g"] is not None:
+    if row["source"] != "unresolved" and row["kcal_100g"] is not None:
         per100 = {"kcal": _num(row["kcal_100g"]), "protein": _num(row["protein_100g"] or 0),
                   "fat": _num(row["fat_100g"] or 0), "carbs": _num(row["carbs_100g"] or 0)}
     return {"id": row["id"], "name": row["name_ru"], "grams": _num(row["grams"]),
@@ -44,12 +44,14 @@ def meal_json(db: sqlite3.Connection, meal: sqlite3.Row) -> dict:
     kcal = int(meal["kcal_total"])
     # правка граммов пересчитывает итог, но не диапазон: не отдаём диапазон, не содержащий итог
     low, high = min(int(meal["kcal_low"]), kcal), max(int(meal["kcal_high"]), kcal)
+    items = [item_json(i) for i in repo.get_meal_items(db, meal["id"])]
+    unresolved = sum(i["source"] == "unresolved" for i in items)
     return {"id": meal["id"], "date": meal["local_date"], "time": meal["local_time"],
             "type": meal["meal_type"], "source": meal["source"],
             "kcal": kcal, "kcal_low": low, "kcal_high": high, "protein": _num(meal["protein_g"]),
             "fat": _num(meal["fat_g"]), "carbs": _num(meal["carbs_g"]),
             "confidence": _num(meal["confidence"], 2), "photos": photos,
-            "items": [item_json(i) for i in repo.get_meal_items(db, meal["id"])],
+            "items": items, **({"unresolved_items": unresolved} if unresolved else {}),
             "comment": meal["transcript"] or None}
 
 

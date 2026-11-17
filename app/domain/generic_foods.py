@@ -53,5 +53,5 @@ def generic_ref(name_ru: str, name_en: str = "") -> FoodRef | None:
         if any(k.replace("ё", "е") in text for k in keys):
             return FoodRef(name_ru=name_ru, name_en=name_en or name_ru, kcal_100g=kcal,
                            protein_100g=protein, fat_100g=fat, carbs_100g=carbs,
-                           source="seed", confidence=0.25)
+                           source="generic", confidence=0.25)
     return None

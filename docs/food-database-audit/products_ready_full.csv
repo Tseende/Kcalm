@@ -1,0 +1,121 @@
+﻿Раздел,Продукт,Продукт (EN),Ккал,Белки,Жиры,Углеводы,Ккал по БЖУ,Δ ккал,Источник,Ссылка,Проверка (ккал/Б/Ж/У),Ссылка проверки,Вердикт,Примечание
+Мясо и птица,Куриная грудка сырая,raw chicken breast,113.0,23.6,1.9,0.4,113,0.0,calorizator,https://calorizator.ru/product/beef/chicken-8,,,,Сырой продукт — для взвешивания до готовки
+Мясо и птица,Куриная грудка варёная,boiled chicken breast,151.0,28.98,3.03,0.0,143,-8.0,usda,https://fdc.nal.usda.gov/food-details/171478/nutrients,137 / 29.8 / 1.8 / 0.5,https://calorizator.ru/product/beef/chicken-18,совпадает,"Без кожи, без масла"
+Мясо и птица,Куриная грудка запечённая,baked chicken breast,165.0,31.02,3.57,0.0,156,-9.0,usda,https://fdc.nal.usda.gov/food-details/171477/nutrients,126 / 20 / 4 / 0,https://calorizator.ru/product/beef/chicken-43,расхождение,"Без кожи, без масла"
+Мясо и птица,Куриная грудка жареная,fried chicken breast,187.0,33.44,4.71,0.51,178,-9.0,usda,https://fdc.nal.usda.gov/food-details/171078/nutrients,,,,"Жарка на масле, без панировки"
+Мясо и птица,Куриное бедро варёное,boiled chicken thigh,195.0,25.0,9.79,0.0,188,-7.0,usda,https://fdc.nal.usda.gov/food-details/172389/nutrients,,,,Мясо без кожи
+Мясо и птица,Куриное бедро запечённое,baked chicken thigh,179.0,24.76,8.15,0.0,172,-7.0,usda,https://fdc.nal.usda.gov/food-details/172388/nutrients,,,,Мясо без кожи
+Мясо и птица,Куриное бедро жареное,fried chicken thigh,218.0,28.18,10.3,1.18,210,-8.0,usda,https://fdc.nal.usda.gov/food-details/172387/nutrients,,,,"Мясо без кожи, жарка на масле"
+Мясо и птица,Куриная голень варёная,boiled chicken drumstick,169.0,27.5,5.71,0.0,161,-8.0,usda,https://fdc.nal.usda.gov/food-details/172377/nutrients,158 / 27 / 5.6 / 0,https://calorizator.ru/product/beef/chicken-31,совпадает,Без кожи
+Мясо и птица,Куриная голень запечённая,baked chicken drumstick,191.0,23.35,10.15,0.0,185,-6.0,usda,https://fdc.nal.usda.gov/food-details/173612/nutrients,198 / 18 / 14 / 0,https://calorizator.ru/product/beef/chicken-39,совпадает,С кожей
+Мясо и птица,Куриные крылышки запечённые,baked chicken wings,254.0,23.79,16.87,0.0,247,-7.0,usda,https://fdc.nal.usda.gov/food-details/173630/nutrients,,,,С кожей
+Мясо и птица,Курица варёная (без кожи),boiled chicken meat,177.0,27.29,6.71,0.0,170,-7.0,usda,https://fdc.nal.usda.gov/food-details/171451/nutrients,170 / 25.2 / 7.4 / 0,https://calorizator.ru/product/beef/chicken-10,совпадает,Тушка без кожи
+Мясо и птица,Курица жареная,roast chicken,239.0,27.3,13.6,0.0,232,-7.0,usda,https://fdc.nal.usda.gov/food-details/171450/nutrients,210 / 26 / 12 / 0,https://calorizator.ru/product/beef/chicken-2,расхождение,"Тушка с кожей, запекание"
+Мясо и птица,Индейка грудка сырая,raw turkey breast,114.0,23.66,1.48,0.14,109,-5.0,usda,https://fdc.nal.usda.gov/food-details/171098/nutrients,84 / 19.2 / 0.7 / 0,https://calorizator.ru/product/beef/turkey-5,сильное расхождение,Сырой продукт
+Мясо и птица,Индейка грудка запечённая,baked turkey breast,147.0,30.13,2.08,0.0,139,-8.0,usda,https://fdc.nal.usda.gov/food-details/171496/nutrients,,,,"Без кожи, запекание"
+Мясо и птица,Индейка бедро тушёное,stewed turkey thigh,173.0,27.71,6.04,0.0,165,-8.0,usda,https://fdc.nal.usda.gov/food-details/171091/nutrients,165 / 28 / 6 / 0,https://calorizator.ru/product/beef/turkey-1,совпадает,Тёмное мясо
+Мясо и птица,Индейка фарш жареный,cooked ground turkey,203.0,27.37,10.4,0.0,203,0.0,usda,https://fdc.nal.usda.gov/food-details/171506/nutrients,161 / 20 / 8 / 0.5,https://calorizator.ru/product/beef/turkey-7,расхождение,Жареный фарш
+Мясо и птица,Говядина варёная (нежирная),boiled lean beef,203.0,29.9,8.37,0.0,195,-8.0,usda,https://fdc.nal.usda.gov/food-details/170208/nutrients,175 / 25.7 / 8.1 / 0.2,https://calorizator.ru/product/beef/beef-22,расхождение,Нежирные отрубы
+Мясо и птица,Говядина тушёная,stewed beef,212.0,33.36,7.67,0.0,202,-10.0,usda,https://fdc.nal.usda.gov/food-details/170615/nutrients,232 / 16.8 / 18.3 / 0,https://calorizator.ru/product/beef/beef-16,совпадает,"Лопатка, тушение"
+Мясо и птица,Стейк говяжий,beef steak,201.0,29.16,8.45,0.0,193,-8.0,usda,https://fdc.nal.usda.gov/food-details/173119/nutrients,220 / 29.6 / 11.2 / 0,https://calorizator.ru/product/beef/steak-3,совпадает,"Толстый край, гриль"
+Мясо и птица,Телятина варёная,boiled veal,203.0,36.71,5.09,0.0,193,-10.0,usda,https://fdc.nal.usda.gov/food-details/175270/nutrients,131 / 30.7 / 0.9 / 0,https://calorizator.ru/product/beef/veal-5,сильное расхождение,Окорок
+Мясо и птица,Свинина тушёная,stewed pork,292.0,23.28,21.39,0.0,286,-6.0,usda,https://fdc.nal.usda.gov/food-details/167844/nutrients,235 / 9.8 / 20.3 / 3.2,https://calorizator.ru/product/beef/pork-21,расхождение,Лопатка с жиром
+Мясо и птица,Свинина запечённая,baked pork,231.0,27.01,12.8,0.0,223,-8.0,usda,https://fdc.nal.usda.gov/food-details/167828/nutrients,160 / 19.4 / 7.1 / 0,https://calorizator.ru/product/beef/pork-22,сильное расхождение,Корейка
+Мясо и птица,Свинина жареная,fried pork,238.0,27.63,13.32,0.0,230,-8.0,usda,https://fdc.nal.usda.gov/food-details/168292/nutrients,,,,Корейка на сковороде
+Мясо и птица,Баранина тушёная,stewed lamb,268.0,20.0,20.9,0.0,268,0.0,calorizator,https://calorizator.ru/product/beef/lamb-9,344 / 28.68 / 24.55 / 0,https://fdc.nal.usda.gov/food-details/172497/nutrients,сильное расхождение,"Лопатка, тушение"
+Мясо и птица,Кролик тушёный,stewed rabbit,206.0,30.38,8.41,0.0,197,-9.0,usda,https://fdc.nal.usda.gov/food-details/174346/nutrients,183 / 21.2 / 11 / 0,https://calorizator.ru/product/beef/rabbit-2,расхождение,Тушка
+Мясо и птица,Котлета куриная жареная,fried chicken cutlet,222.0,18.2,10.4,13.8,222,0.0,calorizator,https://calorizator.ru/product/beef/cutlet-chicken-1,,,,Готовая котлета
+Мясо и птица,Котлета говяжья рубленая,fried beef cutlet,213.0,14.2,11.4,13.0,211,-2.0,calorizator,https://calorizator.ru/product/beef/cutlet-beef-2,,,,Рубленая котлета
+Мясо и птица,Фарш говяжий жареный,cooked ground beef,230.0,28.45,12.04,0.0,222,-8.0,usda,https://fdc.nal.usda.gov/food-details/171794/nutrients,,,,"90/10, обжарка"
+Мясо и птица,Печень куриная жареная,fried chicken liver,167.0,24.46,6.51,0.87,160,-7.0,usda,https://fdc.nal.usda.gov/food-details/171061/nutrients,166 / 25.9 / 6.2 / 2,https://calorizator.ru/product/beef/chicken-15,совпадает,Тушение/обжарка
+Мясо и птица,Печень говяжья тушёная,stewed beef liver,191.0,29.08,5.26,5.13,184,-7.0,usda,https://fdc.nal.usda.gov/food-details/168626/nutrients,117 / 19.4 / 3.4 / 3,https://calorizator.ru/product/beef/beef-45,сильное расхождение,Тушение
+Мясо и птица,Сердце куриное варёное,boiled chicken heart,185.0,26.41,7.92,0.1,177,-8.0,usda,https://fdc.nal.usda.gov/food-details/171059/nutrients,182 / 20 / 10.9 / 1.1,https://calorizator.ru/product/beef/chicken-16,совпадает,Отварное
+Рыба и морепродукты,Треска варёная,boiled cod,105.0,22.83,0.86,0.0,99,-6.0,usda,https://fdc.nal.usda.gov/food-details/171956/nutrients,77 / 17 / 1 / 0,https://calorizator.ru/product/sea/cod-15,сильное расхождение,Запекание/варка
+Рыба и морепродукты,Минтай запечённый,baked pollock,86.6,19.42,0.99,0.0,87,0.4,usda,https://fdc.nal.usda.gov/food-details/173726/nutrients,79 / 17.6 / 1 / 0,https://calorizator.ru/product/sea/pollack-2,совпадает,Запекание
+Рыба и морепродукты,Горбуша запечённая,baked pink salmon,153.0,24.58,5.28,0.0,146,-7.0,usda,https://fdc.nal.usda.gov/food-details/172001/nutrients,168 / 22.9 / 7.8 / 0,https://calorizator.ru/product/sea/hunchback-salmon-3,совпадает,Запекание
+Рыба и морепродукты,Лосось запечённый,baked salmon,206.0,22.1,12.35,0.0,200,-6.0,usda,https://fdc.nal.usda.gov/food-details/175168/nutrients,,,,Запекание без масла
+Рыба и морепродукты,Скумбрия запечённая,baked mackerel,262.0,23.85,17.81,0.0,256,-6.0,usda,https://fdc.nal.usda.gov/food-details/175120/nutrients,191 / 18 / 13.2 / 0,https://calorizator.ru/product/sea/mackerel-1,сильное расхождение,Запекание
+Рыба и морепродукты,Сельдь солёная,salted herring,217.0,24.58,12.37,0.0,210,-7.0,usda,https://fdc.nal.usda.gov/food-details/173668/nutrients,217 / 19.8 / 15.4 / 0,https://calorizator.ru/product/sea/herring-2,совпадает,Солёная/копчёная
+Рыба и морепродукты,Тунец консервированный в собственном соку,canned tuna in water,96.0,21.0,1.2,0.0,95,-1.0,calorizator,https://calorizator.ru/product/sea/tuna-3,116 / 25.51 / 0.82 / 0,https://fdc.nal.usda.gov/food-details/171986/nutrients,расхождение,"Консервы, без масла"
+Рыба и морепродукты,Сардины в масле,canned sardines in oil,208.0,24.62,11.45,0.0,202,-6.0,usda,https://fdc.nal.usda.gov/food-details/175139/nutrients,,,,Консервы в масле
+Рыба и морепродукты,Креветки варёные,boiled shrimp,99.0,23.98,0.28,0.2,99,0.0,usda,https://fdc.nal.usda.gov/food-details/175180/nutrients,95 / 18.9 / 2.2 / 0,https://calorizator.ru/product/sea/peeled-shrimps-3,совпадает,Отварные
+Рыба и морепродукты,Кальмар варёный,boiled squid,122.0,21.2,2.8,2.0,118,-4.0,calorizator,https://calorizator.ru/product/sea/quid-1,,,,Отварной
+Рыба и морепродукты,Мидии варёные,boiled mussels,89.0,16.7,1.7,2.7,93,4.0,calorizator,https://calorizator.ru/product/sea/mussel-5,172 / 23.8 / 4.48 / 7.39,https://fdc.nal.usda.gov/food-details/174217/nutrients,сильное расхождение,Варено-мороженые в собственном соку
+Рыба и морепродукты,Хек (варёный/запечённый),boiled/baked hake,95.0,18.5,2.3,0.0,95,0.0,calorizator,https://calorizator.ru/product/sea/hake-2,,,,Отварной/запечённый
+Рыба и морепродукты,Форель запечённая,baked trout,168.0,23.8,7.38,0.0,162,-6.0,usda,https://fdc.nal.usda.gov/food-details/173718/nutrients,119 / 20.5 / 3.5 / 0,https://calorizator.ru/product/sea/trout-9,сильное расхождение,Запекание
+Яйца и молочное,Яйцо куриное варёное,boiled egg,155.0,12.58,10.61,1.12,150,-5.0,usda,https://fdc.nal.usda.gov/food-details/173424/nutrients,157 / 12.7 / 11.5 / 0.7,https://calorizator.ru/product/egg/egg-1,совпадает,Вкрутую
+Яйца и молочное,Яичница-глазунья,fried egg,196.0,13.61,14.84,0.83,191,-5.0,usda,https://fdc.nal.usda.gov/food-details/173423/nutrients,,,,На масле
+Яйца и молочное,Омлет,omelette,200.0,10.3,17.0,1.6,201,1.0,calorizator,https://calorizator.ru/product/egg/egg-10,154 / 10.57 / 11.66 / 0.64,https://fdc.nal.usda.gov/food-details/172185/nutrients,расхождение,С молоком и маслом
+Яйца и молочное,Яйцо перепелиное,quail egg,158.0,13.05,11.09,0.41,154,-4.0,usda,https://fdc.nal.usda.gov/food-details/172191/nutrients,168 / 11.9 / 13.1 / 0.6,https://calorizator.ru/product/egg/egg-3,совпадает,Сырое/варёное
+Яйца и молочное,Творог обезжиренный,low-fat cottage cheese,110.0,22.0,0.6,3.3,107,-3.0,ru_table,https://health-diet.ru/base_of_food/sostav/391.php,72 / 10.34 / 0.29 / 6.66,https://fdc.nal.usda.gov/food-details/172181/nutrients,сильное расхождение,"Скурихин, 0,6%; у брендов бывает 70-85 ккал — сверяйте упаковку"
+Яйца и молочное,Творог 2%,cottage cheese 2%,103.0,18.0,2.0,3.3,103,0.0,calorizator,https://calorizator.ru/product/cheese/tvorog-20,81 / 10.45 / 2.27 / 4.76,https://fdc.nal.usda.gov/food-details/172182/nutrients,расхождение,"Мягкий, 2%"
+Яйца и молочное,Творог 5%,cottage cheese 5%,121.0,17.2,5.0,1.8,121,0.0,calorizator,https://calorizator.ru/product/cheese/tvorog-11,,,,Классический 5%
+Яйца и молочное,Творог 9%,cottage cheese 9%,159.0,16.7,9.0,2.0,156,-3.0,calorizator,https://calorizator.ru/product/cheese/tvorog-2,,,,Жирный 9%
+Яйца и молочное,Кефир 1%,kefir 1%,40.0,2.8,1.0,4.0,36,-4.0,calorizator,https://calorizator.ru/product/milk/kefir-1,,,,Кисломолочный
+Яйца и молочное,Кефир 2.5%,kefir 2.5%,50.0,2.8,2.5,3.9,49,-1.0,calorizator,https://calorizator.ru/product/milk/kefir-4,,,,
+Яйца и молочное,Молоко 1.5%,milk 1.5%,44.0,2.8,1.5,4.7,44,0.0,calorizator,https://calorizator.ru/product/milk/milk-8,,,,
+Яйца и молочное,Молоко 2.5%,milk 2.5%,52.0,2.8,2.5,4.7,52,0.0,calorizator,https://calorizator.ru/product/milk/milk-9,50 / 3.3 / 1.98 / 4.8,https://fdc.nal.usda.gov/food-details/171267/nutrients,совпадает,
+Яйца и молочное,Молоко 3.2%,milk 3.2%,59.0,2.9,3.2,4.7,59,0.0,calorizator,https://calorizator.ru/product/milk/milk-10,61 / 3.15 / 3.25 / 4.8,https://fdc.nal.usda.gov/food-details/171265/nutrients,совпадает,
+Яйца и молочное,Ряженка 2.5%,ryazhenka 2.5%,54.0,2.9,2.5,4.2,51,-3.0,calorizator,https://calorizator.ru/product/milk/ryazhenka-2,,,,
+Яйца и молочное,Сметана 10%,sour cream 10%,115.0,3.0,10.0,2.9,114,-1.0,calorizator,https://calorizator.ru/product/milk/sourcream-1,,,,
+Яйца и молочное,Сметана 15%,sour cream 15%,158.0,2.6,15.0,3.0,157,-1.0,calorizator,https://calorizator.ru/product/milk/sourcream-8,,,,
+Яйца и молочное,Сметана 20%,sour cream 20%,206.0,2.8,20.0,3.2,204,-2.0,calorizator,https://calorizator.ru/product/milk/sourcream-2,,,,
+Яйца и молочное,Йогурт натуральный 2.7%,plain yogurt 2.7%,56.0,3.2,2.7,4.7,56,0.0,calorizator,https://calorizator.ru/product/milk/yoghurt-5,61 / 3.47 / 3.25 / 4.66,https://fdc.nal.usda.gov/food-details/171284/nutrients,совпадает,Без добавок
+Яйца и молочное,Греческий йогурт,greek yogurt,61.0,10.3,0.37,3.64,59,-2.0,usda,https://fdc.nal.usda.gov/food-details/330137/nutrients,,,,Обезжиренный
+Яйца и молочное,Сыр российский,russian cheese,363.0,24.1,29.5,0.3,363,0.0,calorizator,https://calorizator.ru/product/cheese/cheese-5,,,,
+Яйца и молочное,Сыр моцарелла,mozzarella,242.0,18.8,18.1,1.0,242,0.0,calorizator,https://calorizator.ru/product/cheese/cheese-8,299 / 22.17 / 22.14 / 2.4,https://fdc.nal.usda.gov/food-details/170845/nutrients,расхождение,
+Яйца и молочное,Сыр плавленый,processed cheese,290.5,16.0,24.2,2.3,291,0.5,ru_table,https://health-diet.ru/table_calorie_users/1106725/,,,,Плавленый
+Яйца и молочное,Сырники,fried curd fritters,218.0,13.5,10.0,17.5,214,-4.0,manual,https://nutribirdapp.ru/produkty/gotovye-blyuda/syrniki,300.2 / 13 / 19.4 / 19.6,https://health-diet.ru/base_of_food/sostav/2658.php,сильное расхождение,"Жареные, без сметаны; в духовке ~175 ккал"
+Яйца и молочное,Запеканка творожная,cottage cheese casserole,168.0,17.6,4.2,14.2,165,-3.0,calorizator,https://calorizator.ru/product/milk/baked-pudding,,,,
+Крупы и гарниры,Гречка варёная,boiled buckwheat,100.9,4.2,1.1,18.6,101,0.1,ru_table,https://health-diet.ru/base_of_food/sostav/21269.php,92 / 3.38 / 0.62 / 19.94,https://fdc.nal.usda.gov/food-details/170686/nutrients,совпадает,"Рассыпчатая, без масла (Скурихин)"
+Крупы и гарниры,Гречка сухая,dry buckwheat,313.0,12.6,3.3,62.1,328,15.0,calorizator,https://calorizator.ru/product/cereals/buckwheat-1,,,,
+Крупы и гарниры,Рис белый варёный,boiled white rice,130.0,2.69,0.28,28.17,126,-4.0,usda,https://fdc.nal.usda.gov/food-details/168935/nutrients,116 / 2.2 / 0.5 / 24.9,https://calorizator.ru/product/cereals/rice-7,расхождение,
+Крупы и гарниры,Рис бурый варёный,boiled brown rice,123.0,2.74,0.97,25.58,122,-1.0,usda,https://fdc.nal.usda.gov/food-details/169704/nutrients,,,,
+Крупы и гарниры,Рис сухой,dry rice,365.0,7.13,0.66,79.95,354,-11.0,usda,https://fdc.nal.usda.gov/food-details/169756/nutrients,344 / 6.7 / 0.7 / 78.9,https://calorizator.ru/product/cereals/rice-1,совпадает,
+Крупы и гарниры,Овсянка на воде,oatmeal on water,71.0,2.54,1.52,12.0,72,1.0,usda,https://fdc.nal.usda.gov/food-details/173905/nutrients,71 / 2.5 / 1.5 / 10.3,https://health-diet.ru/base_of_food/sostav/15697.php,совпадает,"Жидкая, на воде, без сахара"
+Крупы и гарниры,Овсянка на молоке,oatmeal on milk,109.0,2.6,4.1,15.5,109,0.0,ru_table,https://health-diet.ru/base_of_food/sostav/24142.php,,,,"Вязкая, на молоке (Скурихин)"
+Крупы и гарниры,Овсяные хлопья сухие,dry oat flakes,379.0,13.15,6.52,67.7,382,3.0,usda,https://fdc.nal.usda.gov/food-details/173904/nutrients,366 / 11.9 / 7.2 / 69.3,https://calorizator.ru/product/cereals/grits-4,совпадает,
+Крупы и гарниры,Пшённая каша на воде,millet porridge on water,100.9,3.4,1.0,19.6,101,0.1,ru_table,https://health-diet.ru/table_calorie_users/928861/,119 / 3.51 / 1 / 23.67,https://fdc.nal.usda.gov/food-details/168871/nutrients,расхождение,"Вязкая, на воде"
+Крупы и гарниры,Перловка варёная,boiled pearl barley,123.0,2.26,0.44,28.22,126,3.0,usda,https://fdc.nal.usda.gov/food-details/170285/nutrients,109 / 3.1 / 0.4 / 22.2,https://calorizator.ru/product/cereals/pearl-barley-3,расхождение,Рассыпчатая
+Крупы и гарниры,Манная каша на молоке,semolina porridge on milk,98.0,3.0,3.2,15.3,102,4.0,calorizator,https://calorizator.ru/product/cereals/manna-3,,,,На молоке
+Крупы и гарниры,Булгур варёный,boiled bulgur,83.0,3.08,0.24,18.58,89,6.0,usda,https://fdc.nal.usda.gov/food-details/170287/nutrients,83 / 3.1 / 0.2 / 14.1,https://calorizator.ru/product/cereals/bulgur-2,совпадает,
+Крупы и гарниры,Кускус варёный,boiled couscous,112.0,3.79,0.16,23.22,109,-3.0,usda,https://fdc.nal.usda.gov/food-details/169700/nutrients,,,,
+Крупы и гарниры,Киноа варёная,boiled quinoa,120.0,4.4,1.92,21.3,120,0.0,usda,https://fdc.nal.usda.gov/food-details/168917/nutrients,,,,
+Крупы и гарниры,Макароны варёные,boiled pasta,158.0,5.8,0.93,30.86,155,-3.0,usda,https://fdc.nal.usda.gov/food-details/169737/nutrients,,,,
+Крупы и гарниры,Макароны сухие,dry pasta,371.0,13.04,1.51,74.67,364,-7.0,usda,https://fdc.nal.usda.gov/food-details/168927/nutrients,344 / 10.4 / 1.1 / 71.5,https://calorizator.ru/product/meal/makfa-1,совпадает,
+Крупы и гарниры,Картофель варёный,boiled potato,86.0,1.71,0.1,20.01,88,2.0,usda,https://fdc.nal.usda.gov/food-details/170440/nutrients,82 / 2 / 0.4 / 16.7,https://calorizator.ru/product/vegetable/potato-5,совпадает,Очищенный
+Крупы и гарниры,Картофельное пюре,mashed potato,113.0,1.9,4.2,15.3,107,-6.0,ru_table,https://health-diet.ru/base_of_food/sostav/17336.php,,,,С молоком и маслом
+Крупы и гарниры,Картофель запечённый,baked potato,93.0,2.5,0.13,21.15,96,3.0,usda,https://fdc.nal.usda.gov/food-details/170093/nutrients,,,,
+Крупы и гарниры,Картофель жареный,fried potato,192.0,2.8,9.5,23.4,190,-2.0,calorizator,https://calorizator.ru/product/vegetable/potato-4,,,,"На масле, соломкой"
+Крупы и гарниры,Картофель фри,french fries,312.0,3.4,15.0,41.0,313,1.0,foodstruct,https://foodstruct.com/ru/food/картофель-фри,,,,"Фритюр, готовый"
+Крупы и гарниры,Кукуруза варёная,boiled corn on the cob,101.0,3.5,2.8,15.6,102,1.0,calorizator,https://calorizator.ru/product/vegetable/corn-6,96 / 3.41 / 1.5 / 20.98,https://fdc.nal.usda.gov/food-details/169999/nutrients,совпадает,В початках
+Крупы и гарниры,Кукуруза консервированная,canned corn,67.0,2.29,1.22,14.34,78,11.0,usda,https://fdc.nal.usda.gov/food-details/169214/nutrients,58 / 2.2 / 0 / 11.2,https://calorizator.ru/product/vegetable/corn,расхождение,Отцеженная (без жидкости)
+Крупы и гарниры,Горох варёный,boiled split peas,118.0,8.34,0.39,21.1,121,3.0,usda,https://fdc.nal.usda.gov/food-details/172429/nutrients,,,,Колотый
+Крупы и гарниры,Фасоль варёная,boiled white beans,139.0,9.73,0.35,25.09,142,3.0,usda,https://fdc.nal.usda.gov/food-details/175203/nutrients,,,,
+Крупы и гарниры,Чечевица варёная,boiled lentils,116.0,9.02,0.38,20.13,120,4.0,usda,https://fdc.nal.usda.gov/food-details/172421/nutrients,112 / 7.8 / 0 / 20.1,https://calorizator.ru/product/vegetable/lentil-2,совпадает,
+Крупы и гарниры,Нут варёный,boiled chickpeas,164.0,8.86,2.59,27.42,168,4.0,usda,https://fdc.nal.usda.gov/food-details/173757/nutrients,127 / 8.3 / 1.9 / 19.3,https://calorizator.ru/product/vegetable/chick-pea-4,расхождение,
+Крупы и гарниры,Соя варёная,boiled soybeans,172.0,18.21,8.97,8.36,187,15.0,usda,https://fdc.nal.usda.gov/food-details/174271/nutrients,,,,
+Овощи,Капуста белокочанная свежая,raw cabbage,25.0,1.28,0.1,5.8,29,4.0,usda,https://fdc.nal.usda.gov/food-details/169975/nutrients,28 / 1.8 / 0.1 / 4.7,https://calorizator.ru/product/vegetable/heads-cabbage,расхождение,
+Овощи,Капуста тушёная,stewed cabbage,75.0,2.0,3.3,9.2,74,-1.0,ru_table,https://health-diet.ru/base_of_food/sostav/24045.php,102.2 / 2.7 / 5.9 / 10.2,https://health-diet.ru/base_of_food/sostav/2574.php,сильное расхождение,"По Скурихину, с маслом"
+Овощи,Брокколи варёная,boiled broccoli,35.0,2.38,0.41,7.18,42,7.0,usda,https://fdc.nal.usda.gov/food-details/169967/nutrients,27 / 3 / 0.4 / 4,https://calorizator.ru/product/vegetable/broccoli-2,расхождение,
+Овощи,Цветная капуста варёная,boiled cauliflower,23.0,1.84,0.45,4.11,28,5.0,usda,https://fdc.nal.usda.gov/food-details/170397/nutrients,29 / 1.8 / 0.3 / 4,https://calorizator.ru/product/vegetable/cauliflower-2,сильное расхождение,
+Овощи,Морковь варёная,boiled carrot,35.0,0.76,0.18,8.22,38,3.0,usda,https://fdc.nal.usda.gov/food-details/170394/nutrients,25 / 0.8 / 0.3 / 5,https://calorizator.ru/product/vegetable/carrot-2,сильное расхождение,
+Овощи,Свёкла варёная,boiled beetroot,44.0,1.68,0.18,9.96,48,4.0,usda,https://fdc.nal.usda.gov/food-details/169146/nutrients,49 / 1.8 / 0 / 10.8,https://calorizator.ru/product/vegetable/beet-2,расхождение,
+Овощи,Кабачок жареный,fried zucchini,88.0,1.1,6.0,6.7,85,-3.0,calorizator,https://calorizator.ru/product/vegetable/marrow-3,,,,На масле
+Овощи,Баклажан жареный,fried eggplant,126.0,1.2,9.0,9.9,125,-1.0,ru_table,https://health-diet.ru/base_of_food/sostav/244963.php,,,,На масле
+Овощи,Перец болгарский свежий,raw bell pepper,26.0,0.99,0.3,6.03,31,5.0,usda,https://fdc.nal.usda.gov/food-details/170108/nutrients,26 / 1.3 / 0.1 / 4.9,https://calorizator.ru/product/vegetable/pepper-1,совпадает,
+Овощи,Помидор,raw tomato,18.0,0.88,0.2,3.89,21,3.0,usda,https://fdc.nal.usda.gov/food-details/170457/nutrients,24 / 1.1 / 0.2 / 3.8,https://calorizator.ru/product/vegetable/tomato,сильное расхождение,
+Овощи,Огурец,raw cucumber,15.0,0.65,0.11,3.63,18,3.0,usda,https://fdc.nal.usda.gov/food-details/168409/nutrients,11 / 0.7 / 0.1 / 1.9,https://calorizator.ru/product/vegetable/cucumber-1,сильное расхождение,
+Овощи,Морковь свежая,raw carrot,41.0,0.93,0.24,9.58,44,3.0,usda,https://fdc.nal.usda.gov/food-details/170393/nutrients,35 / 1.3 / 0.1 / 6.9,https://calorizator.ru/product/vegetable/carrot-1,расхождение,
+Овощи,Свёкла свежая,raw beetroot,43.0,1.61,0.17,9.56,46,3.0,usda,https://fdc.nal.usda.gov/food-details/169145/nutrients,42 / 1.5 / 0.1 / 8.8,https://calorizator.ru/product/vegetable/beet-1,совпадает,
+Овощи,Шампиньоны свежие,raw mushrooms,22.0,3.09,0.34,3.26,28,6.0,usda,https://fdc.nal.usda.gov/food-details/169251/nutrients,27 / 4.3 / 1 / 0.1,https://calorizator.ru/product/mushroom/mushroom-9,расхождение,
+Овощи,Шампиньоны жареные,fried mushrooms,50.2,3.6,2.1,2.8,44,-6.2,ru_table,https://health-diet.ru/table_calorie_users/1130396,58.1 / 3.7 / 4 / 1.7,https://calorizator.ru/recipe/47648,расхождение,"На масле, с луком"
+Овощи,Лук репчатый,raw onion,40.0,1.1,0.1,9.34,43,3.0,usda,https://fdc.nal.usda.gov/food-details/170000/nutrients,41 / 1.4 / 0.2 / 8.2,https://calorizator.ru/product/vegetable/bulb-onion,совпадает,
+Овощи,Тыква запечённая,baked pumpkin,26.0,1.0,0.1,6.5,31,5.0,usda,https://fdc.nal.usda.gov/food-details/168448/nutrients,28 / 1 / 1 / 4.4,https://calorizator.ru/product/vegetable/pumpkin-7,совпадает,Запекание почти не меняет БЖУ
+Овощи,Горошек зелёный варёный,boiled green peas,84.0,5.36,0.22,15.63,86,2.0,usda,https://fdc.nal.usda.gov/food-details/170420/nutrients,73 / 5 / 0.2 / 13.8,https://calorizator.ru/product/vegetable/green-peas-2,расхождение,
+Овощи,Фасоль стручковая варёная,boiled green beans,35.0,1.89,0.28,7.88,42,7.0,usda,https://fdc.nal.usda.gov/food-details/169141/nutrients,31 / 2.2 / 0.2 / 3.3,https://calorizator.ru/product/vegetable/haricot-18,расхождение,
+Хлеб,Хлеб пшеничный,wheat bread,242.0,8.1,1.0,48.8,237,-5.0,calorizator,https://calorizator.ru/product/bread/bread-1,266 / 8.85 / 3.33 / 49.42,https://fdc.nal.usda.gov/food-details/174924/nutrients,совпадает,
+Хлеб,Хлеб ржаной,rye bread,217.0,5.9,1.1,44.5,212,-5.0,calorizator,https://calorizator.ru/product/bread/bread-3,259 / 8.5 / 3.3 / 48.3,https://fdc.nal.usda.gov/food-details/172684/nutrients,расхождение,
+Хлеб,Хлеб бородинский,borodinsky bread,208.0,6.9,1.3,40.9,203,-5.0,calorizator,https://calorizator.ru/product/bread/bread-4,259 / 8.5 / 3.3 / 48.3,https://fdc.nal.usda.gov/food-details/172684/nutrients,расхождение,
+Хлеб,Хлеб цельнозерновой,whole grain bread,252.0,12.45,3.5,42.71,252,0.0,usda,https://fdc.nal.usda.gov/food-details/172688/nutrients,,,,
+Хлеб,Батон нарезной,sliced white loaf,264.0,7.5,2.9,50.9,260,-4.0,calorizator,https://calorizator.ru/product/bread/bread-10,266 / 8.85 / 3.33 / 49.42,https://fdc.nal.usda.gov/food-details/174924/nutrients,совпадает,

@@ -118,7 +118,7 @@ async def test_commands_work_without_slash(db, monkeypatch):
 
     session.texts.clear()
     await send(dp, bot, "сколько калорий в гречке?")
-    assert any("110 ккал" in t for t in session.texts), (session.texts, session.names()[-6:])
+    assert any("100.9 ккал" in t for t in session.texts), (session.texts, session.names()[-6:])
 
     await send(dp, bot, "отмени последнее")
     assert db.execute("SELECT COUNT(*) c FROM meals WHERE user_id=? AND deleted_at IS NULL",
@@ -212,9 +212,9 @@ def test_assistant_fallback_when_llm_down(db, monkeypatch):
 
 
 def test_food_info_handles_cases_and_missing(db):
-    assert "110 ккал" in assistant.food_info(db, "гречке")
+    assert "100.9 ккал" in assistant.food_info(db, "гречке")
     assert "Не нашёл" in assistant.food_info(db, "драконьем фрукте")
-    assert "110 ккал" in assistant.food_info(db, "гречке 150 г")
+    assert "100.9 ккал" in assistant.food_info(db, "гречке 150 г")
 
 
 # ------------------------------------------------------------------------ меню

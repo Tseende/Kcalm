@@ -59,10 +59,11 @@ def test_upgrade_preserves_old_dishes_photos_and_links(tmp_path):
         db.execute('INSERT INTO meal_photos(meal_id,path,dish_id) VALUES (?,?,?)', (mid, 'meal.jpg', did))
         db.commit()
         before = dict(repo.get_dish(db, uid, did))
-        assert migrate(db) == 33
+        latest = max(int(p.name.split("_")[0]) for p in MIGRATIONS_DIR.glob("*.sql"))
+        assert migrate(db) == latest
         assert dict(repo.get_dish(db, uid, did)) == {**before, "width_cm": None}
         assert db.execute('SELECT dish_id FROM meal_photos WHERE meal_id=?', (mid,)).fetchone()[0] == did
-        assert migrate(db) == 33
+        assert migrate(db) == latest
         assert not db.execute('PRAGMA foreign_key_check').fetchall()
         repo.create_dish(db, uid, 'Квадратная', 'square_plate', diameter_cm=22)
     finally:

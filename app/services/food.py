@@ -673,8 +673,8 @@ async def build_calc(u: MealUnderstanding, conn: sqlite3.Connection,
     """Матчинг каждой позиции и детерминированный расчёт приёма.
 
     Позиции, которых нет в локальной базе, разрешаются ПАРАЛЛЕЛЬНО (сеть: OFF, LLM)."""
-    refs = [matching.find_food(conn, item.name, item.name_ru, brand=item.brand, user_id=user_id)
-            for item in u.items]
+    refs = [matching.find_food(conn, item.name, item.name_ru, brand=item.brand, user_id=user_id,
+                               preparation=item.preparation) for item in u.items]
     missing = [i for i, ref in enumerate(refs) if ref is None]
     if missing:
         resolved = await asyncio.gather(*(
@@ -696,9 +696,11 @@ def _empty_ref(item: IngredientEstimate) -> FoodRef:
     """Заглушка для продукта без КБЖУ: 0 ккал, но с явной пометкой в карточке.
     Вода, чай и кофе без калорий — нормальный случай, их не помечаем."""
     names = {item.name.lower().strip(), item.name_ru.lower().strip()}
+    known_zero = bool(names & NO_KCAL_OK)
     return FoodRef(name_ru=item.name_ru, name_en=item.name, kcal_100g=0,
-                   protein_100g=0, fat_100g=0, carbs_100g=0, source="llm",
-                   confidence=0.1, unresolved=not names & NO_KCAL_OK)
+                   protein_100g=0, fat_100g=0, carbs_100g=0,
+                   source="generic" if known_zero else "unresolved",
+                   confidence=0.5 if known_zero else 0.1, unresolved=not known_zero)
 
 
 def guess_meal_type(u: MealUnderstanding, local_time: str, user_hint: str | None) -> str:
@@ -716,26 +718,35 @@ def guess_meal_type(u: MealUnderstanding, local_time: str, user_hint: str | None
 
 def format_card(local_time: str, meal_type_name: str, calc, day_kcal: int,
                 day_target: int, day_protein: int, protein_target: int,
-                late: bool, late_kcal: int, tz_note: str = "") -> Doc:
+                late: bool, late_kcal: int, tz_note: str = "", unresolved_items: int = 0) -> Doc:
     """Карточка приёма пищи: таблица продуктов и итоги. Диапазон обязателен при llm_prior."""
     doc = Doc().text(f"🍽 {meal_type_name}, {local_time}")
     bju = lambda p, f, c: f"{p:g}/{f:g}/{c:g}"            # noqa: E731
+    missing = sum(it.source == "unresolved" for it in calc.items)
     doc.table(
         ["Продукт", "г", "ккал", "Б/Ж/У"],
-        [[it.name_ru, f"{it.grams:g}", str(it.kcal), bju(it.protein_g, it.fat_g, it.carbs_g)]
+        [[it.name_ru + (" (этикетка)" if it.source == "label" else ""), f"{it.grams:g}", "—" if it.source == "unresolved" else
+          f"≈{it.kcal}" if it.source in {"generic", "llm"} else str(it.kcal),
+          "—" if it.source == "unresolved" else bju(it.protein_g, it.fat_g, it.carbs_g)]
          for it in calc.items],
         align="lrrr",
-        total=["Итого", f"{sum(it.grams for it in calc.items):g}", str(calc.kcal_total),
+        total=["Учтено" if missing else "Итого", f"{sum(it.grams for it in calc.items):g}", str(calc.kcal_total),
                bju(calc.protein_g, calc.fat_g, calc.carbs_g)])
     lines = []
-    if calc.method == "llm_prior" or calc.kcal_high - calc.kcal_low > 0:
+    if missing:
+        lines.append(f"Позиций без расчёта: {missing}. Нажми «Уточнить» или внеси КБЖУ вручную.")
+    elif calc.method == "llm_prior" or calc.kcal_high - calc.kcal_low > 0:
         lines.append(f"Диапазон итога: {calc.kcal_low}–{calc.kcal_high} ккал")
     left = day_target - day_kcal
-    lines.append(f"День: {day_kcal} / {day_target} ккал · осталось {left} · белка {day_protein}/{protein_target} г")
+    if unresolved_items:
+        lines.append(f"За день учтено {day_kcal} ккал · позиций без расчёта: {unresolved_items}")
+    else:
+        lines.append(f"День: {day_kcal} / {day_target} ккал · осталось {left} · белка {day_protein}/{protein_target} г")
     if late:
         lines.append(f"🍽 поздняя еда: +{late_kcal} ккал")
-    if calc.quality_flags:
-        lines.append("⚠️ " + esc("; ".join(sorted(set(calc.quality_flags)))))
+    flags = [flag for flag in calc.quality_flags if not flag.startswith("не нашёл калорийность")]
+    if flags:
+        lines.append("⚠️ " + esc("; ".join(sorted(set(flags)))))
     return doc.text(*lines)
 
 

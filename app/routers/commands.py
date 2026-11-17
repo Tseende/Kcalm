@@ -317,7 +317,7 @@ async def cmd_sleep(msg: Message, db: sqlite3.Connection) -> None:
             continue
         next_day = (date.fromisoformat(r["wake_date"]) + timedelta(days=1)).strftime("%Y-%m-%d")
         day = repo.day_totals(db, uid, next_day)
-        if day["meals"] > 0:
+        if day["meals"] > 0 and not day["unresolved_items"]:
             pairs.append(analytics.SleepFoodPair(
                 r["wake_date"], r["duration_min"] / 60, day["kcal"], 0))
     ins = analytics.sleep_food_insight(pairs)
@@ -508,10 +508,13 @@ def _week_stats(db: sqlite3.Connection, uid: int, end: date, target: int,
     frm = (end - timedelta(days=6)).isoformat()
     by_day: dict[str, int] = {}
     counts: dict[str, int] = {}
+    incomplete_days = set()
     for m in repo.range_meals(db, uid, frm, end.isoformat()):
+        if m["incomplete"]:
+            incomplete_days.add(m["local_date"])
         by_day[m["local_date"]] = by_day.get(m["local_date"], 0) + m["kcal_total"]
         counts[m["local_date"]] = counts.get(m["local_date"], 0) + 1
-    covered = [k for d, k in by_day.items() if k >= INTAKE_COVERAGE * target and counts[d] >= 2]
+    covered = [k for d, k in by_day.items() if k >= INTAKE_COVERAGE * target and counts[d] >= 2 and d not in incomplete_days]
     points = _weight_points(repo.trend_weight_series(db, uid, frm, end.isoformat())[0])
     if len(covered) < 5 or len(points) < 3 or points[-1][0] - points[0][0] < 4:
         return None
@@ -568,7 +571,8 @@ def weekly_report(db: sqlite3.Connection, uid: int, today: date | None = None,
     for m in meals:
         by_day.setdefault(m["local_date"], []).append(m)
     target, protein_tgt = _target(db, uid)
-    kcal_days = {d: sum(m["kcal_total"] for m in v) for d, v in by_day.items()}
+    kcal_days = {d: sum(m["kcal_total"] for m in v) for d, v in by_day.items()
+                 if not any(m["incomplete"] for m in v)}
     avg = int(sum(kcal_days.values()) / len(kcal_days)) if kcal_days else 0
     late_evenings = [d for d, v in by_day.items()
                      if any(analytics.is_late(m["local_time"], user["eating_cutoff"]) for m in v)]
@@ -576,7 +580,8 @@ def weekly_report(db: sqlite3.Connection, uid: int, today: date | None = None,
     points = _weight_points(weights)
     slope = weekly_slope(points, window_days=7) if len(points) >= 2 else None
     lines = [f"📊 Неделя {frm[5:]}–{to[5:]}",
-             f"Еда: {len(kcal_days)}/7 дней, среднее {avg} ккал (цель {target})",
+             (f"Еда: {len(kcal_days)}/7 дней с расчётом, среднее {avg} ккал (цель {target})"
+              if kcal_days else "Еда: нет дней с рассчитанным итогом"),
              f"Поздние вечера: {len(late_evenings)}"]
     if points:
         smoothed = ewma_dated(points)
@@ -613,7 +618,7 @@ def weekly_report(db: sqlite3.Connection, uid: int, today: date | None = None,
         date.fromisoformat(day).toordinal(): sum(m["kcal_total"] for m in day_meals)
         for day, day_meals in adaptive_by_day.items()
         if sum(m["kcal_total"] for m in day_meals) >= INTAKE_COVERAGE * target
-        and len(day_meals) >= 2
+        and len(day_meals) >= 2 and not any(m["incomplete"] for m in day_meals)
     }
     adaptive_weights, _ = repo.trend_weight_series(db, uid, adaptive_from, adaptive_to)
     if adaptive_weights:

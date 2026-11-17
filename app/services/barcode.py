@@ -36,7 +36,7 @@ def _ref_from_row(row: sqlite3.Row) -> FoodRef:
     return FoodRef(food_id=row["id"], name_ru=row["name_ru"], name_en=row["name_en"],
                    kcal_100g=row["kcal_100g"], protein_100g=row["protein_100g"],
                    fat_100g=row["fat_100g"], carbs_100g=row["carbs_100g"],
-                   source=row["source"], confidence=0.9)
+                   source=row["nutrition_source"] or row["source"], confidence=0.9)
 
 
 async def lookup(db: sqlite3.Connection, code: str, transport=None,

@@ -145,7 +145,10 @@ def day_chart(f: dict) -> bytes:
     rows = [("Белок", f["protein"], f["protein_target"], "г", None),
             ("Вода", f["water"], f["water_goal"], "мл", None),
             ("Шаги", f["steps"] or 0, insights.STEPS_GOAL, "", None)]
-    if not f["care"]:
+    partial = bool(f.get("unresolved_items"))
+    if partial:
+        rows = rows[1:]  # белок тоже посчитан не полностью
+    if not f["care"] and not partial:
         rows.insert(0, ("Калории", f["kcal"], f["kcal_target"], "ккал", (0.85, 1.1)))
     width, row_h, head = 8.0, 0.62, 1.9
     rows_h = row_h * len(rows) + 0.3
@@ -164,7 +167,7 @@ def day_chart(f: dict) -> bytes:
         ax.text(0.55, top - 0.85, _num(f["kcal"]), fontsize=26, fontweight="bold", va="center",
                 zorder=5)
         ax.text(0.55 + 0.2 * len(_num(f["kcal"])) + 0.45, top - 0.9,
-                f"из {_num(f['kcal_target'])} ккал", fontsize=12, color=MUTED, va="center",
+                "ккал учтено" if partial else f"из {_num(f['kcal_target'])} ккал", fontsize=12, color=MUTED, va="center",
                 zorder=5)
     _card(ax, 0.3, 0.3, width - 0.6, rows_h)
     track_x, track_w = 1.85, 3.1
@@ -191,8 +194,9 @@ def week_chart(days: list[dict], care: bool) -> bytes:
     labels = [WEEKDAYS[date.fromisoformat(d["date"]).weekday()] for d in days]
     panels = []
     if not care:
-        logged = [d["kcal"] for d in days if d["meals"]]
-        panels.append(("Калории, ккал", [d["kcal"] if d["meals"] else 0 for d in days],
+        logged = [d["kcal"] for d in days if d["meals"] and not d.get("unresolved_items")]
+        panels.append(("Калории, ккал", [d["kcal"] if d["meals"] and not d.get("unresolved_items")
+                                          else 0 for d in days],
                        days[-1]["kcal_target"], (0.85, 1.1),
                        sum(logged) / len(logged) if logged else None))
     water = [d["water"] for d in days if d["water"]]

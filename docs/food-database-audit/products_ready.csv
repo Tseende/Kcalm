@@ -1,0 +1,121 @@
+name_ru,name_en,kcal_100g,protein_100g,fat_100g,carbs_100g,source,external_id
+Куриная грудка сырая,raw chicken breast,113.0,23.6,1.9,0.4,seed,ready:kurinaya_grudka_syraya
+Куриная грудка варёная,boiled chicken breast,151.0,28.98,3.03,0.0,seed,ready:kurinaya_grudka_varenaya
+Куриная грудка запечённая,baked chicken breast,165.0,31.02,3.57,0.0,seed,ready:kurinaya_grudka_zapechennaya
+Куриная грудка жареная,fried chicken breast,187.0,33.44,4.71,0.51,seed,ready:kurinaya_grudka_zharenaya
+Куриное бедро варёное,boiled chicken thigh,195.0,25.0,9.79,0.0,seed,ready:kurinoe_bedro_varenoe
+Куриное бедро запечённое,baked chicken thigh,179.0,24.76,8.15,0.0,seed,ready:kurinoe_bedro_zapechennoe
+Куриное бедро жареное,fried chicken thigh,218.0,28.18,10.3,1.18,seed,ready:kurinoe_bedro_zharenoe
+Куриная голень варёная,boiled chicken drumstick,169.0,27.5,5.71,0.0,seed,ready:kurinaya_golen_varenaya
+Куриная голень запечённая,baked chicken drumstick,191.0,23.35,10.15,0.0,seed,ready:kurinaya_golen_zapechennaya
+Куриные крылышки запечённые,baked chicken wings,254.0,23.79,16.87,0.0,seed,ready:kurinye_krylyshki_zapechennye
+Курица варёная (без кожи),boiled chicken meat,177.0,27.29,6.71,0.0,seed,ready:kurica_varenaya_bez_kozhi
+Курица жареная,roast chicken,239.0,27.3,13.6,0.0,seed,ready:kurica_zharenaya
+Индейка грудка сырая,raw turkey breast,114.0,23.66,1.48,0.14,seed,ready:indeyka_grudka_syraya
+Индейка грудка запечённая,baked turkey breast,147.0,30.13,2.08,0.0,seed,ready:indeyka_grudka_zapechennaya
+Индейка бедро тушёное,stewed turkey thigh,173.0,27.71,6.04,0.0,seed,ready:indeyka_bedro_tushenoe
+Индейка фарш жареный,cooked ground turkey,203.0,27.37,10.4,0.0,seed,ready:indeyka_farsh_zharenyy
+Говядина варёная (нежирная),boiled lean beef,203.0,29.9,8.37,0.0,seed,ready:govyadina_varenaya_nezhirnaya
+Говядина тушёная,stewed beef,212.0,33.36,7.67,0.0,seed,ready:govyadina_tushenaya
+Стейк говяжий,beef steak,201.0,29.16,8.45,0.0,seed,ready:steyk_govyazhiy
+Телятина варёная,boiled veal,203.0,36.71,5.09,0.0,seed,ready:telyatina_varenaya
+Свинина тушёная,stewed pork,292.0,23.28,21.39,0.0,seed,ready:svinina_tushenaya
+Свинина запечённая,baked pork,231.0,27.01,12.8,0.0,seed,ready:svinina_zapechennaya
+Свинина жареная,fried pork,238.0,27.63,13.32,0.0,seed,ready:svinina_zharenaya
+Баранина тушёная,stewed lamb,268.0,20.0,20.9,0.0,seed,ready:baranina_tushenaya
+Кролик тушёный,stewed rabbit,206.0,30.38,8.41,0.0,seed,ready:krolik_tushenyy
+Котлета куриная жареная,fried chicken cutlet,222.0,18.2,10.4,13.8,seed,ready:kotleta_kurinaya_zharenaya
+Котлета говяжья рубленая,fried beef cutlet,213.0,14.2,11.4,13.0,seed,ready:kotleta_govyazhya_rublenaya
+Фарш говяжий жареный,cooked ground beef,230.0,28.45,12.04,0.0,seed,ready:farsh_govyazhiy_zharenyy
+Печень куриная жареная,fried chicken liver,167.0,24.46,6.51,0.87,seed,ready:pechen_kurinaya_zharenaya
+Печень говяжья тушёная,stewed beef liver,191.0,29.08,5.26,5.13,seed,ready:pechen_govyazhya_tushenaya
+Сердце куриное варёное,boiled chicken heart,185.0,26.41,7.92,0.1,seed,ready:serdce_kurinoe_varenoe
+Треска варёная,boiled cod,105.0,22.83,0.86,0.0,seed,ready:treska_varenaya
+Минтай запечённый,baked pollock,86.6,19.42,0.99,0.0,seed,ready:mintay_zapechennyy
+Горбуша запечённая,baked pink salmon,153.0,24.58,5.28,0.0,seed,ready:gorbusha_zapechennaya
+Лосось запечённый,baked salmon,206.0,22.1,12.35,0.0,seed,ready:losos_zapechennyy
+Скумбрия запечённая,baked mackerel,262.0,23.85,17.81,0.0,seed,ready:skumbriya_zapechennaya
+Сельдь солёная,salted herring,217.0,24.58,12.37,0.0,seed,ready:seld_solenaya
+Тунец консервированный в собственном соку,canned tuna in water,96.0,21.0,1.2,0.0,seed,ready:tunec_konservirovannyy_v_sobstvennom_soku
+Сардины в масле,canned sardines in oil,208.0,24.62,11.45,0.0,seed,ready:sardiny_v_masle
+Креветки варёные,boiled shrimp,99.0,23.98,0.28,0.2,seed,ready:krevetki_varenye
+Кальмар варёный,boiled squid,122.0,21.2,2.8,2.0,seed,ready:kalmar_varenyy
+Мидии варёные,boiled mussels,89.0,16.7,1.7,2.7,seed,ready:midii_varenye
+Хек (варёный/запечённый),boiled/baked hake,95.0,18.5,2.3,0.0,seed,ready:hek_varenyyzapechennyy
+Форель запечённая,baked trout,168.0,23.8,7.38,0.0,seed,ready:forel_zapechennaya
+Яйцо куриное варёное,boiled egg,155.0,12.58,10.61,1.12,seed,ready:yayco_kurinoe_varenoe
+Яичница-глазунья,fried egg,196.0,13.61,14.84,0.83,seed,ready:yaichnicaglazunya
+Омлет,omelette,200.0,10.3,17.0,1.6,seed,ready:omlet
+Яйцо перепелиное,quail egg,158.0,13.05,11.09,0.41,seed,ready:yayco_perepelinoe
+Творог обезжиренный,low-fat cottage cheese,110.0,22.0,0.6,3.3,seed,ready:tvorog_obezzhirennyy
+Творог 2%,cottage cheese 2%,103.0,18.0,2.0,3.3,seed,ready:tvorog_2
+Творог 5%,cottage cheese 5%,121.0,17.2,5.0,1.8,seed,ready:tvorog_5
+Творог 9%,cottage cheese 9%,159.0,16.7,9.0,2.0,seed,ready:tvorog_9
+Кефир 1%,kefir 1%,40.0,2.8,1.0,4.0,seed,ready:kefir_1
+Кефир 2.5%,kefir 2.5%,50.0,2.8,2.5,3.9,seed,ready:kefir_25
+Молоко 1.5%,milk 1.5%,44.0,2.8,1.5,4.7,seed,ready:moloko_15
+Молоко 2.5%,milk 2.5%,52.0,2.8,2.5,4.7,seed,ready:moloko_25
+Молоко 3.2%,milk 3.2%,59.0,2.9,3.2,4.7,seed,ready:moloko_32
+Ряженка 2.5%,ryazhenka 2.5%,54.0,2.9,2.5,4.2,seed,ready:ryazhenka_25
+Сметана 10%,sour cream 10%,115.0,3.0,10.0,2.9,seed,ready:smetana_10
+Сметана 15%,sour cream 15%,158.0,2.6,15.0,3.0,seed,ready:smetana_15
+Сметана 20%,sour cream 20%,206.0,2.8,20.0,3.2,seed,ready:smetana_20
+Йогурт натуральный 2.7%,plain yogurt 2.7%,56.0,3.2,2.7,4.7,seed,ready:yogurt_naturalnyy_27
+Греческий йогурт,greek yogurt,61.0,10.3,0.37,3.64,seed,ready:grecheskiy_yogurt
+Сыр российский,russian cheese,363.0,24.1,29.5,0.3,seed,ready:syr_rossiyskiy
+Сыр моцарелла,mozzarella,242.0,18.8,18.1,1.0,seed,ready:syr_mocarella
+Сыр плавленый,processed cheese,290.5,16.0,24.2,2.3,seed,ready:syr_plavlenyy
+Сырники,fried curd fritters,218.0,13.5,10.0,17.5,seed,ready:syrniki
+Запеканка творожная,cottage cheese casserole,168.0,17.6,4.2,14.2,seed,ready:zapekanka_tvorozhnaya
+Гречка варёная,boiled buckwheat,100.9,4.2,1.1,18.6,seed,ready:grechka_varenaya
+Гречка сухая,dry buckwheat,313.0,12.6,3.3,62.1,seed,ready:grechka_suhaya
+Рис белый варёный,boiled white rice,130.0,2.69,0.28,28.17,seed,ready:ris_belyy_varenyy
+Рис бурый варёный,boiled brown rice,123.0,2.74,0.97,25.58,seed,ready:ris_buryy_varenyy
+Рис сухой,dry rice,365.0,7.13,0.66,79.95,seed,ready:ris_suhoy
+Овсянка на воде,oatmeal on water,71.0,2.54,1.52,12.0,seed,ready:ovsyanka_na_vode
+Овсянка на молоке,oatmeal on milk,109.0,2.6,4.1,15.5,seed,ready:ovsyanka_na_moloke
+Овсяные хлопья сухие,dry oat flakes,379.0,13.15,6.52,67.7,seed,ready:ovsyanye_hlopya_suhie
+Пшённая каша на воде,millet porridge on water,100.9,3.4,1.0,19.6,seed,ready:pshennaya_kasha_na_vode
+Перловка варёная,boiled pearl barley,123.0,2.26,0.44,28.22,seed,ready:perlovka_varenaya
+Манная каша на молоке,semolina porridge on milk,98.0,3.0,3.2,15.3,seed,ready:mannaya_kasha_na_moloke
+Булгур варёный,boiled bulgur,83.0,3.08,0.24,18.58,seed,ready:bulgur_varenyy
+Кускус варёный,boiled couscous,112.0,3.79,0.16,23.22,seed,ready:kuskus_varenyy
+Киноа варёная,boiled quinoa,120.0,4.4,1.92,21.3,seed,ready:kinoa_varenaya
+Макароны варёные,boiled pasta,158.0,5.8,0.93,30.86,seed,ready:makarony_varenye
+Макароны сухие,dry pasta,371.0,13.04,1.51,74.67,seed,ready:makarony_suhie
+Картофель варёный,boiled potato,86.0,1.71,0.1,20.01,seed,ready:kartofel_varenyy
+Картофельное пюре,mashed potato,113.0,1.9,4.2,15.3,seed,ready:kartofelnoe_pyure
+Картофель запечённый,baked potato,93.0,2.5,0.13,21.15,seed,ready:kartofel_zapechennyy
+Картофель жареный,fried potato,192.0,2.8,9.5,23.4,seed,ready:kartofel_zharenyy
+Картофель фри,french fries,312.0,3.4,15.0,41.0,seed,ready:kartofel_fri
+Кукуруза варёная,boiled corn on the cob,101.0,3.5,2.8,15.6,seed,ready:kukuruza_varenaya
+Кукуруза консервированная,canned corn,67.0,2.29,1.22,14.34,seed,ready:kukuruza_konservirovannaya
+Горох варёный,boiled split peas,118.0,8.34,0.39,21.1,seed,ready:goroh_varenyy
+Фасоль варёная,boiled white beans,139.0,9.73,0.35,25.09,seed,ready:fasol_varenaya
+Чечевица варёная,boiled lentils,116.0,9.02,0.38,20.13,seed,ready:chechevica_varenaya
+Нут варёный,boiled chickpeas,164.0,8.86,2.59,27.42,seed,ready:nut_varenyy
+Соя варёная,boiled soybeans,172.0,18.21,8.97,8.36,seed,ready:soya_varenaya
+Капуста белокочанная свежая,raw cabbage,25.0,1.28,0.1,5.8,seed,ready:kapusta_belokochannaya_svezhaya
+Капуста тушёная,stewed cabbage,75.0,2.0,3.3,9.2,seed,ready:kapusta_tushenaya
+Брокколи варёная,boiled broccoli,35.0,2.38,0.41,7.18,seed,ready:brokkoli_varenaya
+Цветная капуста варёная,boiled cauliflower,23.0,1.84,0.45,4.11,seed,ready:cvetnaya_kapusta_varenaya
+Морковь варёная,boiled carrot,35.0,0.76,0.18,8.22,seed,ready:morkov_varenaya
+Свёкла варёная,boiled beetroot,44.0,1.68,0.18,9.96,seed,ready:svekla_varenaya
+Кабачок жареный,fried zucchini,88.0,1.1,6.0,6.7,seed,ready:kabachok_zharenyy
+Баклажан жареный,fried eggplant,126.0,1.2,9.0,9.9,seed,ready:baklazhan_zharenyy
+Перец болгарский свежий,raw bell pepper,26.0,0.99,0.3,6.03,seed,ready:perec_bolgarskiy_svezhiy
+Помидор,raw tomato,18.0,0.88,0.2,3.89,seed,ready:pomidor
+Огурец,raw cucumber,15.0,0.65,0.11,3.63,seed,ready:ogurec
+Морковь свежая,raw carrot,41.0,0.93,0.24,9.58,seed,ready:morkov_svezhaya
+Свёкла свежая,raw beetroot,43.0,1.61,0.17,9.56,seed,ready:svekla_svezhaya
+Шампиньоны свежие,raw mushrooms,22.0,3.09,0.34,3.26,seed,ready:shampinony_svezhie
+Шампиньоны жареные,fried mushrooms,50.2,3.6,2.1,2.8,seed,ready:shampinony_zharenye
+Лук репчатый,raw onion,40.0,1.1,0.1,9.34,seed,ready:luk_repchatyy
+Тыква запечённая,baked pumpkin,26.0,1.0,0.1,6.5,seed,ready:tykva_zapechennaya
+Горошек зелёный варёный,boiled green peas,84.0,5.36,0.22,15.63,seed,ready:goroshek_zelenyy_varenyy
+Фасоль стручковая варёная,boiled green beans,35.0,1.89,0.28,7.88,seed,ready:fasol_struchkovaya_varenaya
+Хлеб пшеничный,wheat bread,242.0,8.1,1.0,48.8,seed,ready:hleb_pshenichnyy
+Хлеб ржаной,rye bread,217.0,5.9,1.1,44.5,seed,ready:hleb_rzhanoy
+Хлеб бородинский,borodinsky bread,208.0,6.9,1.3,40.9,seed,ready:hleb_borodinskiy
+Хлеб цельнозерновой,whole grain bread,252.0,12.45,3.5,42.71,seed,ready:hleb_celnozernovoy
+Батон нарезной,sliced white loaf,264.0,7.5,2.9,50.9,seed,ready:baton_nareznoy

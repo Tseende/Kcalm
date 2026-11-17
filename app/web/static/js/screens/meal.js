@@ -46,7 +46,9 @@ export default async function render(root, ctx) {
     const range = meal.kcal_low != null && meal.kcal_high != null ? t('meal.range', { a: fmtKcal(meal.kcal_low * k), b: fmtKcal(meal.kcal_high * k) }) : '';
     totalsEl.replaceChildren(
       h('div', { class: 'totals-kcal' }, h('span', { class: 'big' }, fmtKcal(kcal)), ' ' + t('unit.kcal')),
-      range ? h('div', { class: 'range-hint small' }, range) : null,
+      meal.unresolved_items ? h('div', { class: 'range-hint small' },
+        t('nutrition.incomplete', { n: meal.unresolved_items })) :
+        range ? h('div', { class: 'range-hint small' }, range) : null,
       macroChips({ p: meal.protein + d.protein, f: meal.fat + d.fat, c: meal.carbs + d.carbs }, { pills: true }),
       meal.confidence != null ? h('div', { class: 'muted small' }, t('meal.conf', { p: Math.round(meal.confidence * 100) })) : null);
   }
@@ -93,10 +95,11 @@ export default async function render(root, ctx) {
   // Шторка «Изменить позицию»: название, граммы, К/Б/Ж/У. Числа хранятся на 100 г или на порцию (на текущие граммы).
   function itemSheet(it) {
     let per = '100g';
-    const base = it.per100 || { kcal: it.kcal * 100 / it.grams, protein: it.protein * 100 / it.grams, fat: it.fat * 100 / it.grams, carbs: it.carbs * 100 / it.grams };
+    const unresolved = it.source === 'unresolved';
+    const base = unresolved ? {} : it.per100 || { kcal: it.kcal * 100 / it.grams, protein: it.protein * 100 / it.grams, fat: it.fat * 100 / it.grams, carbs: it.carbs * 100 / it.grams };
     const nameI = h('input', { type: 'text', maxlength: 120, value: it.name, 'aria-label': t('common.name'), autocomplete: 'off' });
     const grams = numInput({ value: it.grams, min: G_MIN, max: G_MAX, decimals: 1, 'aria-label': t('add.grams') });
-    const mk = (v, label) => numInput({ value: Math.round(v * 10) / 10, min: 0, max: 900, decimals: 1, 'aria-label': label });
+    const mk = (v, label) => numInput({ value: v == null ? null : Math.round(v * 10) / 10, min: 0, max: 900, decimals: 1, 'aria-label': label });
     const kcal = mk(base.kcal, t('prof.f_kcal'));
     const p = mk(base.protein, t('prof.f_p'));
     const f = mk(base.fat, t('prof.f_f'));
@@ -128,7 +131,11 @@ export default async function render(root, ctx) {
       if (busy) return;
       const n = nameI.value.trim();
       if (!n) { toast(t('fp.v_name'), 'error'); nameI.focus(); return; }
-      for (const [el, label] of [[grams, t('add.grams')], [kcal, t('prof.f_kcal')], [p, t('prof.f_p')], [f, t('prof.f_f')], [c, t('prof.f_c')]]) {
+      const fields = [[grams, t('add.grams')]];
+      if (!unresolved || touched) {
+        fields.push([kcal, t('prof.f_kcal')], [p, t('prof.f_p')], [f, t('prof.f_f')], [c, t('prof.f_c')]);
+      }
+      for (const [el, label] of fields) {
         const bad = numCheck(el, label);
         if (bad) { toast(bad, 'error'); el.focus(); return; }
         if (numVal(el) === null) { toast(t('num.enter', { label }), 'error'); el.focus(); return; }
@@ -210,8 +217,16 @@ export default async function render(root, ctx) {
       // последнее слово + карандаш в одном неразрывном куске
       const m = /^(.*?)(\S+)\s*$/s.exec(it.name);
       nameEl.replaceChildren(m && m[1] ? m[1] : '', h('span', { class: 'nw' }, m ? m[2] : it.name, flag));
-      kcalEl.replaceChildren(fmtKcal(it.kcal * k), h('small', null, ' ' + t('unit.kcal')));
-      macEl.textContent = macroLine({ protein: it.protein * k, fat: it.fat * k, carbs: it.carbs * k });
+      const estimated = it.source === 'generic' || it.source === 'llm';
+      if (it.source === 'unresolved') {
+        kcalEl.textContent = '—';
+        macEl.textContent = t('nutrition.unknown');
+      } else {
+        kcalEl.replaceChildren((estimated ? '≈ ' : '') + fmtKcal(it.kcal * k), h('small', null, ' ' + t('unit.kcal')));
+        const note = estimated ? t('nutrition.estimate') : it.source === 'label' ? t('nutrition.label') : '';
+        macEl.textContent = [macroLine({ protein: it.protein * k, fat: it.fat * k, carbs: it.carbs * k }), note]
+          .filter(Boolean).join(' · ');
+      }
       const ed = !!(it.edited || local !== it.grams);
       flag.classList.toggle('on', ed);
       flag.title = ed ? t('meal.edited') : t('fp.edit_title');

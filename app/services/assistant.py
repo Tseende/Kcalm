@@ -116,7 +116,8 @@ def snapshot(db: sqlite3.Connection, user, today: date | None = None) -> dict:
         sleep = db.execute("SELECT duration_min FROM sleep_sessions WHERE user_id=? AND wake_date=?",
                            (uid, d)).fetchone()
         days.append({
-            "date": d, "kcal": int(totals["kcal"]), "protein_g": round(float(totals["protein"])),
+            "date": d, "kcal": None if totals["unresolved_items"] else int(totals["kcal"]),
+            "protein_g": None if totals["unresolved_items"] else round(float(totals["protein"])),
             "meals": int(totals["meals"]), "water_ml": repo.day_water_ml(db, uid, d),
             "steps": act["steps"] if act and act["steps"] is not None else None,
             "sleep_min": sleep["duration_min"] if sleep and sleep["duration_min"] else None,
@@ -154,7 +155,7 @@ def snapshot(db: sqlite3.Connection, user, today: date | None = None) -> dict:
         "body_composition": body_ctx,
         "today_facts": today_facts,
         "time_now": now_local.strftime("%H:%M"),
-        "today": {**today_row, "kcal_target": kcal_target, "kcal_left": kcal_target - today_row["kcal"],
+        "today": {**today_row, "kcal_target": kcal_target, "kcal_left": (None if today_row["kcal"] is None else kcal_target - today_row["kcal"]),
                   "protein_target_g": protein_target,
                   "water_goal_ml": watersvc.goal_for(db, user)},
         "last_7_days": days,

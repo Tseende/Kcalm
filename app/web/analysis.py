@@ -79,6 +79,8 @@ def score_of(rows: list[dict]) -> int | None:
 
 def _headline(f: dict, score: int | None, closed: bool, incomplete: bool) -> str:
     """Заголовок согласован с оценкой: кольцо, картинка и слова говорят одно и то же."""
+    if f.get("unresolved_items"):
+        return "Часть еды без расчёта"
     if not closed:
         return "День ещё идёт"
     if not f["meals"]:
@@ -95,7 +97,7 @@ def build(db: sqlite3.Connection, user, day: date, now: datetime) -> dict:
     facts = insights.day_facts(db, user, key)
     closed = day < now.date() or now.hour >= CLOSE_HOUR
     good, tips = insights.day_tips(facts, closed=closed)
-    incomplete = closed and insights.maybe_incomplete(facts)
+    incomplete = bool(facts["unresolved_items"]) or (closed and insights.maybe_incomplete(facts))
     mot = motivation.build(db, user, day)
     rows = _rows(facts, closed)
     score = score_of(rows)

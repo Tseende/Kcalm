@@ -943,6 +943,7 @@ def _build_card(db: sqlite3.Connection, user, local_date: str, local_time: str,
         _when_label(user, local_date, local_time), foodsvc.meal_type_ru(meal_type), calc,
         day["kcal"], target_kcal, int(day["protein"]), protein_tgt,
         late=is_late, late_kcal=calc.kcal_total if is_late else 0,
+        unresolved_items=day["unresolved_items"],
     )
     dish_label = _dish_label(db, uid, meal_id)
     if dish_label:

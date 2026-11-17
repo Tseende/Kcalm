@@ -93,6 +93,7 @@ def day_facts(db: sqlite3.Connection, user, day: str) -> dict:
     return {
         "date": day,
         "kcal": int(totals["kcal"]), "meals": len(eaten),
+        "unresolved_items": totals["unresolved_items"],
         "kcal_low": int(sum(m["kcal_low"] or 0 for m in meals)),
         "kcal_high": int(sum(m["kcal_high"] or 0 for m in meals)),
         "protein": round(float(totals["protein"])),
@@ -122,6 +123,8 @@ def maybe_incomplete(f: dict, now_hhmm: str | None = None) -> bool:
     """Записано подозрительно мало: вероятно, не вся еда внесена в дневник.
 
     Для идущего дня (now_hhmm) до 18:00 недобор нормален, поэтому молчим."""
+    if f.get("unresolved_items"):
+        return True
     if now_hhmm is not None and now_hhmm < "18:00":
         return False
     meals, kcal, target = f.get("meals", 0), f.get("kcal", 0), f.get("kcal_target", 0)
@@ -150,7 +153,10 @@ def llm_facts(f: dict, now_hhmm: str | None = None) -> dict:
                      for c in f.get("cravings", [])],
         "diary_maybe_incomplete": maybe_incomplete(f, now_hhmm),
     }
-    if not f["care"]:
+    if f.get("unresolved_items"):
+        for key in ("protein_g", "protein_target_g", "protein_left_g"):
+            out.pop(key)
+    if not f["care"] and not f.get("unresolved_items"):
         out.update({
             "kcal": f["kcal"], "kcal_target": f["kcal_target"],
             "kcal_left": f["kcal_target"] - f["kcal"],
@@ -167,13 +173,15 @@ def _status(ratio: float, good: float = 0.9, ok: float = 0.7) -> str:
 def scorecard_rows(f: dict) -> list[list[str]]:
     """Строки таблицы «показатель, факт, ориентир, статус»."""
     rows: list[list[str]] = []
+    partial = f.get("unresolved_items", 0)
     if not f["care"]:
         k, t = f["kcal"], f["kcal_target"]
         status = "—" if not f["meals"] else "✅" if 0.85 <= k / t <= 1.1 else \
             "🟡" if 0.7 <= k / t <= 1.2 else "⚠️"
-        rows.append(["Калории", f"{_num(k)} ккал", f"{_num(t)}", status])
+        rows.append(["Калории", f"Учтено {_num(k)} ккал" if partial else f"{_num(k)} ккал",
+                     f"{_num(t)}", "—" if partial else status])
     p, pt = f["protein"], f["protein_target"]
-    rows.append(["Белок", f"{p} г", f"{pt} г", _status(p / pt) if f["meals"] else "—"])
+    rows.append(["Белок", f"{p} г", f"{pt} г", _status(p / pt) if f["meals"] and not partial else "—"])
     w, wg = f["water"], f["water_goal"]
     rows.append(["Вода", f"{_num(w)} мл", f"{_num(wg)} мл", _status(w / wg, 0.9, 0.5)])
     steps = f["steps"]
@@ -204,7 +212,7 @@ def _craving_tip(f: dict, incomplete: bool) -> Tip | None:
             else f"Тяга была {_times(len(cravings))}, первый раз в {first['time']}")
     ks, kt = first.get("kcal_so_far"), first.get("kcal_target")
     prio = 1 if overate else 2
-    if f["care"] or ks is None or not kt:
+    if f["care"] or f.get("unresolved_items") or ks is None or not kt:
         return Tip("🧭", f"{head}. Это волна на 15–30 минут. Придумай заранее замену на это время: "
                          "чай, душ или короткая прогулка.", prio)
     if ks < 0.6 * kt:
@@ -230,9 +238,13 @@ def day_tips(f: dict, closed: bool = True) -> tuple[list[str], list[Tip]]:
     active_kcal = f.get("active_kcal")
     active = (steps is not None and steps >= 10000) or (active_kcal is not None
                                                         and active_kcal >= 700)
-    incomplete = closed and maybe_incomplete(f)
+    partial = f.get("unresolved_items", 0)
+    incomplete = bool(partial) or (closed and maybe_incomplete(f))
 
-    if incomplete:
+    if partial:
+        tips.append(Tip("📝", f"Позиций без расчёта: {partial}. Уточни блюдо в дневнике, "
+                              "чтобы увидеть полный итог дня.", 1))
+    elif incomplete:
         if not meals:
             tips.append(Tip("📝", "Еда за день не записана. Если что-то было, допиши хотя бы "
                                   "коротко: тогда советы будут по делу.", 1))
@@ -252,7 +264,7 @@ def day_tips(f: dict, closed: bool = True) -> tuple[list[str], list[Tip]]:
         tips.append(Tip("🥩", f"{why}Сегодня {protein} из {ptarget} г: добавь ещё около {need} г, "
                               f"например {_protein_idea(need)}.", 1 if active else 2,
                         action=f"Завтра: белок в каждый приём пищи, цель {ptarget} г"))
-    elif meals >= 2 and protein >= 0.9 * ptarget:
+    elif meals >= 2 and protein >= 0.9 * ptarget and not partial:
         good.append(f"белок в норме ({protein} г)")
 
     water, goal = f["water"], f["water_goal"]
@@ -335,7 +347,7 @@ def day_tips(f: dict, closed: bool = True) -> tuple[list[str], list[Tip]]:
                              "поставь напоминание на перекус с белком посередине.", 4,
                         action="Завтра: перекус с белком в середине паузы"))
 
-    if not f["care"] and meals and closed:
+    if not f["care"] and meals and closed and not partial:
         ratio = kcal / target
         if ratio > 1.1:
             tips.append(Tip("🍽", f"Съедено на {kcal - target} ккал больше цели: это нормально, "
@@ -383,7 +395,7 @@ def _avg(values: list[float]) -> float | None:
 
 
 def week_summary(days: list[dict]) -> dict:
-    logged = [d for d in days if d["meals"]]
+    logged = [d for d in days if d["meals"] and not d.get("unresolved_items")]
     return {
         "logged": len(logged),
         "kcal": _avg([d["kcal"] for d in logged]),
@@ -402,8 +414,8 @@ def week_summary(days: list[dict]) -> dict:
 def week_table_rows(days: list[dict]) -> list[list[str]]:
     rows = []
     for d in days:
-        rows.append([d["date"][5:], _num(d["kcal"]) if d["meals"] else "—",
-                     f"{d['protein']}" if d["meals"] else "—",
+        rows.append([d["date"][5:], _num(d["kcal"]) if d["meals"] and not d.get("unresolved_items") else "—",
+                     f"{d['protein']}" if d["meals"] and not d.get("unresolved_items") else "—",
                      _num(d["water"]) if d["water"] else "—",
                      _num(d["steps"]) if d["steps"] is not None else "—",
                      analytics.format_minutes(d["sleep_min"]) if d["sleep_min"] else "—"])
@@ -523,8 +535,8 @@ def week_tips(wf: dict) -> tuple[list[str], list[Tip]]:
                                   "на час раньше и добавить в него белок: так вечером меньше "
                                   "тянет.", 3, action="Завтра: ужин на час раньше, с белком"))
         # рабочие дни против выходных
-        work = [d["kcal"] for d in days if d["meals"] and date.fromisoformat(d["date"]).weekday() < 5]
-        free = [d["kcal"] for d in days if d["meals"] and date.fromisoformat(d["date"]).weekday() >= 5]
+        work = [d["kcal"] for d in days if d["meals"] and not d.get("unresolved_items") and date.fromisoformat(d["date"]).weekday() < 5]
+        free = [d["kcal"] for d in days if d["meals"] and not d.get("unresolved_items") and date.fromisoformat(d["date"]).weekday() >= 5]
         if len(work) >= 3 and len(free) >= 2:
             diff = int(sum(free) / len(free) - sum(work) / len(work))
             if diff >= 350:
@@ -536,7 +548,7 @@ def week_tips(wf: dict) -> tuple[list[str], list[Tip]]:
     good.extend(r_good)
     tips.extend(Tip(t["icon"], t["text"], t["prio"], action=t.get("action", "")) for t in r_tips)
 
-    logged = [d for d in days if d["meals"]]
+    logged = [d for d in days if d["meals"] and not d.get("unresolved_items")]
     if logged and not care and s["logged"] >= 4:
         best = min(logged, key=lambda d: abs(d["kcal"] - d["kcal_target"]))
         good.append(f"ближе всего к цели был день {best['date'][5:]} ({_num(best['kcal'])} ккал): "

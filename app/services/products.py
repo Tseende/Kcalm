@@ -116,7 +116,9 @@ async def parse_label(db: sqlite3.Connection, user, image_b64: str | list[str]
         "label_parse", [{"role": "user", "content": content}],
         model=get_config().model_vision, temperature=0.0,
         user_id=user["id"] if user else None, db=db)
-    return label_draft(data)
+    draft, confidence, notes = label_draft(data)
+    draft["nutrition_source"] = "label"
+    return draft, confidence, notes
 
 
 # ------------------------------------------------------------------ Open Food Facts
@@ -131,7 +133,7 @@ def _off_draft(found: dict, code: str) -> dict:
             "kcal": round(found["kcal_100g"]), "protein": found["protein_100g"],
             "fat": found["fat_100g"], "carbs": found["carbs_100g"],
             "default_grams": serving, "unit_name": "порция" if serving else None,
-            "unit_grams": serving, "barcode": code}
+            "unit_grams": serving, "barcode": code, "nutrition_source": "off"}
 
 
 async def enrich_with_off(draft: dict, notes: list[str], transport=None) -> tuple[dict, list[str]]:
@@ -150,6 +152,7 @@ async def enrich_with_off(draft: dict, notes: list[str], transport=None) -> tupl
     if any(out.get(k) is None for k in _NUTRIENTS):
         for k in _NUTRIENTS:
             out[k] = ref[k]
+        out["nutrition_source"] = "off"
         notes.append("КБЖУ не читалось с фото, взял из Open Food Facts: проверьте")
     elif ref["kcal"] and abs(out["kcal"] - ref["kcal"]) / ref["kcal"] > 0.2:
         notes.append(f"На фото {out['kcal']} ккал, в Open Food Facts {ref['kcal']}: проверьте упаковку")
@@ -175,7 +178,8 @@ async def barcode_draft(db: sqlite3.Connection, user, code: str, transport=None
                  "kcal": round(cached["kcal_100g"]), "protein": cached["protein_100g"],
                  "fat": cached["fat_100g"], "carbs": cached["carbs_100g"],
                  "default_grams": cached["default_grams"], "unit_name": cached["unit_name"],
-                 "unit_grams": cached["unit_grams"], "barcode": code}
+                 "unit_grams": cached["unit_grams"], "barcode": code,
+                 "nutrition_source": cached["nutrition_source"] or ("off" if cached["source"] == "off" else None)}
     own = db.execute("SELECT id FROM foods WHERE barcode=? AND owner_user_id=? AND deleted_at IS NULL",
                      (code, user["id"])).fetchone()
     return draft, (own["id"] if own else None)
@@ -266,6 +270,8 @@ def product_from_item(db: sqlite3.Connection, user, item_id: int,
     item = repo.owned_meal_item(db, user["id"], item_id)
     if item is None:
         raise ValueError("Позиция не найдена.")
+    if item["source"] == "unresolved":
+        raise ValueError("Сначала уточни продукт или внеси КБЖУ вручную.")
     grams = item["grams"] or 0
 
     def per100(col100: str, col_abs: str) -> float | None:
@@ -305,7 +311,8 @@ def product_from_food(db: sqlite3.Connection, user, food_id: int
     name, brand = (m.group("name"), m.group("brand")) if m else (label, None)
     draft = {"name": name, "brand": brand, "kcal": round(row["kcal_100g"]),
              "protein": row["protein_100g"], "fat": row["fat_100g"],
-             "carbs": row["carbs_100g"]}
+             "carbs": row["carbs_100g"],
+             "nutrition_source": row["nutrition_source"] or ("off" if row["source"] == "off" else None)}
     return save_product(db, user, draft, barcode=row["barcode"])
 
 

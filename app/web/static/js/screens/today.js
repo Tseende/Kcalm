@@ -55,6 +55,7 @@ export default async function render(root, ctx) {
   function draw(day, { dir = 0, fresh = false } = {}) {
     const tgt = day.targets;
     const eaten = day.totals.kcal;
+    const partial = day.totals.unresolved_items || 0;
     const remaining = day.remaining_kcal;
     const over = remaining < 0;
 
@@ -63,17 +64,19 @@ export default async function render(root, ctx) {
     const animate = firstPaint;
     firstPaint = false;
     const num = h('div', { class: 'ring-num' + (over ? ' over' : '') });
-    if (animate) countUp(num, Math.abs(remaining)); else num.textContent = fmtKcal(Math.abs(remaining));
+    const displayKcal = partial ? eaten : Math.abs(remaining);
+    if (animate) countUp(num, displayKcal); else num.textContent = fmtKcal(displayKcal);
     const ringBox = h('div', { class: 'ring-box' },
       kcalRing({ value: eaten, max: tgt.kcal, size: 208, stroke: 20, animate, label: t('today.eaten', { a: fmtKcal(eaten), b: fmtKcal(tgt.kcal) }) }),
       h('div', { class: 'ring-center' },
-        h('div', { class: 'ring-cap' }, over ? t('today.over_cap') : t('today.left_cap')),
+        h('div', { class: 'ring-cap' }, partial ? t('nutrition.counted') : over ? t('today.over_cap') : t('today.left_cap')),
         num,
         h('div', { class: 'ring-unit' }, t('unit.kcal'))));
     const kcalCard = h('section', { class: 'card kcal-card' + (over ? ' is-over' : ''), 'aria-label': t('today.kcal_card') });
     kcalCard.append(h('div', { class: 'kcal-top' }, ringBox,
       h('div', { class: 'kcal-sub' },
-        h('div', null, t('today.eaten', { a: fmtKcal(eaten), b: fmtKcal(tgt.kcal) })))));
+        h('div', null, partial ? t('nutrition.incomplete', { n: partial }) :
+          t('today.eaten', { a: fmtKcal(eaten), b: fmtKcal(tgt.kcal) })))));
 
     // macros: numbers under the rings (what is left, or the excess)
     let macroIdx = 0;
@@ -88,7 +91,7 @@ export default async function render(root, ctx) {
         h('div', { class: 'macro-name' }, h('i', { class: 'macro-dot' }), name),
         h('div', { class: 'macro-val' }, fmtN(val), h('small', null, ` / ${fmtN(target)}`)),
         bar,
-        h('div', { class: 'macro-left' }, isOver ? t('today.macro_over', { v: fmtN(-left) }) : t('today.macro_left', { v: fmtN(left) })));
+        partial ? null : h('div', { class: 'macro-left' }, isOver ? t('today.macro_over', { v: fmtN(-left) }) : t('today.macro_left', { v: fmtN(left) })));
     };
     const macroRow = h('div', { class: 'macros', role: 'group', 'aria-label': t('today.macros_group') },
       macro(t('macro.carbs'), C, tgt.carbs, 'bar-c'),
@@ -98,7 +101,7 @@ export default async function render(root, ctx) {
     // soft one-line hint instead of a verdict (today only, once something is logged)
     const proteinLeft = Math.round(tgt.protein - day.totals.protein);
     let tipText = null;
-    if (curDate === todayISO() && day.meals.length) {
+    if (!partial && curDate === todayISO() && day.meals.length) {
       if (over && proteinLeft > 10) tipText = t('today.tip_over_protein', { n: proteinLeft });
       else if (over) tipText = t('today.tip_over');
       else if (proteinLeft > 15) tipText = t('today.tip_protein', { n: proteinLeft });
@@ -308,7 +311,8 @@ export default async function render(root, ctx) {
           h('span', { class: 'row-title' }, title, when ? h('span', { class: 'meal-when' }, when) : null),
           h('span', { class: 'row-sub clamp' }, names.join(', ') || t('today.no_items')),
           h('span', { class: 'row-sub' }, macroLine(sum))),
-        h('span', { class: 'meal-kcal' }, fmtKcal(sum.kcal), h('small', null, ' ' + t('unit.kcal'))),
+        h('span', { class: 'meal-kcal' }, (list.some((m) => m.unresolved_items) ? t('nutrition.counted') + ' ' : '') +
+          fmtKcal(sum.kcal), h('small', null, ' ' + t('unit.kcal'))),
         h('span', { class: 'meal-chev' }, icon('chevron-right', 18)));
       const card = h('div', { class: 'list meal-group' }, head, body);
       function setOpen(on) {
@@ -335,7 +339,7 @@ export default async function render(root, ctx) {
       h('span', { class: 'grow' },
         h('span', { class: 'row-title clamp1' }, names || t('today.no_items')),
         h('span', { class: 'row-sub' }, `${m.time} · ${macroLine(m)}`)),
-      h('span', { class: 'meal-kcal' }, fmtKcal(m.kcal), h('small', null, ' ' + t('unit.kcal'))));
+      h('span', { class: 'meal-kcal' }, m.unresolved_items ? t('nutrition.counted') + ' ' + fmtKcal(m.kcal) : fmtKcal(m.kcal), h('small', null, ' ' + t('unit.kcal'))));
   }
 
   await load();

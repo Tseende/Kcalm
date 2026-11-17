@@ -480,14 +480,14 @@ async def test_meal_refine(client, monkeypatch, fake_food):
 async def test_item_patch_recalculates_and_delete(client, fake_food):
     meal = await (await post_meal(client, jpeg())).json()
     item_id = meal["items"][0]["id"]
-    full = meal["kcal"]
+    expected = round(meal["items"][0]["per100"]["kcal"] * 1.5 / 5) * 5
     resp = await client.patch(f"/api/items/{item_id}", json={"grams": 150}, headers=H)
     assert resp.status == 200
     after = await resp.json()
     assert after["id"] == meal["id"]
     assert after["items"][0]["grams"] == 150.0
-    assert after["items"][0]["kcal"] == pytest.approx(full / 2, abs=1)
-    assert after["items"][0]["edited"] is True and after["kcal"] == pytest.approx(full / 2, abs=1)
+    assert after["items"][0]["kcal"] == expected
+    assert after["items"][0]["edited"] is True and after["kcal"] == expected
     assert after["protein"] == pytest.approx(meal["protein"] / 2, abs=0.2)
     assert after["kcal_low"] <= after["kcal"] <= after["kcal_high"]
     grown = await (await client.patch(f"/api/items/{item_id}", json={"grams": 900},
@@ -1126,7 +1126,7 @@ async def test_barcode_endpoint(client, db, user_id, monkeypatch):
     resp = await client.get(f"/api/products/barcode/{code}", headers=H)
     assert resp.status == 200
     body = await resp.json()
-    assert body["source"] == "off" and body["existing_id"] is None
+    assert body["draft"]["nutrition_source"] == body["source"] == "off" and body["existing_id"] is None
     d = body["draft"]
     assert (d["name"], d["brand"], d["kcal"], d["barcode"], d["unit_grams"]) == \
         ("Кефир 2,5%", "Простоквашино", 53, code, 250)
@@ -1318,12 +1318,16 @@ async def test_item_patch_manual_validation(client, fake_food):
 
 async def test_item_patch_name_only_keeps_numbers(client, db, fake_food):
     meal, item = await _first_item(client)
+    # Старые версии дополнительно округляли итог всего блюда до десятков.
+    original_total = round(meal["kcal"], -1)
+    db.execute("UPDATE meals SET kcal_total=? WHERE id=?", (original_total, meal["id"]))
+    db.commit()
     got = (await (await client.patch(f"/api/items/{item['id']}", json={"name": "Каша"}, headers=H)).json())
     new = got["items"][0]
     assert new["name"] == "Каша" and new["edited"] is True
     assert (new["kcal"], new["grams"], new["source"], new["per100"]) == (
         item["kcal"], item["grams"], item["source"], item["per100"])
-    assert got["kcal"] == meal["kcal"]
+    assert got["kcal"] == original_total
 
 
 async def test_item_patch_foreign_item_404(client, db, make_client, fake_food):
@@ -1614,3 +1618,30 @@ async def test_favorite_category(client, db, user_id):
         "title": "Капучино", "kcal": 98, "protein": 5, "fat": 5, "carbs": 8})).json())["id"]
     items = {f["id"]: f for f in (await (await client.get("/api/favorites", headers=H)).json())["items"]}
     assert items[drink_id]["category"] == "drink" and items[fav_id]["category"] == "dinner"
+
+
+async def test_unresolved_calories_survive_save_repeat_and_grams_until_nutrition_is_entered(client, db, user_id):
+    u = _food("неизвестное блюдо", 150)
+    calc = await foodsvc.build_calc(u, db, user_id, use_llm_fallback=False)
+    assert calc.items[0].source == "unresolved"
+    known_zero = await foodsvc.build_calc(_food("вода", 150), db, user_id, use_llm_fallback=False)
+    assert known_zero.items[0].source != "unresolved"
+    meal_id = repo.save_meal(db, user_id, TODAY + "T10:00:00Z", TODAY, "13:00",
+                             "lunch", "text", calc)
+    repeated = repo.repeat_meal(db, user_id, meal_id, TODAY + "T14:00:00Z", TODAY, "17:00", "dinner")
+    item_id = repo.get_meal_items(db, repeated)[0]["id"]
+
+    resp = await client.patch(f"/api/items/{item_id}", headers=H, json={"grams": 120})
+    assert resp.status == 200
+    meal = await resp.json()
+    assert meal["unresolved_items"] == 1 and meal["items"][0]["per100"] is None
+    day = await (await client.get("/api/day", headers=H)).json()
+    assert day["totals"]["unresolved_items"] == 2 and day["remaining_kcal"] is None
+    analysis = await (await client.get("/api/analysis", headers=H)).json()
+    assert analysis["incomplete"] and analysis["headline"] == "Часть еды без расчёта"
+
+    # 0 ккал, явно введённые человеком, считаются известными данными.
+    for mid in (meal_id, repeated):
+        repo.edit_item_manual(db, repo.get_meal_items(db, mid)[0]["id"], macros=(0, 0, 0, 0))
+    day = await (await client.get("/api/day", headers=H)).json()
+    assert day["totals"]["unresolved_items"] == 0 and day["remaining_kcal"] == day["targets"]["kcal"]

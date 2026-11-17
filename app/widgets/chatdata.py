@@ -60,6 +60,8 @@ def day_data(db: sqlite3.Connection, user, local_date: str, now_hhmm: str) -> st
         "t": now_hhmm,
         "lw": 1 if last else 0,
     }
+    if f["unresolved_items"]:
+        data["x"] = f["unresolved_items"]
     while len(_dump(data).encode("utf-8")) > MAX_BYTES and data["m"]:
         data["m"] = data["m"][1:]
     out = _dump(data)
