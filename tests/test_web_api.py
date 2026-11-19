@@ -393,6 +393,14 @@ async def test_meal_form_time_used_without_comment_time(client, fake_food):
     assert (meal["date"], meal["time"], meal["source"]) == ("2026-05-19", "09:15", "photo")
 
 
+async def test_meal_selected_date_takes_priority_over_caption(client, fake_food):
+    resp = await post_meal(client, jpeg(), comment="сегодня в 20:00 гречка",
+                           date="2026-05-19", time="09:15")
+    assert resp.status == 201
+    meal = await resp.json()
+    assert (meal["date"], meal["time"]) == ("2026-05-19", "09:15")
+
+
 async def test_meal_upload_text_only(client, fake_food):
     form = aiohttp.FormData(default_to_multipart=True)
     form.add_field("text", "гречка 150 г")
@@ -1086,6 +1094,32 @@ async def test_meal_product_logs_portion_without_llm(client):
     assert meal["items"][0]["grams"] == 50 and meal["protein"] == 4.0
     assert (await client.post("/api/meals/product", headers=H, json={"name": "", "grams": 5, "kcal": 1})).status == 400
     assert (await client.post("/api/meals/product", headers=H, json={"name": "x", "grams": 0, "kcal": 1})).status == 400
+
+
+async def test_backdated_product_moves_between_diary_days_and_can_be_repeated(client, db, user_id):
+    yesterday = "2026-05-19"
+    product = {"name": "Батончик", "grams": 50, "kcal": 480, "date": yesterday, "time": "09:15"}
+    created = await client.post("/api/meals/product", headers=H, json=product)
+    assert created.status == 201
+    meal_id = (await created.json())["id"]
+    assert repo.get_meal(db, user_id, meal_id)["eaten_at_utc"] == f"{yesterday} 06:15:00"
+    for date, expected in [(yesterday, [meal_id]), (TODAY, [])]:
+        day = await (await client.get("/api/day", headers=H, params={"date": date})).json()
+        assert [m["id"] for m in day["meals"]] == expected
+
+    url = f"/api/meals/{meal_id}"
+    moved = await client.patch(url, headers=H, json={"date": TODAY})
+    assert moved.status == 200
+    meal = await moved.json()
+    assert (meal["date"], meal["time"], meal["kcal"]) == (TODAY, "09:15", 240)
+    assert (await (await client.get("/api/day", headers=H, params={"date": yesterday})).json())["meals"] == []
+
+    repeated = await client.post(url + "/repeat", headers=H, json={"date": yesterday, "time": "10:25"})
+    assert repeated.status == 201
+    repeat_id = (await repeated.json())["id"]
+    day = await (await client.get("/api/day", headers=H, params={"date": yesterday})).json()
+    assert [(m["id"], m["time"], m["kcal"]) for m in day["meals"]] == [(repeat_id, "10:25", 240)]
+    assert (await client.post("/api/meals/product", headers=H, json={**product, "date": "2999-01-01"})).status == 400
 
 
 async def test_favorites_validation_and_isolation(client, db):

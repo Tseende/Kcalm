@@ -9,6 +9,7 @@ import {
   frow, group, segmented,
 } from '../ui.js';
 import { pickFood, toPayload } from '../food_picker.js';
+import { pickMealDateTime } from '../meal_datetime.js';
 
 const G_MIN = 1;
 const G_MAX = 5000; // как на сервере (PATCH /items/:id)
@@ -402,12 +403,11 @@ export default async function render(root, ctx) {
   }
 
   function pickTime() {
-    const input = h('input', { type: 'time', value: meal.time, class: 'time-big', 'aria-label': t('meal.time_title') });
-    const s = sheet({ title: t('meal.time_title'), content: h('div', { class: 'stack' }, input,
-      h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: async () => {
-        if (!input.value) return;
-        try { const m = await api.patch('/meals/' + meal.id, { time: input.value }); s.close(); haptic('success'); onMeal(m, true); } catch (e) { toast(e.message, 'error'); }
-      } }, t('common.save'))) });
+    pickMealDateTime({ date: meal.date, time: meal.time, timeRequired: true, alive: ctx.alive, save: async (when) => {
+      await settle();
+      const m = await api.patch('/meals/' + meal.id, when);
+      if (ctx.alive()) { haptic('success'); onMeal(m, true); }
+    } });
   }
 
   function pickType() {
@@ -448,8 +448,8 @@ export default async function render(root, ctx) {
       carousel(),
       h('div', { class: 'meta-row' },
         h('button', { class: 'chip', type: 'button', onclick: pickType, 'aria-label': t('meal.a_type', { n: mt.label }) }, (mealPic(meal.type, 24) || icon(mt.icon, 18)), mt.label),
-        h('button', { class: 'chip', type: 'button', onclick: pickTime, 'aria-label': t('meal.a_time', { n: meal.time }) }, icon('clock', 16), meal.time),
-        h('span', { class: 'muted small' }, longDate(meal.date))),
+        h('button', { class: 'chip', type: 'button', onclick: pickTime, 'aria-label': t('meal.a_time', { n: longDate(meal.date) + ' · ' + meal.time }) },
+          icon('calendar', 16), longDate(meal.date) + ' · ' + meal.time)),
       totalsEl,
       meal.comment ? h('div', { class: 'card comment' }, h('div', { class: 'muted small' }, t('add.comment')), h('div', null, meal.comment)) : null,
       sectionTitle(t('meal.items')),

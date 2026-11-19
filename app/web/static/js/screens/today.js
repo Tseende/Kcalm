@@ -19,19 +19,21 @@ const openGroups = new Set();   // раскрытые группы приёмо�
 const openInit = new Set();     // для каких дат уже выбрана группа по умолчанию
 
 export default async function render(root, ctx) {
-  // Пришли на вкладку «Сегодня» с другой вкладки: показываем сегодня, а не день, на котором остановились (иначе «+» пишет в сегодня, а на экране вчера).
-  // Возврат с экрана приёма сохраняет выбранный день.
-  // Возврат с форм сна/шагов/веса тоже сохраняет день; после сохранения форма сама передаёт ?date=.
-  const qd = ctx.query && ctx.query.date;
+  const qd = ctx.query.date || history.state?.diaryDate;
   if (qd && /^\d{4}-\d{2}-\d{2}$/.test(qd) && qd <= todayISO()) {
     curDate = qd;
-    try { history.replaceState(history.state, '', '#/today'); } catch { /* ignore */ }
   } else if (!/^\/(meal\/|add\/(sleep|activity|weight)$)/.test(ctx.prev || '')) curDate = todayISO();
+  function rememberDate() {
+    const diaryDate = curDate === todayISO() ? null : curDate;
+    history.replaceState({ ...history.state, diaryDate }, '', '#/today');
+  }
+  rememberDate();
+  const addMeal = () => nav.go(curDate === todayISO() ? '/add/meal' : '/add/meal?date=' + curDate);
   const view = h('div', { class: 'screen today' });
   const body = h('div', { class: 'stack' });
   root.append(view);
 
-  const sw = dateSwitch(curDate, (d, dir) => { curDate = d; firstPaint = true; load({ dir }); });
+  const sw = dateSwitch(curDate, (d, dir) => { curDate = d; rememberDate(); firstPaint = true; load({ dir }); });
   view.append(sw.el, body);
 
   async function load({ quiet = false, dir = 0 } = {}) {
@@ -192,12 +194,12 @@ export default async function render(root, ctx) {
     const mealsList = day.meals.length
       ? h('div', { class: 'stack meal-groups' }, mealGroups(day))
       : emptyState('tools-kitchen-2', t('today.empty_title'), t('today.empty_text'),
-        h('button', { class: 'btn btn-primary', type: 'button', onclick: () => nav.go('/add/meal') }, t('today.add_meal')));
+        h('button', { class: 'btn btn-primary', type: 'button', onclick: addMeal }, t('today.add_meal')));
 
     const isToday = curDate === todayISO();
     const often = isToday ? oftenRow() : null;
     const kids = [kcalCard, waterCard, miniRow, ...(isToday ? [activityHint(day.activity_hint)].filter(Boolean) : []), ...(isToday ? [weekGoalBlock(ctx, { compact: true })] : []),
-      sectionTitle(t('today.meals'), isToday ? h('button', { class: 'btn-link section-add', type: 'button', onclick: () => nav.go('/add/meal') }, icon('plus', 14), t('common.add')) : null), mealsList,
+      sectionTitle(t('today.meals'), h('button', { class: 'btn-link section-add', type: 'button', onclick: addMeal }, icon('plus', 14), t('common.add'))), mealsList,
       ...(isToday ? [sectionTitle(t('today.repeat')), often, ...(often._ph ? [often._ph] : [])] : [])];
     body.replaceChildren(...kids);
     const oh = body.querySelector('.often');
@@ -301,8 +303,8 @@ export default async function render(root, ctx) {
       const when = times.length > 1 && times[0] !== times[times.length - 1] ? `${times[0]}–${times[times.length - 1]}` : (times[0] || '');
       const body = h('div', { class: 'meal-group-body' },
         list.map(mealRow),
-        isToday ? h('button', { class: 'row meal-add-row', type: 'button', onclick: () => { sessionStorage.setItem('meal-type', g); nav.go('/add/meal'); } },
-          icon('plus', 18), h('span', null, t('today.add_to', { n: mt.label.toLowerCase() }))) : null);
+        h('button', { class: 'row meal-add-row', type: 'button', onclick: () => { sessionStorage.setItem('meal-type', g); addMeal(); } },
+          icon('plus', 18), h('span', null, t('today.add_to', { n: mt.label.toLowerCase() }))));
       const title = g === 'snack' ? t('meal.snacks') : mt.label;
       const head = h('button', { class: 'row meal-group-head', type: 'button', 'aria-label': `${title}, ${fmtKcal(sum.kcal)} ${t('unit.kcal')}`,
         onclick: () => { haptic('light'); setOpen(!openGroups.has(key(g))); } },

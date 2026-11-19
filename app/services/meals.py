@@ -149,7 +149,8 @@ async def save_understanding(db: sqlite3.Connection, user, u, *, text: str | Non
                              photo_path: str | None = None,
                              dish_ids: list[int | None] | None = None,
                              transcript: str | None = None, calc=None,
-                             taken_at: datetime | None = None) -> SavedMeal:
+                             taken_at: datetime | None = None,
+                             explicit_at: datetime | None = None) -> SavedMeal:
     """Посчитать и записать приём пищи. u.items должны быть непустыми."""
     uid = user["id"]
     now_local = foodsvc.local_now(user["tz"])
@@ -157,9 +158,12 @@ async def save_understanding(db: sqlite3.Connection, user, u, *, text: str | Non
     local_time = now_local.strftime("%H:%M")
     meal_type = None
     # «в обед», «вчера вечером», «в 13:30», «час назад» в тексте или время съёмки из EXIF
-    when = resolve_when(user, text or transcript, taken_at)
-    if when:
-        local_date, local_time, meal_type = when.local_date, when.local_time, when.meal_type
+    if explicit_at is not None:
+        local_date, local_time = explicit_at.strftime("%Y-%m-%d"), explicit_at.strftime("%H:%M")
+    else:
+        when = resolve_when(user, text or transcript, taken_at)
+        if when:
+            local_date, local_time, meal_type = when.local_date, when.local_time, when.meal_type
     if calc is None:
         calc = await foodsvc.build_calc(u, db, uid)
     meal_type = meal_type or foodsvc.guess_meal_type(u, local_time, None)
@@ -174,12 +178,14 @@ async def save_understanding(db: sqlite3.Connection, user, u, *, text: str | Non
 
 
 def repeat_meal(db: sqlite3.Connection, user, meal_id: int, allow_deleted: bool = False, *,
-                factor: float = 1.0, meal_type: str | None = None, day: str | None = None) -> int | None:
+                factor: float = 1.0, meal_type: str | None = None, day: str | None = None,
+                time: str | None = None) -> int | None:
     """«Как обычно»: повторить частое блюдо (по умолчанию на текущее время). None — образца нет.
 
     factor — порция, meal_type — тип приёма, day — местная дата (ГГГГ-ММ-ДД, проверена снаружи)."""
     now_local = foodsvc.local_now(user["tz"])
-    local_date, local_time = day or now_local.strftime("%Y-%m-%d"), now_local.strftime("%H:%M")
+    local_date = day or now_local.strftime("%Y-%m-%d")
+    local_time = time or now_local.strftime("%H:%M")
     return repo.repeat_meal(
         db, user["id"], meal_id, utc_of(user["tz"], local_date, local_time), local_date,
         local_time, meal_type or foodsvc.guess_meal_type(None, local_time, None),
@@ -197,11 +203,12 @@ async def recognize_and_save(db: sqlite3.Connection, user, image_paths: list[str
                              dish_ids: list[int | None] | None = None,
                              comment: str | None = None,
                              local_dt: datetime | None = None,
-                             groups: list[int] | None = None) -> int:
+                             groups: list[int] | None = None, *,
+                             explicit_at: datetime | None = None) -> int:
     """Фото (1–6) → один приём пищи. groups[i] — номер блюда, к которому относится фото i. Возвращает meal_id.
 
     dish_ids: None — посуда по умолчанию, список под фото — явный выбор (None: без посуды).
-    local_dt — наивное локальное время приёма (EXIF, поле формы); время из comment главнее.
+    local_dt — время съёмки; explicit_at — выбранные пользователем дата и время.
     Исключения: NoPhotos, NoFood, ошибки LLM пробрасываются как есть."""
     uid = user["id"]
     b64, idx = read_images_b64(image_paths)
@@ -220,7 +227,7 @@ async def recognize_and_save(db: sqlite3.Connection, user, image_paths: list[str
     saved = await save_understanding(
         db, user, u, text=comment, source="combo" if comment else "photo",
         photo_paths=paths, dish_ids=[d["id"] if d is not None else None for d in dishes],
-        taken_at=local_dt)
+        taken_at=local_dt, explicit_at=explicit_at)
     return saved.meal_id
 
 

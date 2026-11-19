@@ -68,11 +68,13 @@ function setActiveTab(tab) {
 
 function openAddSheet() {
   haptic('light');
+  const date = curPath === '/today' ? history.state?.diaryDate : null;
+  const mealPath = date ? '/add/meal?date=' + date : '/add/meal';
   const go = (path) => { s.close(); nav.go(path); };
   const card = (ic, col, title, sub, path) => h('button', { class: 'add-card', type: 'button', onclick: () => go(path) },
     tile(ic, col, 42),
     h('span', { class: 'add-text' }, h('span', { class: 'row-title' }, title), h('span', { class: 'row-sub muted' }, sub)));
-  const hero = h('button', { class: 'add-hero', type: 'button', onclick: () => go('/add/meal') },
+  const hero = h('button', { class: 'add-hero', type: 'button', onclick: () => go(mealPath) },
     h('span', { class: 'add-hero-text' },
       h('span', { class: 'add-hero-title' }, t('add.meal')),
       h('span', { class: 'add-hero-sub' }, t('add.meal_sub')),

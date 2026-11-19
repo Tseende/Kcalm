@@ -388,6 +388,11 @@ def parse_when(user, date_s: str | None, time_s: str | None) -> datetime | None:
     return datetime.strptime(f"{day.isoformat()} {hhmm}", "%Y-%m-%d %H:%M")
 
 
+def read_when(user, data: dict) -> datetime | None:
+    return parse_when(user, str(data["date"]) if data.get("date") else None,
+                      str(data["time"]) if data.get("time") else None)
+
+
 def number(data: dict, key: str, low: float, high: float, *, required: bool = False):
     """Число из JSON в границах. Нет поля: None (или ошибка, если required)."""
     if key not in data or data[key] is None:
@@ -732,7 +737,7 @@ async def api_meal_product(request: web.Request) -> web.Response:
         f"{name} ({brand})" if brand and brand.lower() not in name.lower() else name, grams,
         number(data, "kcal", 0, 1000, required=True), number(data, "protein", 0, 100) or 0.0,
         number(data, "fat", 0, 100) or 0.0, number(data, "carbs", 0, 100) or 0.0)
-    now = now_local(user)
+    now = read_when(user, data) or now_local(user)
     local_date, local_time = now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
     meal_id = repo.save_meal(
         db, user["id"], meals_svc.utc_of(user["tz"], local_date, local_time), local_date, local_time,
@@ -855,8 +860,7 @@ async def api_meal_manual(request: web.Request) -> web.Response:
     meal_type = data.get("type")
     if meal_type is not None and meal_type not in MEAL_TYPES:
         raise bad("type: breakfast, lunch, dinner или snack.", "bad_field")
-    when = parse_when(user, str(data["date"]) if data.get("date") else None,
-                      str(data["time"]) if data.get("time") else None)
+    when = read_when(user, data)
     entries = [_manual_entry(db, user, r) for r in raw_items]
     for item, food, save in entries:
         _remember(db, user, item, food, save)
@@ -906,7 +910,12 @@ async def api_meal_create(request: web.Request) -> web.Response:
     if comment and len(comment) > MAX_TEXT:
         raise bad("Слишком длинный комментарий.", "text_too_long")
     require_images(photos)
-    local_dt = parse_when(user, form.value("date"), form.value("time"))
+    date_s = form.value("date")
+    local_dt = parse_when(user, date_s, form.value("time"))
+    # Выбранная дата имеет приоритет над подписью. Для формы только со временем
+    # подсказка в тексте по-прежнему важнее.
+    taken_at = local_dt if not date_s else None
+    explicit_at = local_dt if date_s else None
     llm_gate(db, user)
     try:
         if photos:
@@ -930,13 +939,14 @@ async def api_meal_create(request: web.Request) -> web.Response:
                     raise bad("groups должен быть по одному номеру на каждое фото.", "bad_field")
             paths = [save_upload(config, data) for data in photos]
             meal_id = await meals_svc.recognize_and_save(
-                db, user, paths, dish_ids, comment or text, local_dt, groups)
+                db, user, paths, dish_ids, comment or text, groups=groups,
+                local_dt=taken_at, explicit_at=explicit_at)
         else:
             u = await foodsvc.parse_text(text, user["id"], db)
             if not u.items:
                 raise meals_svc.NoFood()
             meal_id = (await meals_svc.save_understanding(
-                db, user, u, text=text, source="text", taken_at=local_dt)).meal_id
+                db, user, u, text=text, source="text", taken_at=taken_at, explicit_at=explicit_at)).meal_id
     except meals_svc.NoFood:
         raise ApiError(422, "no_food", "Не увидел еды. Опишите приём словами или пришлите другое фото.") from None
     except meals_svc.NoPhotos:
@@ -1143,7 +1153,7 @@ async def api_favorite_delete(request: web.Request) -> web.Response:
 
 @routes.post("/api/favorites/{id}/repeat")
 async def api_favorite_repeat(request: web.Request) -> web.Response:
-    """Записать избранное в дневник. Тело необязательно: factor (0,25–4), meal_type, date (последние 30 дней)."""
+    """Записать избранное в дневник. Тело необязательно: factor, meal_type, date и time."""
     db, user, _ = ctx(request)
     fav_id = path_id(request)
     data = await read_json(request) if request.can_read_body else {}
@@ -1152,9 +1162,11 @@ async def api_favorite_repeat(request: web.Request) -> web.Response:
     if meal_type is not None and meal_type not in MEAL_TYPES:
         raise bad("Неизвестный тип приёма пищи.", "bad_field")
     day = checked_date(user, data.get("date"))
+    when = parse_when(user, day, str(data["time"])) if data.get("time") else None
     meal_id = repo.favorite_meal_id(db, user["id"], fav_id)
-    new_id = meals_svc.repeat_meal(db, user, meal_id, allow_deleted=True, factor=factor or 1.0,
-                                   meal_type=meal_type, day=day) if meal_id else None
+    new_id = meals_svc.repeat_meal(
+        db, user, meal_id, allow_deleted=True, factor=factor or 1.0, meal_type=meal_type,
+        day=day, time=when.strftime("%H:%M") if when else None) if meal_id else None
     if new_id is None:
         raise ApiError(404, "not_found", "Блюдо не найдено.")
     repo.touch_favorite(db, user["id"], fav_id)
@@ -1164,7 +1176,10 @@ async def api_favorite_repeat(request: web.Request) -> web.Response:
 @routes.post("/api/meals/{id}/repeat")
 async def api_meal_repeat(request: web.Request) -> web.Response:
     db, user, _ = ctx(request)
-    new_id = meals_svc.repeat_meal(db, user, path_id(request))
+    when = read_when(user, await read_json(request)) if request.can_read_body else None
+    new_id = meals_svc.repeat_meal(db, user, path_id(request),
+                                   day=when.date().isoformat() if when else None,
+                                   time=when.strftime("%H:%M") if when else None)
     if new_id is None:
         raise ApiError(404, "not_found", "Приём пищи не найден.")
     return ok({"id": new_id, "kcal": int(repo.get_meal(db, user["id"], new_id)["kcal_total"])}, 201)
@@ -1618,9 +1633,12 @@ def _water_total(db, user) -> int:
 @routes.post("/api/water")
 async def api_water_add(request: web.Request) -> web.Response:
     db, user, _ = ctx(request)
-    ml = number(await read_json(request), "ml", waterdom.MIN_ML, waterdom.MAX_ML, required=True)
-    water_id, _ = watersvc.log_water(db, user, int(round(ml)), "command")
-    return ok({"water_ml": _water_total(db, user), "goal_ml": watersvc.goal_for(db, user),
+    data = await read_json(request)
+    ml = number(data, "ml", waterdom.MIN_ML, waterdom.MAX_ML, required=True)
+    when = read_when(user, data) or now_local(user)
+    day, time = when.date().isoformat(), when.strftime("%H:%M")
+    water_id = repo.add_water(db, user["id"], day, time, int(round(ml)), "command")
+    return ok({"water_ml": repo.day_water_ml(db, user["id"], day), "goal_ml": watersvc.goal_for(db, user),
                "id": water_id}, 201)
 
 

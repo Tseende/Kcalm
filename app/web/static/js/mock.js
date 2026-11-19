@@ -343,6 +343,14 @@ function guessType(time) {
   return h < 11 ? 'breakfast' : h < 16 ? 'lunch' : h < 21 ? 'dinner' : 'snack';
 }
 function nowHHMM() { const d = new Date(); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
+function logMockMeal(data, items, comment = null, source = 'manual') {
+  const date = data.date || todayISO();
+  const time = data.time || (date === todayISO() ? nowHHMM() : '12:00');
+  const meal = { id: nid(), date, time, type: data.meal_type || data.type || guessType(time),
+    source, confidence: 1, photos: [], items, comment };
+  meals.set(meal.id, meal);
+  return recalcMeal(meal);
+}
 
 // Weekly mini-goal demo state
 const WG_KINDS = {
@@ -460,9 +468,10 @@ const routes = [
     const f = new FormLike(b);
     const files = f.all('photo').filter((x) => x && x.size !== undefined);
     const dishIds = f.all('dish_id');
-    const time = f.get('time') || nowHHMM();
+    const date = f.get('date') || todayISO();
+    const time = f.get('time') || (date === todayISO() ? nowHHMM() : '12:00');
     const type = guessType(time);
-    const mm = makeMeal(f.get('date') || todayISO(), type, Math.floor(rnd() * 3), false, time);
+    const mm = makeMeal(date, type, Math.floor(rnd() * 3), false, time);
     if (files.length) {
       mm.source = 'photo';
       mm.photos = files.map((file, i) => ({ id: nid(), url: URL.createObjectURL(file), dish_id: dishIds[i] ? +dishIds[i] : null }));
@@ -533,11 +542,7 @@ const routes = [
   }],
   ['POST', /^\/meals\/manual$/, (m, q, b) => {
     if (!Array.isArray(b.items) || !b.items.length || b.items.length > 30) throw err(400, 'bad_field', L('Нужна хотя бы одна позиция.', "At least one item is required."));
-    const time = b.time || nowHHMM();
-    const mm = { id: nid(), date: b.date || todayISO(), time, type: b.type || guessType(time), source: 'manual', confidence: 1, photos: [], items: [], comment: null };
-    b.items.forEach((x) => mm.items.push(mockManualItem(x)));
-    meals.set(mm.id, mm);
-    return recalcMeal(mm);
+    return logMockMeal(b, b.items.map(mockManualItem));
   }, 201],
   ['POST', /^\/meals\/(\d+)\/items$/, (m, q, b) => {
     const x = meals.get(+m[1]); if (!x) throw notFound();
@@ -579,7 +584,7 @@ const routes = [
   }],
   ['DELETE', /^\/dishes\/(\d+)$/, (m) => { dishes = dishes.filter((x) => x.id !== +m[1]); return null; }],
   ['POST', /^\/water$/, (m, q, b) => {
-    const T = todayISO(); const e = { id: nid(), ml: b.ml };
+    const T = b.date || todayISO(); const e = { id: nid(), ml: b.ml };
     water.set(T, [...(water.get(T) || []), e]);
     return { water_ml: waterOf(T), goal_ml: TARGETS.water_ml, id: e.id };
   }],
@@ -638,16 +643,30 @@ const routes = [
     const i = customFavs.findIndex((x) => x.id === Number(m[1])); if (i >= 0) customFavs.splice(i, 1);
     return null;
   }],
-  ['POST', /^\/meals\/product$/, (m, q, b) => ({ id: 9002, kcal: Math.round(b.kcal * b.grams / 100) }), 201],
+  ['POST', /^\/meals\/product$/, (m, q, b) => {
+    const meal = logMockMeal(b, [mockManualItem({ protein: 0, fat: 0, carbs: 0, ...b })]);
+    return { id: meal.id, kcal: meal.kcal };
+  }, 201],
   ['POST', /^\/favorites\/(\d+)\/repeat$/, (m, q, b) => {
     const f = favList().find((x) => x.id === +m[1]);
     if (!f) throw notFound();
     const k = b && b.factor !== undefined ? Number(b.factor) : 1;
     if (!(k >= 0.25 && k <= 4)) throw err(400, 'bad_field', L('Поле factor: допустимо от 0,25 до 4.', "Field factor: allowed range is 0.25 to 4."));
     favUse[f.id] = (favUse[f.id] || 0) + 1;
-    return { id: 9001, kcal: Math.round(f.kcal * k) };
+    const item = mockManualItem({ ...f, name: f.title, grams: 100 * k });
+    const meal = logMockMeal(b || {}, [item], f.note, 'repeat');
+    return { id: meal.id, kcal: meal.kcal };
   }, 201],
-  ['POST', /^\/meals\/(\d+)\/repeat$/, () => ({ id: 9001, kcal: 410 })],
+  ['POST', /^\/meals\/(\d+)\/repeat$/, (m, q, b) => {
+    const frequent = FREQ.find((f) => f.meal_id === +m[1]);
+    const original = meals.get(+m[1]);
+    if (!frequent && (!original || original.deleted)) throw notFound();
+    const items = frequent
+      ? [mockManualItem({ ...frequent, name: frequent.title, grams: 100 })]
+      : original.items.map((item) => ({ ...item, id: nid() }));
+    const meal = logMockMeal(b || {}, items, frequent ? null : original.comment, 'repeat');
+    return { id: meal.id, kcal: meal.kcal };
+  }, 201],
   ['GET', /^\/week-goal$/, () => weekGoalMock()],
   ['PUT', /^\/week-goal$/, (m, q, b) => { weekGoal = { kind: b.kind, target: b.target }; return weekGoalMock(); }],
   ['DELETE', /^\/week-goal$/, () => { weekGoal = null; return weekGoalMock(); }],

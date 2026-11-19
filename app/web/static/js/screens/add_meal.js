@@ -1,7 +1,7 @@
-// Add meal: dishes (each = several photos + one plate) and/or a text description. Time and meal type are set by the server (now).
+// Add meal: dishes (each = several photos + one plate) and/or a text description.
 import { api } from '../api.js';
 import {
-  h, icon, tile, toast, haptic, nav, mainButton, draft, pageHead, compressImage, busyOverlay, dishKind, sheet, fmtN, numInput, numVal, numCheck, codeInput, frow, macroLine, sectionTitle, photoImg,
+  h, icon, tile, toast, haptic, nav, mainButton, draft, pageHead, compressImage, busyOverlay, dishKind, sheet, fmtN, numInput, numVal, numCheck, codeInput, frow, macroLine, sectionTitle, photoImg, dateLabel,
 } from '../ui.js';
 import { voiceButton } from '../voice.js';
 import { scanBarcode, decodeFile, validBarcode } from '../scanner.js';
@@ -10,6 +10,7 @@ import { pickFood, editEntryGrams, entryAbs, entryTotal, toPayload } from '../fo
 import { dishPic, foodPic, mealPic } from '../pics.js';
 import { pickDrink, drinkEntry } from '../drink_picker.js';
 import { t, tn } from '../i18n.js';
+import { pickMealDateTime } from '../meal_datetime.js';
 
 const MAX = 6;
 const QUICK_SHOWN = 5;
@@ -26,6 +27,21 @@ export default async function render(root, ctx) {
   const allPhotos = () => groups.flatMap((g) => g.photos);
   let target = groups[0];
   let busy = false;
+  let choosingWhen = false;
+  const initialDate = ctx.query?.date;
+  let when = /^\d{4}-\d{2}-\d{2}$/.test(initialDate || '') ? { date: initialDate } : {};
+  const whenLabel = () => when.date ? [dateLabel(when.date), when.time].filter(Boolean).join(' · ') : t('meal.time_title');
+  const whenText = h('span', null, whenLabel());
+  const whenButton = h('button', { class: 'chip', type: 'button', onclick: () => {
+    if (busy || choosingWhen) return;
+    choosingWhen = true;
+    sync();
+    pickMealDateTime({
+      ...when, alive: ctx.alive,
+      save: (selection) => { when = selection; whenText.textContent = whenLabel(); },
+      onClose: () => { choosingWhen = false; if (ctx.alive()) sync(); },
+    });
+  } }, icon('calendar', 16), whenText);
   // Пришли с плюса в группе на главной («Добавить в обед»): записанному приёму ставим этот тип.
   const wantType = sessionStorage.getItem('meal-type');
   sessionStorage.removeItem('meal-type');
@@ -85,7 +101,7 @@ export default async function render(root, ctx) {
           onclick: async () => {
             row.classList.add('is-pending');
             try {
-              const r = await api.post(f.favorite_id ? `/favorites/${f.favorite_id}/repeat` : `/meals/${f.meal_id}/repeat`);
+              const r = await api.post(f.favorite_id ? `/favorites/${f.favorite_id}/repeat` : `/meals/${f.meal_id}/repeat`, when);
               await fixType(r.id);
               haptic('success');
               mainButton.hide();
@@ -259,7 +275,7 @@ export default async function render(root, ctx) {
       if (bad) { toast(bad, 'error'); return; }
       add.disabled = true;
       try {
-        const r = await api.post('/meals/product', { name: d.name, brand: d.brand, grams: g, kcal: d.kcal, protein: d.protein, fat: d.fat, carbs: d.carbs });
+        const r = await api.post('/meals/product', { name: d.name, brand: d.brand, grams: g, kcal: d.kcal, protein: d.protein, fat: d.fat, carbs: d.carbs, ...when });
         await fixType(r.id);
         haptic('success');
         sh.close();
@@ -504,7 +520,7 @@ export default async function render(root, ctx) {
   let lastDisabled = null;
   function sync() {
     // Не дёргаем кнопку на каждую букву: в Telegram каждое enable/disable пересчитывает окно.
-    const d = busy || !valid();
+    const d = busy || choosingWhen || !valid();
     if (d === lastDisabled) return;
     lastDisabled = d;
     mainButton.setDisabled(d);
@@ -526,7 +542,7 @@ export default async function render(root, ctx) {
   }
 
   async function submit() {
-    if (busy || !valid()) return;
+    if (busy || choosingWhen || !valid()) return;
     busy = true;
     sync();
     mainButton.setLoading(true);
@@ -541,9 +557,10 @@ export default async function render(root, ctx) {
         // одна вода: приёма нет, только норма воды
       } else if (!withAI) {
         // только продукты и напитки: без модели, один запрос
-        meal = await api.post('/meals/manual', { items: items.map(toPayload) });
+        meal = await api.post('/meals/manual', { items: items.map(toPayload), ...when });
       } else {
         const fd = new FormData();
+        for (const [key, value] of Object.entries(when)) fd.append(key, value);
         if (filled.length) {
           // Фото идут блюдо за блюдом; groups — номер блюда для каждого фото.
           const owner = [];
@@ -567,13 +584,13 @@ export default async function render(root, ctx) {
         if (failed) toast(t('fp.add_failed', { n: failed }), 'error');
       }
       // вода пишется после приёма: сбой здесь не должен терять сам приём
-      if (waterMl) { try { await api.post('/water', { ml: Math.min(3000, Math.round(waterMl)) }); } catch (er) { toast(er.message, 'error'); } }
+      if (waterMl) { try { await api.post('/water', { ml: Math.min(3000, Math.round(waterMl)), ...when }); } catch (er) { toast(er.message, 'error'); } }
       if (meal) await fixType(meal.id);
       haptic('success');
       stop();
       clearDraft();
       mainButton.hide();
-      nav.replace(meal ? '/meal/' + meal.id : '/today');
+      nav.replace(meal ? '/meal/' + meal.id : when.date ? '/today?date=' + when.date : '/today');
     } catch (e) {
       stop();
       busy = false;
@@ -599,6 +616,7 @@ export default async function render(root, ctx) {
   view.append(
     pageHead(t('add.meal'), { parent: '/today' }),
     h('div', { class: 'stack' },
+      h('div', { class: 'meta-row' }, whenButton),
       capture, dishList, prodBox, noDishHint,
       textField,
       quick,
