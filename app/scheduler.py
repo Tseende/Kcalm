@@ -12,8 +12,11 @@ import os
 import sqlite3
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import FSInputFile
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -23,6 +26,7 @@ from app.storage import repo
 from app.timeutils import minutes_before
 
 log = logging.getLogger(__name__)
+REMINDER_IMAGES = Path(__file__).resolve().parent / "assets" / "reminders"
 
 
 def build_scheduler(db: sqlite3.Connection, bot) -> AsyncIOScheduler:
@@ -250,10 +254,8 @@ async def _send_custom(db: sqlite3.Connection, bot, user, r, now: datetime) -> N
         total, goal = repo.day_water_ml(db, user["id"], now.strftime("%Y-%m-%d")), watersvc.goal_for(db, user)
         text += f"\n\nСегодня выпито {total} из {goal} мл."
     screen = tpl.get("screen") if tpl else None
-    if screen:
-        await _app_pointer(bot, user["tg_id"], text, screen, "📱 " + tpl.get("button", remsvc.DEFAULT_BUTTON))
-    else:
-        await bot.send_message(user["tg_id"], text)
+    button = "📱 " + tpl.get("button", remsvc.DEFAULT_BUTTON) if tpl else remsvc.DEFAULT_BUTTON
+    await _send_notification(bot, user["tg_id"], text, r["template"] if tpl else "custom", screen, button)
 
 
 async def _dispatch_rules(db: sqlite3.Connection, bot, user, now: datetime) -> None:
@@ -262,8 +264,8 @@ async def _dispatch_rules(db: sqlite3.Connection, bot, user, now: datetime) -> N
     today = now.strftime("%Y-%m-%d")
     for rule in repo.due_rules(db, user["id"], now.strftime("%H:%M"), today):
         try:
-            await bot.send_message(user["tg_id"], "🧭 Твоё правило на этот час:\n" +
-                                   plansvc.format_rule(rule))
+            await _send_notification(bot, user["tg_id"], "🧭 Твоё правило на этот час:\n" +
+                                     plansvc.format_rule(rule), "rule")
         except Exception:  # noqa: BLE001
             log.exception("не отправлено правило id=%s", rule["id"])
             continue
@@ -293,11 +295,20 @@ def _is_due(kind: str, local_time: str, now: datetime, days: str | None = None) 
     return kind != "weekly" or now.weekday() == 6
 
 
-async def _app_pointer(bot, tg_id: int, text: str, screen: str | None = None,
-                       button: str = "📱 Открыть приложение") -> None:
-    """Короткий пуш без цифр: сами отчёты читаются в Mini App, кнопка ведёт сразу на экран."""
-    from app.routers import menu
-    await bot.send_message(tg_id, text, reply_markup=menu.main_kb(screen, button))
+async def _send_notification(bot, tg_id: int, text: str, kind: str,
+                             screen: str | None = None, button: str = "📱 Открыть приложение") -> None:
+    options = {}
+    if screen:
+        from app.routers import menu
+        options["reply_markup"] = menu.main_kb(screen, button)
+    image = REMINDER_IMAGES / f"{kind}.jpg"
+    if image.is_file():
+        try:
+            await bot.send_photo(tg_id, FSInputFile(image), caption=text, **options)
+            return
+        except (TelegramBadRequest, OSError) as exc:
+            log.warning("картинка напоминания %s недоступна: %s", kind, exc)
+    await bot.send_message(tg_id, text, **options)
 
 
 async def _send_reminder(db: sqlite3.Connection, bot, user, kind: str,
@@ -315,45 +326,46 @@ async def _send_reminder(db: sqlite3.Connection, bot, user, kind: str,
             except Exception:  # noqa: BLE001
                 log.warning("утренний синк Picooc не удался", exc_info=True)
         # сводка утра в приложении («Анализ»); в чат — короткое приглашение, без цифр и калорий
-        await _app_pointer(bot, tg_id, "☀️ Доброе утро! План на день уже ждёт в приложении.",
-                           "analysis", "☀️ Открыть план дня")
+        await _send_notification(bot, tg_id, "☀️ Доброе утро! План на день уже ждёт в приложении.",
+                                 kind, "analysis", "☀️ Открыть план дня")
     elif kind == "midday":
         from app.storage import repo
         day = repo.day_totals(db, uid, local_day.isoformat())
         if day["meals"] == 0:
-            await bot.send_message(tg_id, "🍽 Пока пусто в дневнике. Запиши завтрак/обед — "
-                                             "хотя бы текстом, это 10 секунд.")
+            await _send_notification(bot, tg_id, "🍽 Пока пусто в дневнике. Запиши завтрак/обед — "
+                                     "хотя бы текстом, это 10 секунд.", kind)
     elif kind == "kitchen_close":
-        await bot.send_message(
-            tg_id,
+        await _send_notification(
+            bot, tg_id,
             f"🍽 Кухня закрывается через 15 минут ({user['eating_cutoff']}). "
             "Если голодно — план Б: кефир/творог/овощи на 150–200 ккал. "
             "А если вечером потянет переесть, просто напиши мне, поговорим.",
+            kind,
         )
     elif kind == "evening":
-        await _app_pointer(bot, tg_id, "🌙 Итог дня готов: что получилось и что поправить завтра.",
-                           "analysis", "🌙 Открыть итог дня")
+        await _send_notification(bot, tg_id, "🌙 Итог дня готов: что получилось и что поправить завтра.",
+                                 kind, "analysis", "🌙 Открыть итог дня")
     elif kind == "weigh":
         from app.storage import repo
         if user["care_mode"]:
             return                                    # осторожный режим: без напоминаний о весе
         if repo.weight_series(db, uid, local_day.isoformat(), local_day.isoformat()):
             return                                    # уже взвесился сегодня
-        await bot.send_message(
-            tg_id,
+        await _send_notification(
+            bot, tg_id,
             "⚖️ Утреннее взвешивание: после туалета, до еды и воды, в одно и то же время. "
-            "Пришли скриншот весов. Одна цифра ничего не значит, смотрим на тренд.")
+            "Пришли скриншот весов. Одна цифра ничего не значит, смотрим на тренд.", kind)
     elif kind == "water":
         from app.services import water as watersvc
         from app.storage import repo
         total = repo.day_water_ml(db, uid, local_day.isoformat())
         goal = watersvc.goal_for(db, user)
         if total < goal // 2:
-            await bot.send_message(
-                tg_id, f"💧 Воды сегодня пока {total} мл из ориентира {goal}. "
-                       "Выпей стакан и напиши «выпил стакан воды».")
+            await _send_notification(
+                bot, tg_id, f"💧 Воды сегодня пока {total} мл из ориентира {goal}. "
+                            "Выпей стакан и напиши «выпил стакан воды».", kind)
     elif kind == "weekly":
-        await _app_pointer(bot, tg_id, "📅 Неделя закончилась: итог и цель на новую неделю "
-                                        "готовы в приложении.", "analysis", "📅 Открыть итог недели")
+        await _send_notification(bot, tg_id, "📅 Неделя закончилась: итог и цель на новую неделю "
+                                 "готовы в приложении.", kind, "analysis", "📅 Открыть итог недели")
     else:
         log.warning("неизвестный тип напоминания: %s", kind)

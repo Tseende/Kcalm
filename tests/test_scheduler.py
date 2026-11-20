@@ -7,19 +7,43 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 import pytest
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.methods import SendPhoto
 
 from app import scheduler
 from app.db import connect, migrate
 from app.services import craving
+from app.services.reminders import TEMPLATES
 from app.storage import repo
 
 
 class FakeBot:
     def __init__(self) -> None:
         self.sent: list[tuple[int, str]] = []
+        self.photos: list[str] = []
 
     async def send_message(self, chat_id, text, **kwargs):
         self.sent.append((chat_id, text))
+
+    async def send_photo(self, chat_id, photo, caption, **kwargs):
+        await self.send_message(chat_id, caption, **kwargs)
+        self.photos.append(photo.filename)
+
+
+def test_reminder_images_cover_scheduled_notifications():
+    kinds = set(TEMPLATES) | {"morning", "midday", "kitchen_close", "evening", "weekly", "custom", "rule"}
+    assert all((scheduler.REMINDER_IMAGES / f"{kind}.jpg").is_file() for kind in kinds)
+
+
+@pytest.mark.asyncio
+async def test_reminder_image_rejection_falls_back_to_text():
+    class RejectPhotoBot(FakeBot):
+        async def send_photo(self, chat_id, photo, caption, **kwargs):
+            raise TelegramBadRequest(SendPhoto(chat_id=chat_id, photo=photo), "PHOTO_INVALID")
+
+    bot = RejectPhotoBot()
+    await scheduler._send_notification(bot, 10, "Время завтрака", "breakfast")
+    assert bot.sent == [(10, "Время завтрака")]
 
 
 @pytest.fixture()
@@ -52,6 +76,7 @@ async def test_water_reminder_only_when_low(db):
     bot = FakeBot()
     await scheduler.dispatch_due_reminders(db, bot, now_utc=_utc_for_local(16, 0))
     assert len(bot.sent) == 1 and "💧" in bot.sent[0][1]
+    assert bot.photos == ["water.jpg"]
 
     # достаточно воды: напоминания нет (и отметка отправки не мешает)
     uid2, user2 = _user(db, tg=11)

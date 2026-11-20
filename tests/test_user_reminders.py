@@ -219,6 +219,7 @@ async def test_custom_text_is_html_escaped(db):
     bot = KbBot()
     await scheduler.dispatch_due_reminders(db, bot, now_utc=_now(10, 0))
     assert bot.sent[0][1] == "&lt;b&gt;жирно&lt;/b&gt; &amp; &lt;a href='x'&gt;ссылка&lt;/a&gt;"
+    assert bot.photos == ["custom.jpg"]
 
 
 @pytest.mark.asyncio
@@ -232,6 +233,7 @@ async def test_template_sends_app_button_when_url_configured(db, monkeypatch):
     bot = KbBot()
     await scheduler.dispatch_due_reminders(db, bot, now_utc=_now(8, 30))
     assert len(bot.sent) == 2
+    assert sorted(bot.photos) == ["breakfast.jpg", "walk.jpg"]
     kbs = [m for m in bot.markup if m is not None]
     assert len(kbs) == 1
     assert "screen=add_meal" in kbs[0].inline_keyboard[0][0].web_app.url
