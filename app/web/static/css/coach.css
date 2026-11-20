@@ -3,7 +3,7 @@
 .coach { position: fixed; inset: 0; z-index: 75; pointer-events: none; opacity: 0; transition: opacity .25s ease; --coach-dim: rgba(0, 0, 0, .5); }
 .coach.on { opacity: 1; }
 .coach.out { opacity: 0; transition-duration: .18s; }
-html.scheme-dark .coach { --coach-dim: rgba(0, 0, 0, .68); }
+html:is(.scheme-dark, .scheme-cosmic) .coach { --coach-dim: rgba(0, 0, 0, .68); }
 
 /* «Дыра» в затемнении: огромная тень вокруг прозрачного скруглённого прямоугольника */
 .coach-hole { position: fixed; left: 0; top: 0; width: 0; height: 0; border-radius: 18px; pointer-events: none;
@@ -36,6 +36,8 @@ html.scheme-dark .coach { --coach-dim: rgba(0, 0, 0, .68); }
 .coach-next { min-height: 36px; padding: 0 18px; border: 0; border-radius: 999px; background: #fff; color: var(--c-btn); font-size: 15px; font-weight: 600; margin-left: auto; }
 .coach-next:active, .coach-skip:active { opacity: .7; }
 .coach-bubble button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+html.scheme-cosmic .coach-skip { color: var(--c-btn-text); }
+html.scheme-cosmic .coach-next { background: var(--c-btn-text); color: var(--c-text); }
 
 @media (prefers-reduced-motion: reduce) {
   .coach, .coach-hole, .coach-bubble, .coach-bubble.in, .coach-dots i { transition: none !important; }

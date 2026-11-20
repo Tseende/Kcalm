@@ -1,6 +1,6 @@
 // Screen 5: Menu
 import { api, tg } from '../api.js';
-import { h, icon, tile, nav, fmtN, skeletonBlocks, sheet, haptic, errorState, staggerIn, getThemePref, setThemePref } from '../ui.js';
+import { h, icon, tile, nav, fmtN, skeletonBlocks, sheet, haptic, errorState, staggerIn, getThemePref, setThemePref, THEMES } from '../ui.js';
 import { t, langPref, setLang } from '../i18n.js';
 
 // Фото из Telegram (если пользователь его разрешил), иначе первая буква имени
@@ -16,16 +16,25 @@ function avatarEl(name) {
   return box;
 }
 
-// Оформление: строка как в iOS («Как в системе» / «Светлое» / «Тёмное») и лист выбора. «Как в системе» снимает ключ 'theme'.
-const THEMES = [[null, t('menu.theme_sys')], ['light', t('menu.theme_light')], ['dark', t('menu.theme_dark')]];
+const THEME_OPTIONS = [[null, t('menu.theme_sys')], ...THEMES.map((theme) => [theme, t('menu.theme_' + theme)])];
 const LANGS = [['auto', t('lang.auto')], ['ru', 'Русский'], ['en', 'English']];   // названия языков не переводим
 function themeRow() {
-  const label = () => THEMES.find((x) => x[0] === getThemePref())[1];
+  const label = () => THEME_OPTIONS.find((x) => x[0] === getThemePref())[1];
   const val = h('span', { class: 'row-value' }, label());
   const open = () => {
-    const rows = THEMES.map(([v, text]) => h('button', { class: 'row', type: 'button', role: 'radio', 'aria-checked': String(v === getThemePref()), onclick: () => {
-      setThemePref(v); haptic('selection'); val.textContent = label(); s.close();
-    } }, h('span', { class: 'grow' }, h('span', { class: 'row-title' }, text)), v === getThemePref() ? h('span', { class: 'row-check' }, icon('check', 20)) : null));
+    const current = getThemePref();
+    const rows = THEME_OPTIONS.map(([value, text]) => h('button', {
+      class: 'row', type: 'button', role: 'radio', 'aria-checked': String(value === current),
+      onclick: () => {
+        setThemePref(value);
+        haptic('selection');
+        val.textContent = label();
+        s.close();
+      },
+    },
+      value === 'cosmic' ? h('span', { class: 'theme-swatch', 'aria-hidden': 'true' }) : null,
+      h('span', { class: 'grow' }, h('span', { class: 'row-title' }, text)),
+      value === current ? h('span', { class: 'row-check' }, icon('check', 20)) : null));
     const langRows = LANGS.map(([v, text]) => h('button', { class: 'row', type: 'button', role: 'radio', 'aria-checked': String(v === langPref()), onclick: () => {
       if (v === langPref()) return;
       haptic('selection'); setLang(v);                  // сохраняет выбор и перезагружает приложение

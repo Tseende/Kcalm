@@ -549,6 +549,7 @@ export default {
   "menu.theme_sys": "Same as system",
   "menu.theme_light": "Light",
   "menu.theme_dark": "Dark",
+  "menu.theme_cosmic": "Cosmic",
   "menu.appearance": "Appearance",
   "menu.theme": "Theme",
   "menu.profile": "Profile and goals",

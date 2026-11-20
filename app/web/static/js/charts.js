@@ -292,7 +292,7 @@ export function ring({ value, max, size = 150, stroke = 14, color = 'var(--c-acc
 }
 
 /**
- * Одно крупное кольцо калорий: градиент зелёный → бирюзовый. Всё, что выше 100 %, второй круг поверх
+ * Одно крупное кольцо калорий: цвет темы или градиент зелёный → бирюзовый. Всё, что выше 100 %, второй круг поверх
  * мягким оранжевым (не красным). Возвращает SVG; цифры рисуются поверх HTML-ом.
  */
 export function kcalRing({ value, max, size = 208, stroke = 20, animate = false, label = '' }) {
@@ -303,7 +303,8 @@ export function kcalRing({ value, max, size = 208, stroke = 20, animate = false,
   const id = 'kr' + (++ringSeq);
   const svg = s('svg', { viewBox: `0 0 ${size} ${size}`, width: size, height: size, class: 'ring kcal-ring', role: 'img', 'aria-label': label });
   svg.append(s('defs', null, s('linearGradient', { id, x1: '0', y1: '0', x2: '1', y2: '1' },
-    s('stop', { offset: '0', style: 'stop-color:var(--c-green)' }), s('stop', { offset: '1', style: 'stop-color:var(--c-teal)' }))));
+    s('stop', { offset: '0', style: 'stop-color:var(--c-kcal,var(--c-green))' }),
+    s('stop', { offset: '1', style: 'stop-color:var(--c-kcal,var(--c-teal))' }))));
   svg.append(s('circle', { cx, cy: cx, r, fill: 'none', 'stroke-width': stroke, class: 'kr-track' }));
   const arc = (frac, cls, grad) => s('circle', {
     cx, cy: cx, r, fill: 'none', 'stroke-width': stroke, 'stroke-linecap': 'round', transform: `rotate(-90 ${cx} ${cx})`,

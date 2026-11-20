@@ -1,5 +1,7 @@
-/* ---------- tokens: палитра iOS (светлая/тёмная), темы Telegram не используем ---------- */
+/* ---------- палитры оформления ---------- */
 :root {
+  --cosmic-bg: #1f0b28; --cosmic-cream: #fcf6e8; --cosmic-gold: #fdce48;
+  --cosmic-pink: #fd4fa4; --cosmic-mint: #69f7b5;
   --c-bg: #f2f2f7; --c-card: #ffffff; --c-text: #000000; --c-hint: #8a8a8e; --c-header: #6d6d72;
   --c-link: #007aff; --c-btn: #007aff; --c-btn-text: #ffffff; --c-danger: #ff3b30;
   --c-sep: rgba(60, 60, 67, .22); --c-fill: rgba(120, 120, 128, .12);
@@ -16,6 +18,22 @@ html.scheme-dark {
   --c-green: #30d158; --c-red: #ff453a; --c-yellow: #ffd60a; --c-teal: #40c8e0; --c-weight: #bf5af2;
   --c-seg-on: #636366;
   --c-pic: rgba(255, 255, 255, .08); --c-pic-edge: transparent; --pic-shadow: drop-shadow(0 1px 2px rgba(0, 0, 0, .45));
+}
+html.scheme-cosmic {
+  color-scheme: dark;
+  --c-bg: var(--cosmic-bg); --c-card: #2d1636; --c-text: var(--cosmic-cream); --c-hint: #cbb6ce; --c-header: #e1cadf;
+  --c-link: var(--cosmic-pink); --c-btn: var(--cosmic-gold); --c-btn-text: var(--cosmic-bg); --c-danger: #ff8696;
+  --c-sep: rgba(252, 246, 232, .18); --c-fill: rgba(252, 246, 232, .11); --c-seg-on: #55304f;
+  --c-p: var(--cosmic-pink); --c-f: var(--cosmic-gold); --c-c: var(--cosmic-mint);
+  --c-water: var(--cosmic-mint); --c-sleep: var(--cosmic-cream); --c-steps: var(--cosmic-mint); --c-warn: #ffaf78;
+  --c-green: var(--cosmic-mint); --c-red: var(--c-danger); --c-yellow: var(--cosmic-gold);
+  --c-teal: var(--cosmic-mint); --c-weight: var(--cosmic-pink);
+  --c-kcal: var(--cosmic-gold);
+  --c-pic: #3b2342; --c-pic-edge: rgba(252, 246, 232, .12); --pic-shadow: drop-shadow(0 2px 4px rgba(0, 0, 0, .3));
+  --t-blue: var(--cosmic-gold); --t-green: var(--c-green); --t-orange: var(--cosmic-gold); --t-red: var(--c-red);
+  --t-purple: var(--c-weight); --t-teal: var(--c-teal); --t-pink: var(--cosmic-pink); --t-indigo: var(--cosmic-cream);
+  --t-yellow: var(--c-yellow); --t-gray: var(--c-hint);
+  --card-edge: rgba(252, 246, 232, .12);
 }
 :root {
   --c-accent: var(--c-btn);
@@ -1226,6 +1244,11 @@ button.row:active, a.row:active, .often-chip:active, .wg-strip:active, .wg-opt:a
 
 .row-value { color: var(--c-hint); font-size: 17px; white-space: nowrap; }
 .row-check { color: var(--c-btn); display: inline-flex; flex: none; }
+.theme-swatch {
+  width: 20px; height: 20px; border-radius: 50%; flex: none;
+  background: conic-gradient(var(--cosmic-gold) 45%, var(--cosmic-cream) 0 65%, var(--cosmic-pink) 0 85%, var(--cosmic-mint) 0);
+  border: 1px solid var(--c-sep);
+}
 .row[aria-checked="false"] > .row-check { visibility: hidden; }
 
 
@@ -1565,3 +1588,23 @@ img.broken { display: none; }
   .mic-btn.rec::after { animation: none; opacity: .45; transform: scale(1.25); }
   .dish-chev, .dish-body { transition: none; }
 }
+
+/* Космос: плоские заливки и тёмные иконки на ярких поверхностях. */
+html.scheme-cosmic :is(.plus-circle, .plus-circle .ico, .capture-ico, .capture-ico .ico,
+  .cap-main, .cap-main .cap-ico, .mchip.active, .avatar, .onb-check .ok, .onb-badge-kg) {
+  color: var(--c-btn-text);
+}
+html.scheme-cosmic .add-card :is(.ticon, .ticon .ico) { color: var(--c-btn-text); }
+html.scheme-cosmic .add-card .ticon { background-image: none !important; }
+html.scheme-cosmic .avatar { background: var(--cosmic-pink); }
+html.scheme-cosmic .kr-track { stroke: color-mix(in srgb, var(--cosmic-cream) 23%, transparent); }
+html.scheme-cosmic :is(.add-hero, .an-focus) {
+  color: var(--c-btn-text);
+  background: var(--cosmic-gold);
+  box-shadow: none;
+}
+html.scheme-cosmic .add-hero-cta { background: var(--cosmic-cream); }
+html.scheme-cosmic .an-focus-ico .stile { color: var(--c-btn-text); }
+html.scheme-cosmic .toast { background: #483053; color: var(--c-text); }
+html.scheme-cosmic .toast.error { background: #713345; }
+html.scheme-cosmic .toast.ok { background: #245744; }

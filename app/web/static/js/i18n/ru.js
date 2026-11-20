@@ -549,6 +549,7 @@ export default {
   "menu.theme_sys": "Как в системе",
   "menu.theme_light": "Светлое",
   "menu.theme_dark": "Тёмное",
+  "menu.theme_cosmic": "Космос",
   "menu.appearance": "Оформление",
   "menu.theme": "Тема",
   "menu.profile": "Профиль и цели",

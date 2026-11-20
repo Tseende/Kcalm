@@ -1,7 +1,7 @@
 // Router + tab bar + Telegram bootstrap.
 import { api, isMock, onMockEnabled, tg, inTelegram } from './api.js';
 import { initKeyboard } from './keyboard.js';
-import { h, $, icon, tile, sheet, nav, mainButton, backButton, emptyState, errorState, sessionExpiredButton, haptic, closeAllSheets, getThemePref, staggerIn, skeletonCards } from './ui.js';
+import { h, $, icon, tile, sheet, nav, mainButton, backButton, emptyState, errorState, sessionExpiredButton, haptic, closeAllSheets, getThemePref, THEMES, staggerIn, skeletonCards } from './ui.js';
 import { mealPic } from './pics.js';
 import { t } from './i18n.js';
 
@@ -214,17 +214,21 @@ async function boot() {
   syncSafe();
   try { if (tg && tg.onEvent) ['fullscreenChanged', 'safeAreaChanged', 'contentSafeAreaChanged', 'viewportChanged'].forEach((ev) => tg.onEvent(ev, syncSafe)); } catch (e) { /* старый клиент */ }
   window.addEventListener('resize', syncSafe);
-  // Единственная палитра тёмной темы — html.scheme-dark. Класс ставит и inline-скрипт в <head> (до первой отрисовки).
+  // Класс темы уже установлен в <head>. Здесь обновляем его при смене настройки или системной темы.
   const applyScheme = () => {
     const pref = getThemePref();                      // null = «Авто»: ключ снят, работает тема Telegram/системы
     const sys = inTelegram && tg && tg.colorScheme ? tg.colorScheme === 'dark'
       : !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    const dark = pref ? pref === 'dark' : sys;
-    document.documentElement.classList.toggle('scheme-dark', dark);
-    document.documentElement.classList.toggle('scheme-light', !dark);
-    // Шапка и фон Telegram под фон приложения (системный серый iOS), а не под тему клиента.
-    const bg = dark ? '#000000' : '#f2f2f7';
-    try { if (tg && tg.isVersionAtLeast && tg.isVersionAtLeast('6.1')) { tg.setHeaderColor(bg); tg.setBackgroundColor(bg); } } catch (e) { /* old client */ }
+    const scheme = pref || (sys ? 'dark' : 'light');
+    const root = document.documentElement;
+    for (const theme of THEMES) root.classList.toggle('scheme-' + theme, theme === scheme);
+    try {
+      if (tg && tg.isVersionAtLeast && tg.isVersionAtLeast('6.1')) {
+        const bg = getComputedStyle(root).getPropertyValue('--c-bg').trim();
+        tg.setHeaderColor(bg);
+        tg.setBackgroundColor(bg);
+      }
+    } catch (e) { /* старый клиент */ }
   };
   applyScheme();
   window.addEventListener('app:theme', applyScheme);

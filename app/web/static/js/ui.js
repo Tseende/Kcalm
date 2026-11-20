@@ -137,12 +137,14 @@ export function staggerIn(container, items) {
   });
 }
 
-/** Тема: null = «как в системе», 'light' | 'dark'. «Авто» снимает ключ и просит main.js пересчитать схему. */
+export const THEMES = ['light', 'dark', 'cosmic'];
+
+/** null = «Как в системе». */
 export function getThemePref() {
-  try { const v = localStorage.getItem('theme'); return v === 'light' || v === 'dark' ? v : null; } catch (e) { return null; }
+  try { const v = localStorage.getItem('theme'); return THEMES.includes(v) ? v : null; } catch (e) { return null; }
 }
 export function setThemePref(v) {
-  try { if (v === 'light' || v === 'dark') localStorage.setItem('theme', v); else localStorage.removeItem('theme'); } catch (e) { /* без хранилища */ }
+  try { if (THEMES.includes(v)) localStorage.setItem('theme', v); else localStorage.removeItem('theme'); } catch (e) { /* без хранилища */ }
   window.dispatchEvent(new Event('app:theme'));
 }
 
