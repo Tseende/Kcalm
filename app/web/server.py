@@ -14,7 +14,7 @@ import json
 import logging
 import re
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from aiohttp import web
@@ -1652,8 +1652,13 @@ async def api_water_delete(request: web.Request) -> web.Response:
 
 @routes.get("/api/drinks")
 async def api_drinks(request: web.Request) -> web.Response:
-    ctx(request)
-    return ok({"drinks": drinksdom.catalog_json()})
+    db, user, _ = ctx(request)
+    data = {"drinks": drinksdom.catalog_json()}
+    if request.query.get("history") == "1":
+        today = now_local(user).date()
+        data["history"] = repo.drink_history(db, user["id"], (today - timedelta(days=29)).isoformat(),
+                                             today.isoformat())
+    return ok(data)
 
 
 @routes.post("/api/drinks")

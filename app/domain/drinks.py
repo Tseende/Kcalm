@@ -110,6 +110,17 @@ _DRINK_WORDS = re.compile(
     r"вода|воды|воду|водой|морс|морса|компот|компота|кефир|кефира|молоко|молока|смузи|какао|"
     r"лимонад|газировк\w*|кола|колы|пиво|пива|вино|вина|фанта|энергетик|коктейль|напиток)(?![а-яa-z])")
 _CATALOG_NAMES = tuple(d.name.lower().replace("ё", "е") for d in DRINKS)
+_CATALOG_IDS = {name: d.id for d in DRINKS for name in (d.name.lower().replace("ё", "е"), d.name_en)}
+_SUGAR_SUFFIX = re.compile(r"(?:\s*[, +]\s*)\d+\s*ч\.\s*л\.\s*сахара$")
+
+
+def catalog_id(name: str, name_en: str | None = None) -> str | None:
+    """Сопоставляет запись с каталогом, включая обе версии подписи сахара."""
+    ru = _SUGAR_SUFFIX.sub("", name.strip().lower().replace("ё", "е"))
+    en = (name_en or "").strip().lower()
+    if ru in ("вода", "water") or en == "water":
+        return "water"
+    return _CATALOG_IDS.get(ru) or _CATALOG_IDS.get(en)
 
 
 def is_drink_name(name: str) -> bool:

@@ -588,7 +588,10 @@ const routes = [
     water.set(T, [...(water.get(T) || []), e]);
     return { water_ml: waterOf(T), goal_ml: TARGETS.water_ml, id: e.id };
   }],
-  ['GET', /^\/drinks$/, () => ({ drinks: MOCK_DRINKS.map((d) => ({ protein: 0, fat: 0, carbs: Math.round(d.kcal_100 / 4 * 10) / 10, alcohol: ['beer', 'wine'].includes(d.id), ...d })) })],
+  ['GET', /^\/drinks$/, (m, q) => ({
+    drinks: MOCK_DRINKS.map((d) => ({ protein: 0, fat: 0, carbs: Math.round(d.kcal_100 / 4 * 10) / 10, alcohol: ['beer', 'wine'].includes(d.id), ...d })),
+    ...(q.history ? { history: [{ id: 'americano', count: 6, last_ml: 200 }, { id: 'water', count: 5, last_ml: 250 }, { id: 'tea', count: 2, last_ml: 300 }] } : {}),
+  })],
   ['POST', /^\/drinks$/, (m, q, b) => {
     const T = todayISO();
     const d = MOCK_DRINKS.find((x) => x.id === b.drink);

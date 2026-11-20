@@ -46,9 +46,9 @@ export const TIPS = [
 
   { id: 'addmeal.photo', route: 'addmeal', target: '.capture.cap-menu',
     title: t('coach.addmeal.photo.t'), text: t('coach.addmeal.photo.x') },
-  { id: 'addmeal.text', route: 'addmeal', target: '.compose-keep',
+  { id: 'addmeal.text', route: 'addmeal', target: '[aria-controls="meal-description"]',
     title: t('coach.addmeal.text.t'), text: t('coach.addmeal.text.x') },
-  { id: 'addmeal.quick', route: 'addmeal', target: () => { const el = q('#view .quick-list'); return el && !el.closest('[hidden]') ? el : null; },
+  { id: 'addmeal.quick', route: 'addmeal', target: '.meal-catalog-search',
     title: t('coach.addmeal.quick.t'), text: t('coach.addmeal.quick.x') },
 
   { id: 'stats.range', route: 'stats', target: '#view .seg',

@@ -6,14 +6,14 @@ import {
 import { voiceButton } from '../voice.js';
 import { scanBarcode, decodeFile, validBarcode } from '../scanner.js';
 import { dishInfo } from './dishes.js';
-import { pickFood, editEntryGrams, entryAbs, entryTotal, toPayload } from '../food_picker.js';
+import { gramsSheet, manualSheet, editEntryGrams, entryAbs, entryTotal, toPayload } from '../food_picker.js';
 import { dishPic, foodPic, mealPic } from '../pics.js';
-import { pickDrink, drinkEntry } from '../drink_picker.js';
+import { portionSheet, customDrinkSheet, drinkEntry } from '../drink_picker.js';
+import { mealCatalog } from '../meal_catalog.js';
 import { t, tn } from '../i18n.js';
 import { pickMealDateTime } from '../meal_datetime.js';
 
 const MAX = 6;
-const QUICK_SHOWN = 5;
 
 export default async function render(root, ctx) {
   const view = h('div', { class: 'screen' });
@@ -54,105 +54,65 @@ export default async function render(root, ctx) {
 
   const camera = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, onchange: () => addFiles(camera) });
   const gallery = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, onchange: () => addFiles(gallery) });
-  const textTa = h('textarea', { rows: 3, placeholder: t('add.ph_text'), oninput: () => { sync(); quickVisibility(); } });
-  const textField = h('label', { class: 'field compose-keep' }, h('span', { class: 'field-label' }, t('add.or_describe')),
+  const textTa = h('textarea', { rows: 3, placeholder: t('add.ph_text'), oninput: sync });
+  const textField = h('label', { id: 'meal-description', class: 'field compose-keep' }, h('span', { class: 'field-label' }, t('add.or_describe')),
     h('div', { class: 'mic-wrap' }, textTa, voiceButton(textTa)));
   const clearDraft = draft('meal-text', textTa);
+  let describing = !!textTa.value.trim();
   const dishList = h('div', { class: 'stack' });
   const capture = h('div', { class: 'capture' });
-  const quick = h('div', { class: 'stack', hidden: true });
   // Продукты из базы или введённые вручную: отдельный список позиций приёма (см. food_picker.js).
   const prods = [];
   const prodBox = h('div', { class: 'stack-sm prod-box', hidden: true });
 
-  // «Мои блюда» и «Частые»: один тап записывает приём заново, звезда добавляет/убирает из своих блюд.
-  async function loadQuick() {
-    let items = [];
-    try { items = (await api.get('/frequent', { limit: 60 })).items || []; } catch (e) { return; }
-    if (!ctx.alive()) return;
-    let starBusy = false;
-    let quickTab = null;
-    let quickExpanded = false;
-    quickVisibility = () => { quick.hidden = !items.length || allPhotos().length > 0 || !!textTa.value.trim() || prods.length > 0; };
-    const pic = (f) => foodPic(f.title, 40) || foodPic((f.names || [])[0] || '', 40) || mealPic('snack', 40);
-    const quickRow = (f) => {
-      const names = (f.names || []).filter(Boolean);
-      const star = h('button', {
-        class: 'quick-star' + (f.favorite_id ? ' on' : ''), type: 'button',
-        'aria-label': f.favorite_id ? t('favf.rm') : t('add.fav_aria'), 'aria-pressed': String(!!f.favorite_id),
+  // Быстрый повтор остаётся доступен, пока приём пуст.
+  let starBusy = false;
+  const pic = (f) => foodPic(f.title, 40) || foodPic((f.names || [])[0] || '', 40) || mealPic('snack', 40);
+  function quickRow(f) {
+    const names = (f.names || []).filter(Boolean);
+    const star = h('button', {
+      class: 'quick-star' + (f.favorite_id ? ' on' : ''), type: 'button',
+      'aria-label': f.favorite_id ? t('favf.rm') : t('add.fav_aria'), 'aria-pressed': String(!!f.favorite_id),
+      onclick: async () => {
+        if (starBusy) return;                     // двойной тап не должен создать два блюда
+        starBusy = true;
+        star.disabled = true;
+        try {
+          if (f.favorite_id) { await api.del('/favorites/' + f.favorite_id); f.favorite_id = null; }
+          else f.favorite_id = (await api.post('/favorites', { meal_id: f.meal_id })).id;
+          haptic('light');
+          // строку не переносим в другой раздел сразу: она не должна уехать из-под пальца
+          star.classList.toggle('on', !!f.favorite_id);
+          star.setAttribute('aria-pressed', String(!!f.favorite_id));
+          star.setAttribute('aria-label', f.favorite_id ? t('favf.rm') : t('add.fav_aria'));
+        } catch (e) { toast(e.message, 'error'); } finally { starBusy = false; star.disabled = false; }
+      },
+    }, icon('star', 22));
+    const row = h('div', { class: 'row prod-row fav-row' },
+      h('button', {
+        class: 'fav-open', type: 'button', title: names.join(', '),
         onclick: async () => {
-          if (starBusy) return;                     // двойной тап не должен создать два блюда
-          starBusy = true;
-          star.disabled = true;
+          if (busy || choosingWhen || compressing || valid()) return;
+          busy = true;
+          row.classList.add('is-pending');
           try {
-            if (f.favorite_id) { await api.del('/favorites/' + f.favorite_id); f.favorite_id = null; }
-            else f.favorite_id = (await api.post('/favorites', { meal_id: f.meal_id })).id;
-            haptic('light');
-            // строку не переносим в другой раздел сразу: она не должна уехать из-под пальца
-            star.classList.toggle('on', !!f.favorite_id);
-            star.setAttribute('aria-pressed', String(!!f.favorite_id));
-            star.setAttribute('aria-label', f.favorite_id ? t('favf.rm') : t('add.fav_aria'));
-          } catch (e) { toast(e.message, 'error'); } finally { starBusy = false; star.disabled = false; }
+            const r = await api.post(f.favorite_id ? `/favorites/${f.favorite_id}/repeat` : `/meals/${f.meal_id}/repeat`, when);
+            await fixType(r.id);
+            if (!ctx.alive()) return;
+            haptic('success');
+            mainButton.hide();
+            nav.replace('/meal/' + r.id);
+          } catch (e) { if (ctx.alive()) toast(e.message, 'error'); }
+          finally { busy = false; row.classList.remove('is-pending'); }
         },
-      }, icon('star', 22));
-      const row = h('div', { class: 'row prod-row fav-row' },
-        h('button', {
-          class: 'fav-open', type: 'button', title: names.join(', '),
-          onclick: async () => {
-            row.classList.add('is-pending');
-            try {
-              const r = await api.post(f.favorite_id ? `/favorites/${f.favorite_id}/repeat` : `/meals/${f.meal_id}/repeat`, when);
-              await fixType(r.id);
-              haptic('success');
-              mainButton.hide();
-              nav.replace('/meal/' + r.id);
-            } catch (e) { row.classList.remove('is-pending'); toast(e.message, 'error'); }
-          },
-        },
-        f.photo_url ? h('span', { class: 'fav-thumb quick-thumb' }, photoImg(f.photo_url, '', f.title, () => pic(f))) : pic(f),
-        h('span', { class: 'grow' },
-          h('span', { class: 'row-title' }, f.title),
-          h('span', { class: 'row-sub' }, [`${fmtN(f.kcal)} ${t('unit.kcal')}`, names.length > 1 ? names.join(', ') : null].filter(Boolean).join(' · ')))),
-        star);
-      return row;
-    };
-    const section = (title, list) => (list.length ? [sectionTitle(title), h('div', { class: 'list tiles prod-list quick-list' }, list.map(quickRow))] : null);
-    const paintQuick = () => {
-      quickVisibility();
-      const tabs = [
-        ['freq', t('add.frequent'), items.filter((f) => !f.is_drink && !f.favorite_id)],
-        ['mine', t('fav.title'), items.filter((f) => !f.is_drink && f.favorite_id)],
-        ['drinks', t('add.drinks'), items.filter((f) => f.is_drink)],
-      ].filter((x) => x[2].length);
-      if (!tabs.length) { quick.replaceChildren(); return; }
-      if (!tabs.some((x) => x[0] === quickTab)) {
-        let saved = null;
-        try { saved = localStorage.getItem('addmeal_quick_tab'); } catch (e) { /* ignore */ }
-        quickTab = (tabs.find((x) => x[0] === saved) || tabs[0])[0];
-      }
-      const cur = tabs.find((x) => x[0] === quickTab);
-      const chips = tabs.length > 1 ? h('div', { class: 'chips scroll', role: 'tablist', 'aria-label': t('add.frequent') },
-        tabs.map(([key, label, list]) => h('button', {
-          type: 'button', role: 'tab', class: 'chip' + (key === quickTab ? ' active' : ''), 'aria-selected': String(key === quickTab),
-          onclick: () => {
-            if (key === quickTab) return;
-            quickTab = key; quickExpanded = false;
-            try { localStorage.setItem('addmeal_quick_tab', key); } catch (e) { /* ignore */ }
-            haptic('selection');
-            paintQuick();
-          },
-        }, `${label} ${list.length}`))) : sectionTitle(cur[1]);
-      const list = cur[2];
-      const shown = quickExpanded ? list : list.slice(0, QUICK_SHOWN);
-      quick.replaceChildren(...[chips,
-        h('div', { class: 'list tiles prod-list quick-list' }, shown.map(quickRow)),
-        list.length > shown.length ? h('button', { class: 'an-more quick-more', type: 'button', onclick: () => { quickExpanded = true; paintQuick(); } }, t('add.show_more', { n: list.length - shown.length })) : null].filter(Boolean));
-    };
-    quickPaint = paintQuick;
-    paintQuick();
+      },
+      f.photo_url ? h('span', { class: 'fav-thumb quick-thumb' }, photoImg(f.photo_url, '', f.title, () => pic(f))) : pic(f),
+      h('span', { class: 'grow' },
+        h('span', { class: 'row-title' }, f.title),
+        h('span', { class: 'row-sub' }, [`${fmtN(f.kcal)} ${t('unit.kcal')}`, names.length > 1 ? names.join(', ') : null].filter(Boolean).join(' · ')))),
+      star);
+    return row;
   }
-  let quickPaint = null;
-  let quickVisibility = () => {};
 
   let compressing = false;
   async function addFiles(input) {
@@ -413,18 +373,20 @@ export default async function render(root, ctx) {
       ingBlock(g, n));
   }
 
-  async function addProd() {
+  async function addProd(food, manualName = '') {
+    if (busy) return;
     haptic('light');
-    const e = await pickFood();
+    const e = await (food ? gramsSheet(food) : manualSheet({ name: manualName }));
     if (!e || !ctx.alive()) return;
     prods.push(e);
     haptic('success');
     paintProds();
   }
   // Напиток в приёме: такая же позиция, как продукт (мл вместо граммов). Вода уходит в норму воды, а не в позиции.
-  async function addDrink() {
+  async function addDrink(drink) {
+    if (busy) return;
     haptic('light');
-    const c = await pickDrink();
+    const c = await (drink ? portionSheet(drink, { start: drink.last_ml }) : customDrinkSheet());
     if (!c || !ctx.alive()) return;
     prods.push(drinkEntry(c));
     haptic('success');
@@ -453,7 +415,6 @@ export default async function render(root, ctx) {
         h('div', { class: 'prod-sum row-between' }, h('span', { class: 'muted' }, t('fp.total')),
           h('span', { class: 'row-title' }, `${fmtN(sum.kcal)} ${t('unit.kcal')} · ${macroLine(sum)}`)));
     } else prodBox.replaceChildren();
-    quickVisibility();
     sync();
   }
 
@@ -469,6 +430,7 @@ export default async function render(root, ctx) {
       clearDraft();
     } else if (!filled.length && !textTa.value && groups[0].note.trim()) {
       textTa.value = groups[0].note.trim();
+      describing = true;
       groups[0].note = '';
     }
     dishList.replaceChildren(...filled.map((g, gi) => groupCard(g, gi)));
@@ -477,7 +439,6 @@ export default async function render(root, ctx) {
       if (n) { n.focus({ preventScroll: true }); try { n.setSelectionRange(keep.s, keep.e); } catch (e) { /* ignore */ } }
     }
     paintCapture(filled);
-    if (quickPaint) quickPaint();
     sync();
   }
 
@@ -487,17 +448,22 @@ export default async function render(root, ctx) {
     capture.className = 'capture' + (has ? ' compact' : ' cap-menu');
     if (!has) {
       target = groups[0];
-      const opt = (ic, color, short, full, fn) => h('button', { class: 'cap-mini', type: 'button', 'aria-label': full, onclick: fn },
-        tile(ic, color, 36), h('span', { class: 'cap-mini-l' }, short));
+      const opt = (ic, label, fn, attrs = {}) => h('button', {
+        class: 'cap-mini', type: 'button', onclick: fn, ...attrs,
+      }, icon(ic, 17), h('span', { class: 'cap-mini-l' }, label));
       capture.replaceChildren(
         h('button', { class: 'cap-main', type: 'button', onclick: () => pick(camera, groups[0]) },
           h('span', { class: 'cap-ico' }, icon('camera', 26)),
           h('span', { class: 'grow' }, h('span', { class: 'cap-label' }, t('add.shoot')), h('span', { class: 'cap-sub' }, t('add.cap_sub', { n: MAX })))),
         h('div', { class: 'cap-minis' },
-          opt('image', 'purple', t('add.gallery_short'), t('add.from_gallery'), () => pick(gallery, groups[0])),
-          opt('barcode', 'green', t('add.scan_short'), t('add.scan'), () => scanIng(null)),
-          opt('package', 'orange', t('add.product_short'), t('add.find_product'), addProd),
-          opt('cup', 'teal', t('add.drink_short'), t('add.drink'), addDrink)));
+          opt('image', t('add.gallery_short'), () => pick(gallery, groups[0])),
+          opt('barcode', t('add.scan_short'), () => scanIng(null)),
+          opt('pencil', t('add.describe_short'), (event) => {
+            describing = !describing;
+            textField.hidden = !describing;
+            event.currentTarget.setAttribute('aria-expanded', String(describing));
+            if (describing) textTa.focus();
+          }, { 'aria-expanded': String(describing), 'aria-controls': 'meal-description' })));
     } else {
       const more = (ic, label, fn) => h('button', { class: 'btn btn-secondary', type: 'button', onclick: fn }, icon(ic, 20), label);
       capture.replaceChildren(
@@ -509,17 +475,16 @@ export default async function render(root, ctx) {
             groups.push(g);
             haptic('light');
             pick(camera, g);
-          }),
-          more('package', t('fp.title'), addProd),
-          more('cup', t('add.drink_short'), addDrink)));
+          })));
     }
-    textField.hidden = has;
+    textField.hidden = has || !describing;
   }
 
   function valid() { return allPhotos().length > 0 || textTa.value.trim().length > 0 || prods.length > 0; }
   let lastDisabled = null;
   function sync() {
     // Не дёргаем кнопку на каждую букву: в Telegram каждое enable/disable пересчитывает окно.
+    catalog.update();
     const d = busy || choosingWhen || !valid();
     if (d === lastDisabled) return;
     lastDisabled = d;
@@ -613,19 +578,26 @@ export default async function render(root, ctx) {
     paint();
   }
 
+  const catalog = mealCatalog({
+    alive: ctx.alive, canRepeat: () => !valid(), repeatRow: quickRow,
+    addFood: (food) => addProd(food), addManual: (name) => addProd(null, name),
+    addDrink, addCustomDrink: () => addDrink(),
+  });
   view.append(
     pageHead(t('add.meal'), { parent: '/today' }),
     h('div', { class: 'stack' },
       h('div', { class: 'meta-row' }, whenButton),
       capture, dishList, prodBox, noDishHint,
       textField,
-      quick,
+      catalog.element,
       camera, gallery, codeShot));
 
   mainButton.show(t('add.save_meal'), submit, { disabled: true });
   lastDisabled = true;
   paint();
   loadDishes();
-  loadQuick();
-  return () => allPhotos().forEach((p) => URL.revokeObjectURL(p.url));
+  return () => {
+    catalog.destroy();
+    allPhotos().forEach((p) => URL.revokeObjectURL(p.url));
+  };
 }

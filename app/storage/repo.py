@@ -1448,6 +1448,32 @@ def due_reminders(conn: sqlite3.Connection, user_id: int, kind: str) -> sqlite3.
 
 # ------------------------------------------------------------------- вода
 
+def drink_history(conn: sqlite3.Connection, user_id: int, start: str, end: str) -> list[dict]:
+    """Частота и последний объём напитков из каталога, включая отдельно записанную воду."""
+    from app.domain import drinks, water
+
+    rows = conn.execute(
+        """SELECT i.name_ru, i.name_en, i.grams AS ml, m.local_date, m.local_time, i.id
+           FROM meals m JOIN meal_items i ON i.meal_id=m.id
+           WHERE m.user_id=? AND m.deleted_at IS NULL AND m.local_date BETWEEN ? AND ?
+           UNION ALL
+           SELECT NULL, NULL, ml, local_date, local_time, id FROM water_log
+           WHERE user_id=? AND meal_id IS NULL AND local_date BETWEEN ? AND ?
+           ORDER BY local_date DESC, local_time DESC, id DESC""",
+        (user_id, start, end, user_id, start, end),
+    )
+    history = {}
+    for row in rows:
+        drink_id = "water" if row["name_ru"] is None else drinks.catalog_id(row["name_ru"], row["name_en"])
+        lo, hi = (water.MIN_ML, water.MAX_ML) if drink_id == "water" else (drinks.MIN_ML, drinks.MAX_ML)
+        if not drink_id or row["ml"] is None or not lo <= row["ml"] <= hi:
+            continue
+        if drink_id not in history:
+            history[drink_id] = {"id": drink_id, "count": 0, "last_ml": round(row["ml"])}
+        history[drink_id]["count"] += 1
+    return sorted(history.values(), key=lambda entry: -entry["count"])
+
+
 def add_water(conn: sqlite3.Connection, user_id: int, local_date: str, local_time: str,
               ml: int, source: str, raw_text: str | None = None) -> int:
     cur = conn.execute(

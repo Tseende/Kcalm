@@ -17,8 +17,15 @@ const SUGAR_G = 5;
 const MAX_SUGAR = 6;
 const r1 = (v) => Math.round(v * 10) / 10;
 
-export async function loadDrinks() {
-  return [WATER, ...((await api.get('/drinks')).drinks || [])];
+export async function loadDrinks({ ranked = false } = {}) {
+  const { drinks = [], history = [] } = await api.get('/drinks', ranked ? { history: 1 } : {});
+  const catalog = [WATER, ...drinks];
+  if (!ranked) return catalog;
+  const byId = new Map(catalog.map((drink) => [drink.id, drink]));
+  const recent = history.filter((entry) => byId.has(entry.id));
+  const used = new Set(recent.map((entry) => entry.id));
+  return [...recent.map((entry) => ({ ...byId.get(entry.id), last_ml: entry.last_ml })),
+    ...catalog.filter((drink) => !used.has(drink.id))];
 }
 
 const kcalLabel = (d) => (d.id === 'water' ? t('drink.no_kcal') : `${d.kcal_100 < 1 ? 0 : fmtN(Math.round(d.kcal_100))} ${t('unit.kcal')}`);
@@ -54,12 +61,12 @@ export function drinkGrid(catalog, onPick, onCustom) {
 }
 
 /** Шторка порции: объём кнопками или числом, сахар у чая и кофе, итог. Promise<{drink, ml, sugar} | null>. */
-export function portionSheet(d, { cta } = {}) {
+export function portionSheet(d, { cta, start } = {}) {
   return new Promise((resolve) => {
     let done = false;
     let sugar = 0;
     const [lo, hi] = d.id === 'water' ? WATER_ML : DRINK_ML;
-    const ml = numInput({ max: hi, value: d.sizes[Math.min(1, d.sizes.length - 1)], inputmode: 'numeric', 'aria-label': t('drink.a_ml') });
+    const ml = numInput({ max: hi, value: start >= lo && start <= hi ? start : d.sizes[Math.min(1, d.sizes.length - 1)], inputmode: 'numeric', 'aria-label': t('drink.a_ml') });
     const chips = h('div', { class: 'chips wrap' }, d.sizes.map((v) => h('button', { type: 'button', class: 'chip', 'data-ml': v,
       onclick: () => { numSet(ml, v); haptic('light'); paint(); } }, v + ' ' + t('unit.ml'))));
     const sugarVal = h('b', { class: 'step-val' }, '0');

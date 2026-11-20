@@ -44,7 +44,7 @@ function themeRow() {
       h('div', { class: 'section-label' }, t('lang.title')),
       h('div', { class: 'list', role: 'radiogroup', 'aria-label': t('lang.title') }, langRows)) });
   };
-  return h('button', { class: 'row', type: 'button', onclick: open }, tile('moon', 'indigo'),
+  return h('button', { class: 'row appearance-row', type: 'button', onclick: open }, tile('moon', 'indigo'),
     h('span', { class: 'grow' }, h('span', { class: 'row-title' }, t('menu.appearance'))), val, icon('next', 18));
 }
 

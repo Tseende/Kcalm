@@ -40,10 +40,10 @@ export function toPayload(e) {
   };
 }
 
-const foodLine = (f) => [f.brand, `${fmtN(f.kcal)} ${t('unit.kcal')} ${t('common.per100')}`].filter(Boolean).join(' · ');
+export const foodLine = (f) => [f.brand, `${fmtN(f.kcal)} ${t('unit.kcal')} ${t('common.per100')}`].filter(Boolean).join(' · ');
 
 // Шторка «граммы»: старт с default_grams / unit_grams / 100, значения пересчитываются на лету.
-function gramsSheet(food, { cta, start }) {
+export function gramsSheet(food, { cta, start } = {}) {
   return new Promise((resolve) => {
     let done = false;
     const grams = numInput({ value: start || food.default_grams || food.unit_grams || 100, min: 1, max: G_MAX, decimals: 1, 'aria-label': t('add.grams') });

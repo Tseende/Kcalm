@@ -38,6 +38,34 @@ async def test_catalog_endpoint(client):
     body = await (await client.get("/api/drinks", headers=H)).json()
     assert [d["id"] for d in body["drinks"]][:3] == ["cola_zero", "cola", "fanta"]
     assert all({"name", "emoji", "kcal_100", "sizes", "sugar"} <= set(d) for d in body["drinks"])
+    assert "history" not in body
+
+
+@pytest.mark.asyncio
+async def test_ranked_drink_history(client, db):
+    from app.storage import repo
+    from tests.test_web_api import TODAY, add_user
+
+    user_id = repo.get_user_by_tg(db, 1001)["id"]
+    for volume in (200, 275):
+        resp = await client.post("/api/drinks", json={"drink": "americano", "ml": volume}, headers=H)
+        assert resp.status == 201
+    tea = await client.post("/api/drinks", json={"drink": "tea", "ml": 300, "sugar_tsp": 1}, headers=H)
+    assert tea.status == 201
+    deleted = await client.post("/api/drinks", json={"drink": "americano", "ml": 400}, headers=H)
+    assert (await client.delete(f"/api/meals/{(await deleted.json())['id']}", headers=H)).status == 204
+    repo.add_water(db, user_id, TODAY, "16:00", 250, "command")
+    repo.add_water(db, user_id, "2026-04-20", "16:00", 500, "command")
+    repo.add_water(db, add_user(db, 1002), TODAY, "17:00", 600, "command")
+
+    response = await client.get("/api/drinks?history=1", headers=H)
+    assert response.status == 200
+    assert (await response.json())["history"] == [
+        {"id": "americano", "count": 2, "last_ml": 275},
+        {"id": "water", "count": 1, "last_ml": 250},
+        {"id": "tea", "count": 1, "last_ml": 300},
+    ]
+    assert drinks.catalog_id("Чай + 2 ч. л. сахара") == "tea"
 
 
 @pytest.mark.asyncio
