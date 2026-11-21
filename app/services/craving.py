@@ -518,11 +518,10 @@ def followup_text(user) -> str:
 
 
 async def followup_message(db: sqlite3.Connection, user, event: sqlite3.Row) -> str:
-    """Проверка через 15 минут с опорой на разговор; без модели — запасной текст."""
+    """Подготовить продолжение разговора; история обновляется после отправки."""
     data = await _ask_model(db, user, event, "", "followup")
     if not data:
         return followup_text(user)
-    repo.add_craving_message(db, event["id"], "assistant", data["reply"])
     return "⏱ " + esc(data["reply"])
 
 

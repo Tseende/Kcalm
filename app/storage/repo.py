@@ -5,6 +5,7 @@ import json
 import sqlite3
 from datetime import datetime, timezone
 
+from app.db import write_transaction
 from app.domain.nutrition import MealCalculation
 
 
@@ -419,20 +420,20 @@ def save_meal(conn: sqlite3.Connection, user_id: int, eaten_utc: str, local_date
     notify=False: служебная запись (образец избранного), рефералы и заморозки её не видят."""
     paths = [p for p in (photo_paths or ([photo_path] if photo_path else [])) if p]
     photo_path = photo_path or (paths[0] if paths else None)
-    cur = conn.execute(
-        """INSERT INTO meals (user_id, eaten_at_utc, local_date, local_time, meal_type,
-           source, photo_path, transcript, kcal_total, protein_g, fat_g, carbs_g,
-           kcal_low, kcal_high, confidence, method)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-        (user_id, eaten_utc, local_date, local_time, meal_type, source, photo_path,
-         transcript, calc.kcal_total, calc.protein_g, calc.fat_g, calc.carbs_g,
-         calc.kcal_low, calc.kcal_high, calc.confidence, calc.method),
-    )
-    meal_id = cur.lastrowid
-    _insert_items(conn, meal_id, calc)
-    add_meal_photos(conn, meal_id, paths, dish_ids=dish_ids, commit=False)
-    sync_meal_water(conn, meal_id)
-    conn.commit()
+    with write_transaction(conn):
+        cur = conn.execute(
+            """INSERT INTO meals (user_id, eaten_at_utc, local_date, local_time, meal_type,
+               source, photo_path, transcript, kcal_total, protein_g, fat_g, carbs_g,
+               kcal_low, kcal_high, confidence, method)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (user_id, eaten_utc, local_date, local_time, meal_type, source, photo_path,
+             transcript, calc.kcal_total, calc.protein_g, calc.fat_g, calc.carbs_g,
+             calc.kcal_low, calc.kcal_high, calc.confidence, calc.method),
+        )
+        meal_id = cur.lastrowid
+        _insert_items(conn, meal_id, calc)
+        add_meal_photos(conn, meal_id, paths, dish_ids=dish_ids, commit=False)
+        sync_meal_water(conn, meal_id)
     if notify:
         meal_saved(conn, user_id, local_date)
     return meal_id
@@ -480,35 +481,35 @@ def repeat_meal(conn: sqlite3.Connection, user_id: int, meal_id: int, eaten_utc:
 
     allow_deleted: образец избранного живёт, даже если исходную запись убрали из дневника.
     factor: порция (×0,5, ×2…): граммы, ккал и БЖУ позиций умножаются, итог пересчитывается с нуля."""
-    src = get_meal(conn, user_id, meal_id)
-    if not src or (src["deleted_at"] and not allow_deleted):
-        return None
-    cur = conn.execute(
-        """INSERT INTO meals (user_id, eaten_at_utc, local_date, local_time, meal_type,
-           source, transcript, kcal_total, protein_g, fat_g, carbs_g,
-           kcal_low, kcal_high, confidence, method)
-           VALUES (?,?,?,?,?,'manual','повтор частого блюда',?,?,?,?,?,?,?,?)""",
-        (user_id, eaten_utc, local_date, local_time, meal_type, src["kcal_total"],
-         src["protein_g"], src["fat_g"], src["carbs_g"], src["kcal_low"], src["kcal_high"],
-         src["confidence"], src["method"]))
-    new_id = cur.lastrowid
-    cols = [r[1] for r in conn.execute("PRAGMA table_info(meal_items)")
-            if r[1] not in ("id", "meal_id")]
-    names = ", ".join(cols)
-    conn.execute(f"INSERT INTO meal_items (meal_id, {names}) SELECT ?, {names} "
-                 "FROM meal_items WHERE meal_id=?", (new_id, meal_id))
-    if abs(factor - 1.0) > 1e-9:
-        conn.execute(
-            """UPDATE meal_items SET grams = ROUND(grams * ?, 1), kcal = MAX(0, CAST(ROUND(kcal * ?) AS INTEGER)),
-               protein_g = ROUND(protein_g * ?, 1), fat_g = ROUND(fat_g * ?, 1),
-               carbs_g = ROUND(carbs_g * ?, 1) WHERE meal_id = ?""",
-            (factor, factor, factor, factor, factor, new_id))
-        _resum_meal(conn, new_id)
-        conn.execute("UPDATE meals SET kcal_low = CAST(ROUND(kcal_low * ?) AS INTEGER), "
-                     "kcal_high = CAST(ROUND(kcal_high * ?) AS INTEGER) WHERE id = ?",
-                     (factor, factor, new_id))
-    sync_meal_water(conn, new_id)
-    conn.commit()
+    with write_transaction(conn):
+        src = get_meal(conn, user_id, meal_id)
+        if not src or (src["deleted_at"] and not allow_deleted):
+            return None
+        cur = conn.execute(
+            """INSERT INTO meals (user_id, eaten_at_utc, local_date, local_time, meal_type,
+               source, transcript, kcal_total, protein_g, fat_g, carbs_g,
+               kcal_low, kcal_high, confidence, method)
+               VALUES (?,?,?,?,?,'manual','повтор частого блюда',?,?,?,?,?,?,?,?)""",
+            (user_id, eaten_utc, local_date, local_time, meal_type, src["kcal_total"],
+             src["protein_g"], src["fat_g"], src["carbs_g"], src["kcal_low"], src["kcal_high"],
+             src["confidence"], src["method"]))
+        new_id = cur.lastrowid
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(meal_items)")
+                if r[1] not in ("id", "meal_id")]
+        names = ", ".join(cols)
+        conn.execute(f"INSERT INTO meal_items (meal_id, {names}) SELECT ?, {names} "
+                     "FROM meal_items WHERE meal_id=?", (new_id, meal_id))
+        if abs(factor - 1.0) > 1e-9:
+            conn.execute(
+                """UPDATE meal_items SET grams = ROUND(grams * ?, 1), kcal = MAX(0, CAST(ROUND(kcal * ?) AS INTEGER)),
+                   protein_g = ROUND(protein_g * ?, 1), fat_g = ROUND(fat_g * ?, 1),
+                   carbs_g = ROUND(carbs_g * ?, 1) WHERE meal_id = ?""",
+                (factor, factor, factor, factor, factor, new_id))
+            _resum_meal(conn, new_id)
+            conn.execute("UPDATE meals SET kcal_low = CAST(ROUND(kcal_low * ?) AS INTEGER), "
+                         "kcal_high = CAST(ROUND(kcal_high * ?) AS INTEGER) WHERE id = ?",
+                         (factor, factor, new_id))
+        sync_meal_water(conn, new_id)
     meal_saved(conn, user_id, local_date)
     return new_id
 
@@ -827,12 +828,12 @@ def get_last_meal(conn: sqlite3.Connection, user_id: int) -> sqlite3.Row | None:
 
 
 def soft_delete_meal(conn: sqlite3.Connection, user_id: int, meal_id: int) -> bool:
-    cur = conn.execute(
-        "UPDATE meals SET deleted_at = ? WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
-        (utcnow_iso(), meal_id, user_id),
-    )
-    sync_meal_water(conn, meal_id)
-    conn.commit()
+    with write_transaction(conn):
+        cur = conn.execute(
+            "UPDATE meals SET deleted_at = ? WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
+            (utcnow_iso(), meal_id, user_id),
+        )
+        sync_meal_water(conn, meal_id)
     return cur.rowcount > 0
 
 
@@ -863,25 +864,25 @@ def _scaled_values(item: sqlite3.Row, new_grams: float) -> tuple[int, float, flo
 
 def edit_item_grams(conn: sqlite3.Connection, item_id: int, new_grams: float) -> None:
     """Правка граммов: пересчёт от базы на 100 г (у старых строк — пропорционально), meal_edits + audit."""
-    item = conn.execute("SELECT * FROM meal_items WHERE id=?", (item_id,)).fetchone()
-    if not item:
-        return
-    old = item["grams"]
-    kcal, protein, fat, carbs = _scaled_values(item, new_grams)
-    conn.execute(
-        """UPDATE meal_items SET grams=?, kcal=?, protein_g=?, fat_g=?, carbs_g=?,
-           edited_by_user=1 WHERE id=?""",
-        (new_grams, kcal, protein, fat, carbs, item_id),
-    )
-    _resum_meal(conn, item["meal_id"])
-    conn.execute("INSERT INTO meal_edits (meal_item_id, field, old_value, new_value) "
-                 "VALUES (?,?,?,?)", (item_id, "grams", str(old), str(new_grams)))
-    conn.execute(
-        """INSERT INTO audit_events (user_id, entity_type, entity_id, event_type,
-           before_json, after_json) VALUES (?, 'meal_item', ?, 'edit_grams', ?, ?)""",
-        (None, item_id, json.dumps({"grams": old}), json.dumps({"grams": new_grams})),
-    )
-    conn.commit()
+    with write_transaction(conn):
+        item = conn.execute("SELECT * FROM meal_items WHERE id=?", (item_id,)).fetchone()
+        if not item:
+            return
+        old = item["grams"]
+        kcal, protein, fat, carbs = _scaled_values(item, new_grams)
+        conn.execute(
+            """UPDATE meal_items SET grams=?, kcal=?, protein_g=?, fat_g=?, carbs_g=?,
+               edited_by_user=1 WHERE id=?""",
+            (new_grams, kcal, protein, fat, carbs, item_id),
+        )
+        _resum_meal(conn, item["meal_id"])
+        conn.execute("INSERT INTO meal_edits (meal_item_id, field, old_value, new_value) "
+                     "VALUES (?,?,?,?)", (item_id, "grams", str(old), str(new_grams)))
+        conn.execute(
+            """INSERT INTO audit_events (user_id, entity_type, entity_id, event_type,
+               before_json, after_json) VALUES (?, 'meal_item', ?, 'edit_grams', ?, ?)""",
+            (None, item_id, json.dumps({"grams": old}), json.dumps({"grams": new_grams})),
+        )
 
 
 EXACT_SOURCES = ("manual", "barcode", "user", "label")
@@ -930,109 +931,109 @@ def edit_item_manual(conn: sqlite3.Connection, item_id: int, *, name: str | None
     food_ref_id сбрасывается; пересчитываются и per100, и абсолютные значения, вилка и
     уверенность приёма. Только название → только название и флаг правки."""
     from app.domain import manual
-    item = conn.execute("SELECT * FROM meal_items WHERE id=?", (item_id,)).fetchone()
-    if not item:
-        return False
-    meal_id = item["meal_id"]
-    old_total = conn.execute("SELECT kcal_total FROM meals WHERE id=?", (meal_id,)).fetchone()[0]
-    if food is not None:
-        macros = (food["kcal_100g"], food["protein_100g"], food["fat_100g"], food["carbs_100g"])
-        per = "100g"
-        if name is None:
-            name = food["name_ru"]
-    new_grams = float(grams) if grams is not None else item["grams"]
-    cols: dict = {"edited_by_user": 1}
-    if name is not None and name != item["name_ru"]:
-        cols["name_ru"], cols["name_en"] = name, name
-    if grams is not None:
-        cols["grams"] = new_grams
-    if macros is not None:
-        (kcal, protein, fat, carbs), (k100, p100, f100, c100) = manual.derive(
-            new_grams, *macros, per=per)
-        owned = food is not None and food["owner_user_id"] is not None
-        cols.update(
-            kcal=kcal, protein_g=protein, fat_g=fat, carbs_g=carbs, kcal_100g=k100,
-            protein_100g=p100, fat_100g=f100, carbs_100g=c100, confidence=1.0,
-            food_ref_id=food["id"] if food is not None else None,
-            source=(food["nutrition_source"] or ("user" if owned else food["source"]))
-            if food is not None else "manual")
-    elif grams is not None:
-        kcal, protein, fat, carbs = _scaled_values(item, new_grams)
-        cols.update(kcal=kcal, protein_g=protein, fat_g=fat, carbs_g=carbs)
-    conn.execute(f"UPDATE meal_items SET {', '.join(f'{k}=?' for k in cols)} WHERE id=?",
-                 (*cols.values(), item_id))
-    field_names = {"name_ru": "name", "grams": "grams", "kcal": "kcal", "protein_g": "protein",
-                   "fat_g": "fat", "carbs_g": "carbs", "kcal_100g": "kcal_100g",
-                   "protein_100g": "protein_100g", "fat_100g": "fat_100g",
-                   "carbs_100g": "carbs_100g", "source": "source"}
-    before, after = {}, {}
-    for col, field in field_names.items():
-        if col in cols and cols[col] != item[col]:
-            before[field], after[field] = item[col], cols[col]
-            conn.execute("INSERT INTO meal_edits (meal_item_id, field, old_value, new_value) "
-                         "VALUES (?,?,?,?)", (item_id, field, str(item[col]), str(cols[col])))
-    if grams is not None or macros is not None:
-        _resum_meal(conn, meal_id)
-    else:
-        sync_meal_water(conn, meal_id)
-    if macros is not None:
-        _refresh_range(conn, meal_id, old_total)
-    conn.execute(
-        """INSERT INTO audit_events (user_id, entity_type, entity_id, event_type,
-           before_json, after_json) VALUES (?, 'meal_item', ?, 'edit_manual', ?, ?)""",
-        (None, item_id, json.dumps(before, ensure_ascii=False),
-         json.dumps(after, ensure_ascii=False)))
-    conn.commit()
+    with write_transaction(conn):
+        item = conn.execute("SELECT * FROM meal_items WHERE id=?", (item_id,)).fetchone()
+        if not item:
+            return False
+        meal_id = item["meal_id"]
+        old_total = conn.execute("SELECT kcal_total FROM meals WHERE id=?", (meal_id,)).fetchone()[0]
+        if food is not None:
+            macros = (food["kcal_100g"], food["protein_100g"], food["fat_100g"], food["carbs_100g"])
+            per = "100g"
+            if name is None:
+                name = food["name_ru"]
+        new_grams = float(grams) if grams is not None else item["grams"]
+        cols: dict = {"edited_by_user": 1}
+        if name is not None and name != item["name_ru"]:
+            cols["name_ru"], cols["name_en"] = name, name
+        if grams is not None:
+            cols["grams"] = new_grams
+        if macros is not None:
+            (kcal, protein, fat, carbs), (k100, p100, f100, c100) = manual.derive(
+                new_grams, *macros, per=per)
+            owned = food is not None and food["owner_user_id"] is not None
+            cols.update(
+                kcal=kcal, protein_g=protein, fat_g=fat, carbs_g=carbs, kcal_100g=k100,
+                protein_100g=p100, fat_100g=f100, carbs_100g=c100, confidence=1.0,
+                food_ref_id=food["id"] if food is not None else None,
+                source=(food["nutrition_source"] or ("user" if owned else food["source"]))
+                if food is not None else "manual")
+        elif grams is not None:
+            kcal, protein, fat, carbs = _scaled_values(item, new_grams)
+            cols.update(kcal=kcal, protein_g=protein, fat_g=fat, carbs_g=carbs)
+        conn.execute(f"UPDATE meal_items SET {', '.join(f'{k}=?' for k in cols)} WHERE id=?",
+                     (*cols.values(), item_id))
+        field_names = {"name_ru": "name", "grams": "grams", "kcal": "kcal", "protein_g": "protein",
+                       "fat_g": "fat", "carbs_g": "carbs", "kcal_100g": "kcal_100g",
+                       "protein_100g": "protein_100g", "fat_100g": "fat_100g",
+                       "carbs_100g": "carbs_100g", "source": "source"}
+        before, after = {}, {}
+        for col, field in field_names.items():
+            if col in cols and cols[col] != item[col]:
+                before[field], after[field] = item[col], cols[col]
+                conn.execute("INSERT INTO meal_edits (meal_item_id, field, old_value, new_value) "
+                             "VALUES (?,?,?,?)", (item_id, field, str(item[col]), str(cols[col])))
+        if grams is not None or macros is not None:
+            _resum_meal(conn, meal_id)
+        else:
+            sync_meal_water(conn, meal_id)
+        if macros is not None:
+            _refresh_range(conn, meal_id, old_total)
+        conn.execute(
+            """INSERT INTO audit_events (user_id, entity_type, entity_id, event_type,
+               before_json, after_json) VALUES (?, 'meal_item', ?, 'edit_manual', ?, ?)""",
+            (None, item_id, json.dumps(before, ensure_ascii=False),
+             json.dumps(after, ensure_ascii=False)))
     return True
 
 
 def add_meal_item(conn: sqlite3.Connection, meal_id: int, it) -> int:
     """Добавить точную позицию (CalculatedItem из app.domain.manual) в готовый приём."""
-    old_total = conn.execute("SELECT kcal_total FROM meals WHERE id=?", (meal_id,)).fetchone()[0]
-    item_id = _insert_item(conn, meal_id, it)
-    _resum_meal(conn, meal_id)
-    _refresh_range(conn, meal_id, old_total)
-    conn.execute(
-        """INSERT INTO audit_events (user_id, entity_type, entity_id, event_type,
-           before_json, after_json) VALUES (?, 'meal', ?, 'add_item', ?, ?)""",
-        (None, meal_id, json.dumps({}), json.dumps({"item_id": item_id, "name": it.name_ru,
-                                                     "kcal": it.kcal}, ensure_ascii=False)))
-    conn.commit()
+    with write_transaction(conn):
+        old_total = conn.execute("SELECT kcal_total FROM meals WHERE id=?", (meal_id,)).fetchone()[0]
+        item_id = _insert_item(conn, meal_id, it)
+        _resum_meal(conn, meal_id)
+        _refresh_range(conn, meal_id, old_total)
+        conn.execute(
+            """INSERT INTO audit_events (user_id, entity_type, entity_id, event_type,
+               before_json, after_json) VALUES (?, 'meal', ?, 'add_item', ?, ?)""",
+            (None, meal_id, json.dumps({}), json.dumps({"item_id": item_id, "name": it.name_ru,
+                                                         "kcal": it.kcal}, ensure_ascii=False)))
     return item_id
 
 
 def apply_product_to_item(conn: sqlite3.Connection, item_id: int, name: str, kcal_100g: float,
                           protein_100g: float, fat_100g: float, carbs_100g: float) -> None:
     """Позиция уточнена по упаковке (штрихкод): название и КБЖУ на 100 г из продукта, граммы прежние."""
-    item = conn.execute("SELECT * FROM meal_items WHERE id=?", (item_id,)).fetchone()
-    if not item:
-        return
-    scale = item["grams"] / 100.0
-    kcal = max(0, round(kcal_100g * scale / 5) * 5)
-    conn.execute(
-        """UPDATE meal_items SET name_ru=?, kcal=?, protein_g=?, fat_g=?, carbs_g=?,
-           kcal_100g=?, protein_100g=?, fat_100g=?, carbs_100g=?, food_ref_id=NULL,
-           source='barcode', confidence=0.95, edited_by_user=1 WHERE id=?""",
-        (name, kcal, round(protein_100g * scale, 1), round(fat_100g * scale, 1),
-         round(carbs_100g * scale, 1), kcal_100g, protein_100g, fat_100g, carbs_100g, item_id))
-    _resum_meal(conn, item["meal_id"])
-    conn.execute("INSERT INTO meal_edits (meal_item_id, field, old_value, new_value) "
-                 "VALUES (?,?,?,?)", (item_id, "barcode", item["name_ru"], name))
-    conn.execute(
-        """INSERT INTO audit_events (user_id, entity_type, entity_id, event_type,
-           before_json, after_json) VALUES (?, 'meal_item', ?, 'apply_barcode', ?, ?)""",
-        (None, item_id, json.dumps({"name": item["name_ru"], "kcal": item["kcal"]}),
-         json.dumps({"name": name, "kcal": kcal})))
-    conn.commit()
+    with write_transaction(conn):
+        item = conn.execute("SELECT * FROM meal_items WHERE id=?", (item_id,)).fetchone()
+        if not item:
+            return
+        scale = item["grams"] / 100.0
+        kcal = max(0, round(kcal_100g * scale / 5) * 5)
+        conn.execute(
+            """UPDATE meal_items SET name_ru=?, kcal=?, protein_g=?, fat_g=?, carbs_g=?,
+               kcal_100g=?, protein_100g=?, fat_100g=?, carbs_100g=?, food_ref_id=NULL,
+               source='barcode', confidence=0.95, edited_by_user=1 WHERE id=?""",
+            (name, kcal, round(protein_100g * scale, 1), round(fat_100g * scale, 1),
+             round(carbs_100g * scale, 1), kcal_100g, protein_100g, fat_100g, carbs_100g, item_id))
+        _resum_meal(conn, item["meal_id"])
+        conn.execute("INSERT INTO meal_edits (meal_item_id, field, old_value, new_value) "
+                     "VALUES (?,?,?,?)", (item_id, "barcode", item["name_ru"], name))
+        conn.execute(
+            """INSERT INTO audit_events (user_id, entity_type, entity_id, event_type,
+               before_json, after_json) VALUES (?, 'meal_item', ?, 'apply_barcode', ?, ?)""",
+            (None, item_id, json.dumps({"name": item["name_ru"], "kcal": item["kcal"]}),
+             json.dumps({"name": name, "kcal": kcal})))
 
 
 def delete_item(conn: sqlite3.Connection, item_id: int) -> None:
-    item = conn.execute("SELECT meal_id FROM meal_items WHERE id=?", (item_id,)).fetchone()
-    if not item:
-        return
-    conn.execute("DELETE FROM meal_items WHERE id=?", (item_id,))
-    _resum_meal(conn, item["meal_id"])
-    conn.commit()
+    with write_transaction(conn):
+        item = conn.execute("SELECT meal_id FROM meal_items WHERE id=?", (item_id,)).fetchone()
+        if not item:
+            return
+        conn.execute("DELETE FROM meal_items WHERE id=?", (item_id,))
+        _resum_meal(conn, item["meal_id"])
 
 
 def _resum_meal(conn: sqlite3.Connection, meal_id: int) -> None:
@@ -1097,29 +1098,30 @@ def save_body_measurement(conn: sqlite3.Connection, user_id: int, local_date: st
     values = {c: metrics.get(c) for c in cols if metrics.get(c) is not None}
     if not values:
         return None
-    existing = conn.execute(
-        "SELECT id, fasting FROM body_measurements WHERE user_id=? AND local_date=?",
-        (user_id, local_date)).fetchone()
-    if existing and existing["fasting"] == 1 and metrics.get("fasting") == 0:
-        # утренний замер натощак главнее: вечерний не перезаписывает вес дня
-        return existing["id"]
-    if existing:
-        sets = ", ".join(f"{c}=?" for c in values)
-        conn.execute(f"""UPDATE body_measurements SET {sets},
-                         source=?, confidence=?, measured_at_utc=COALESCE(?, measured_at_utc)
-                         WHERE id=?""",
-                     (*values.values(), source, confidence, measured_utc, existing["id"]))
-        mid = existing["id"]
-    else:
-        names = ", ".join(["user_id", "local_date", *cols, "source", "confidence",
-                           "measured_at_utc", "raw_observation_id"])
-        full_vals = [user_id, local_date, *[values.get(c) for c in cols],
-                     source, confidence, measured_utc, raw_id]
-        qmarks = ", ".join(["?"] * len(full_vals))
-        cur = conn.execute(f"INSERT INTO body_measurements ({names}) VALUES ({qmarks})",
-                           full_vals)
-        mid = cur.lastrowid
-    conn.commit()
+    with write_transaction(conn):
+        existing = conn.execute(
+            "SELECT id, fasting FROM body_measurements WHERE user_id=? AND local_date=? "
+            "ORDER BY (fasting IS 1) DESC, id DESC LIMIT 1",
+            (user_id, local_date)).fetchone()
+        if existing and existing["fasting"] == 1 and metrics.get("fasting") == 0:
+            # утренний замер натощак главнее: вечерний не перезаписывает вес дня
+            return existing["id"]
+        if existing:
+            sets = ", ".join(f"{c}=?" for c in values)
+            conn.execute(f"""UPDATE body_measurements SET {sets},
+                             source=?, confidence=?, measured_at_utc=COALESCE(?, measured_at_utc)
+                             WHERE id=?""",
+                         (*values.values(), source, confidence, measured_utc, existing["id"]))
+            mid = existing["id"]
+        else:
+            names = ", ".join(["user_id", "local_date", *cols, "source", "confidence",
+                               "measured_at_utc", "raw_observation_id"])
+            full_vals = [user_id, local_date, *[values.get(c) for c in cols],
+                         source, confidence, measured_utc, raw_id]
+            qmarks = ", ".join(["?"] * len(full_vals))
+            cur = conn.execute(f"INSERT INTO body_measurements ({names}) VALUES ({qmarks})",
+                               full_vals)
+            mid = cur.lastrowid
     return mid
 
 
@@ -1391,42 +1393,42 @@ def replace_meal_items(conn: sqlite3.Connection, user_id: int, meal_id: int,
 
     Запись остаётся той же: id, время и фото сохраняются, второй записи не появляется.
     """
-    meal = conn.execute("SELECT * FROM meals WHERE id=? AND user_id=? AND deleted_at IS NULL",
-                        (meal_id, user_id)).fetchone()
-    if not meal:
-        return False
-    old = [dict(r) for r in get_meal_items(conn, meal_id)]
-    conn.execute("DELETE FROM meal_items WHERE meal_id=?", (meal_id,))
-    _insert_items(conn, meal_id, calc)
-    conn.execute(
-        """UPDATE meals SET kcal_total=?, protein_g=?, fat_g=?, carbs_g=?, kcal_low=?,
-           kcal_high=?, confidence=?, method=?, source=COALESCE(?, source),
-           transcript=COALESCE(?, transcript) WHERE id=?""",
-        (calc.kcal_total, calc.protein_g, calc.fat_g, calc.carbs_g, calc.kcal_low,
-         calc.kcal_high, calc.confidence, calc.method, source, transcript, meal_id),
-    )
-    sync_meal_water(conn, meal_id)
-    conn.execute(
-        """INSERT INTO audit_events (user_id, entity_type, entity_id, event_type,
-           before_json, after_json) VALUES (?, 'meal', ?, 'replace_items', ?, ?)""",
-        (user_id, meal_id, json.dumps({"items": [i["name_ru"] for i in old]}, ensure_ascii=False),
-         json.dumps({"items": [i.name_ru for i in calc.items]}, ensure_ascii=False)),
-    )
-    conn.commit()
+    with write_transaction(conn):
+        meal = conn.execute("SELECT * FROM meals WHERE id=? AND user_id=? AND deleted_at IS NULL",
+                            (meal_id, user_id)).fetchone()
+        if not meal:
+            return False
+        old = [dict(r) for r in get_meal_items(conn, meal_id)]
+        conn.execute("DELETE FROM meal_items WHERE meal_id=?", (meal_id,))
+        _insert_items(conn, meal_id, calc)
+        conn.execute(
+            """UPDATE meals SET kcal_total=?, protein_g=?, fat_g=?, carbs_g=?, kcal_low=?,
+               kcal_high=?, confidence=?, method=?, source=COALESCE(?, source),
+               transcript=COALESCE(?, transcript) WHERE id=?""",
+            (calc.kcal_total, calc.protein_g, calc.fat_g, calc.carbs_g, calc.kcal_low,
+             calc.kcal_high, calc.confidence, calc.method, source, transcript, meal_id),
+        )
+        sync_meal_water(conn, meal_id)
+        conn.execute(
+            """INSERT INTO audit_events (user_id, entity_type, entity_id, event_type,
+               before_json, after_json) VALUES (?, 'meal', ?, 'replace_items', ?, ?)""",
+            (user_id, meal_id, json.dumps({"items": [i["name_ru"] for i in old]}, ensure_ascii=False),
+             json.dumps({"items": [i.name_ru for i in calc.items]}, ensure_ascii=False)),
+        )
     return True
 
 
 def update_meal_time(conn: sqlite3.Connection, user_id: int, meal_id: int, local_date: str,
                      local_time: str, meal_type: str, eaten_utc: str | None = None) -> bool:
     """Перенести приём пищи на другую дату/время (итоги дня считаются по local_date)."""
-    cur = conn.execute(
-        """UPDATE meals SET local_date=?, local_time=?, meal_type=?,
-           eaten_at_utc=COALESCE(?, eaten_at_utc)
-           WHERE id=? AND user_id=? AND deleted_at IS NULL""",
-        (local_date, local_time, meal_type, eaten_utc, meal_id, user_id),
-    )
-    sync_meal_water(conn, meal_id)
-    conn.commit()
+    with write_transaction(conn):
+        cur = conn.execute(
+            """UPDATE meals SET local_date=?, local_time=?, meal_type=?,
+               eaten_at_utc=COALESCE(?, eaten_at_utc)
+               WHERE id=? AND user_id=? AND deleted_at IS NULL""",
+            (local_date, local_time, meal_type, eaten_utc, meal_id, user_id),
+        )
+        sync_meal_water(conn, meal_id)
     return cur.rowcount > 0
 
 
@@ -1630,12 +1632,30 @@ def close_craving(conn: sqlite3.Connection, event_id: int, outcome: str) -> None
     update_craving(conn, event_id, outcome=outcome, closed_utc=utcnow_iso())
 
 
-def add_craving_message(conn: sqlite3.Connection, event_id: int, role: str, text: str) -> None:
+def _insert_craving_message(conn: sqlite3.Connection, event_id: int, role: str, text: str) -> None:
     conn.execute(
         "INSERT INTO craving_messages (event_id, role, text, created_utc) VALUES (?,?,?,?)",
         (event_id, role, text[:2000], utcnow_iso()),
     )
+
+
+def add_craving_message(conn: sqlite3.Connection, event_id: int, role: str, text: str) -> None:
+    _insert_craving_message(conn, event_id, role, text)
     conn.commit()
+
+
+def finish_craving_followup(conn: sqlite3.Connection, event, *, text: str | None = None,
+                            retry_at: str | None = None) -> None:
+    """Применить результат отправки, если эпизод и назначенное время всё ещё актуальны."""
+    with write_transaction(conn):
+        cur = conn.execute(
+            """UPDATE craving_events SET followup_sent=?, followup_at_utc=?
+               WHERE id=? AND outcome='open' AND followup_sent=0 AND followup_at_utc=?""",
+            (int(text is not None), event["followup_at_utc"] if text is not None else retry_at,
+             event["id"], event["followup_at_utc"]),
+        )
+        if text is not None and cur.rowcount:
+            _insert_craving_message(conn, event["id"], "assistant", text)
 
 
 def craving_messages(conn: sqlite3.Connection, event_id: int, limit: int = 20) -> list[sqlite3.Row]:

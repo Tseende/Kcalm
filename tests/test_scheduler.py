@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import os
 import tempfile
+from unittest.mock import AsyncMock
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 import pytest
-from aiogram.exceptions import TelegramBadRequest
-from aiogram.methods import SendPhoto
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
+from aiogram.methods import SendMessage, SendPhoto
 
 from app import scheduler
 from app.db import connect, migrate
@@ -105,6 +106,41 @@ async def test_craving_followup_sent_once(db):
     await scheduler.dispatch_craving_followups(db, bot)
     await scheduler.dispatch_craving_followups(db, bot)
     assert len(bot.sent) == 1 and "10 минут" in bot.sent[0][1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error", [
+    RuntimeError("temporary network failure"),
+    TelegramRetryAfter(SendMessage(chat_id=10, text="test"), "flood control", retry_after=180),
+    TelegramForbiddenError(SendMessage(chat_id=10, text="test"), "bot was blocked"),
+])
+async def test_followup_records_delivery_only_after_success(db, monkeypatch, error):
+    uid, user = _user(db)
+    eid, _, _ = craving.start_episode(db, user, "хочу есть")
+    craving.schedule_followup(db, eid, minutes=-1)
+    history = repo.craving_messages(db, eid)
+    monkeypatch.setattr(craving, "followup_message", AsyncMock(return_value="Как ты &amp; всё ли хорошо?"))
+    bot = FakeBot()
+    transport = AsyncMock(side_effect=error)
+    bot.send_message = transport
+
+    await scheduler.dispatch_craving_followups(db, bot)
+    event = repo.get_craving(db, uid, eid)
+    assert event["followup_sent"] == 0
+    assert repo.craving_messages(db, eid) == history
+    assert repo.due_craving_followups(db) == []
+    if isinstance(error, TelegramForbiddenError):
+        assert event["followup_at_utc"] is None
+        return
+    delay = (datetime.fromisoformat(event["followup_at_utc"]).replace(tzinfo=timezone.utc)
+             - datetime.now(timezone.utc)).total_seconds()
+    assert delay > (170 if isinstance(error, TelegramRetryAfter) else 50)
+
+    craving.schedule_followup(db, eid, minutes=-1)
+    transport.side_effect = None
+    await scheduler.dispatch_craving_followups(db, bot)
+    assert repo.get_craving(db, uid, eid)["followup_sent"] == 1
+    assert repo.craving_messages(db, eid)[-1]["text"] == "Как ты & всё ли хорошо?"
 
 
 @pytest.mark.asyncio

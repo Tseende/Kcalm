@@ -45,7 +45,7 @@ def week_late_summary(days: list[DayIntake]) -> dict:
 
 def compare_late_weeks(week_summaries: list[dict]) -> dict | None:
     """Недели ≤1 позднего вечера против ≥4. Показывать только при ≥3 неделях в группе."""
-    calm = [w["avg_late_kcal"] and w for w in week_summaries if w["late_evenings"] <= 1]
+    calm = [w for w in week_summaries if w["late_evenings"] <= 1]
     wild = [w for w in week_summaries if w["late_evenings"] >= 4]
     if len(calm) < 3 or len(wild) < 3:
         return None

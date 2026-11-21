@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import os
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+from threading import Barrier
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -83,6 +85,38 @@ def test_no_warning_when_everything_is_unknown():
 
 
 # ----------------------------------------------------------------------- запись
+
+def test_concurrent_measurements_share_one_daily_row(tmp_path, monkeypatch):
+    monkeypatch.delenv("HEALTHBOT_TEST_LIBSQL", raising=False)
+    path = tmp_path / "concurrent.db"
+    conn = connect(path)
+    migrate(conn)
+    uid = repo.create_user(conn, 1)
+    conn.close()
+    barrier = Barrier(2)
+
+    def save(weight, fasting):
+        connection = connect(path)
+        try:
+            barrier.wait(timeout=5)
+            return repo.save_body_measurement(connection, uid, "2026-10-25",
+                                              {"weight_kg": weight, "fasting": fasting}, "manual", 0.9)
+        finally:
+            connection.close()
+
+    with ThreadPoolExecutor(2) as executor:
+        morning = executor.submit(save, 85, 1)
+        evening = executor.submit(save, 87, 0)
+        assert morning.result() == evening.result()
+
+    conn = connect(path)
+    try:
+        rows = conn.execute("SELECT weight_kg, fasting FROM body_measurements WHERE user_id=?", (uid,)).fetchall()
+        assert [tuple(row) for row in rows] == [(85, 1)]
+    finally:
+        conn.close()
+
+
 
 def test_evening_weight_does_not_overwrite_morning(db):
     uid = repo.create_user(db, 1)

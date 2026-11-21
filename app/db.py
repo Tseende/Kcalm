@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sqlite3
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
@@ -135,12 +137,14 @@ class LibsqlConnection:
     def execute(self, sql: str, params=()):
         args = params if isinstance(params, dict) else tuple(params)
         self._close_orphan_tx()
+        explicit_tx = self._explicit and self.in_transaction_safe()
         try:
             return _Cursor(self._raw.execute(sql, args))
         except Exception as e:  # noqa: BLE001
-            # Чтение повторяем всегда; запись — только вне открытой транзакции, чтобы не продублировать часть её.
+            # Явную транзакцию прерываем целиком: новое соединение не видит её изменений.
             read = sql.lstrip()[:6].upper() in ("SELECT", "PRAGMA")
-            if not self._reopen or not self._is_stale(e) or (not read and self.in_transaction_safe()):
+            if (not self._reopen or not self._is_stale(e) or explicit_tx
+                    or (not read and self.in_transaction_safe())):
                 raise
             self._reconnect()
             return _Cursor(self._raw.execute(sql, args))
@@ -202,10 +206,14 @@ class LibsqlConnection:
 
     def __exit__(self, exc_type, exc, tb) -> None:
         self._explicit -= 1
-        if exc_type is None:
-            self.commit()
-        else:
+        if exc_type is not None:
             self.rollback()
+            return
+        try:
+            self.commit()
+        except BaseException:
+            self.rollback()
+            raise
 
 
 def connect(db_path: str | Path, *, url: str = "", token: str = ""):
@@ -242,6 +250,29 @@ def connect_from_config(cfg):
     return connect(cfg.db_path, url=cfg.turso_database_url, token=cfg.turso_auth_token)
 
 
+@contextmanager
+def write_transaction(conn):
+    """Закрепить право записи до первого чтения и откатить всю операцию при сбое."""
+    with conn:
+        if not conn.in_transaction:
+            conn.execute("BEGIN IMMEDIATE")
+        yield
+
+
+def _migration_statements(script: str):
+    """Разделить SQL с учётом строк, комментариев и тел триггеров."""
+    start = 0
+    for end in re.finditer(";", script):
+        statement = script[start:end.end()]
+        if sqlite3.complete_statement(statement):
+            start = end.end()
+            if statement.strip() != ";":
+                yield statement
+    tail = script[start:]
+    if re.sub(r"--[^\n]*|/\*[\s\S]*?\*/", "", tail).strip():
+        yield tail
+
+
 def user_version(conn) -> int:
     if isinstance(conn, LibsqlConnection):
         # В облаке версия лежит в таблице: PRAGMA user_version на удалённой БД ненадёжна.
@@ -266,13 +297,19 @@ def migrate(conn, migrations_dir: Path = MIGRATIONS_DIR) -> int:
     Возвращает номер версии после миграции. Каждая миграция — отдельный файл
     NNN_name.sql, версия = числовой префикс имени.
     """
-    files = sorted(MIGRATIONS_DIR.glob("*.sql"))
+    files = sorted(migrations_dir.glob("*.sql"))
     applied = user_version(conn)
     for f in files:
         version = int(f.name.split("_", 1)[0])
         if version <= applied:
             continue
-        with conn:
-            conn.executescript(f.read_text(encoding="utf-8"))
+        script = f.read_text(encoding="utf-8")
+        with write_transaction(conn):
+            applied = user_version(conn)
+            if version <= applied:
+                continue
+            for statement in _migration_statements(script):
+                conn.execute(statement)
             _set_version(conn, version)
-    return user_version(conn)
+        applied = version
+    return applied

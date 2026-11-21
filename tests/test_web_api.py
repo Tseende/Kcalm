@@ -824,6 +824,38 @@ async def test_activity_middleware_ignores_healthz(client, monkeypatch):
     assert scheduler._last_activity is not None
 
 
+async def test_static_gzip_negotiation_and_ranges(client):
+    url = "/app/js/main.js"
+    source = (server.STATIC_DIR / "js/main.js").read_bytes()
+    response = await client.get(url, headers={"Accept-Encoding": "GZip"})
+    assert response.status == 200
+    assert response.headers["Content-Encoding"] == "gzip"
+    assert response.headers["Vary"] == "Accept-Encoding"
+    assert await response.read() == source
+
+    plain = await client.get(url, headers={"Accept-Encoding": "gzip;q=0, *;q=1"})
+    assert plain.status == 200
+    assert "Content-Encoding" not in plain.headers
+    assert plain.headers["Vary"] == "Accept-Encoding"
+    assert plain.headers["ETag"] != response.headers["ETag"]
+    assert await plain.read() == source
+
+    cached = await client.get(url, headers={"Accept-Encoding": "gzip",
+                                          "If-None-Match": response.headers["ETag"]})
+    assert cached.status == 304 and cached.headers["Vary"] == "Accept-Encoding"
+    assert await cached.read() == b""
+
+    head = await client.head(url, headers={"Accept-Encoding": "gzip"})
+    assert head.headers["ETag"] == response.headers["ETag"]
+    assert head.headers["Content-Length"] == response.headers["Content-Length"]
+    assert await head.read() == b""
+
+    partial = await client.get(url, headers={"Accept-Encoding": "gzip", "Range": "bytes=0-63"})
+    assert partial.status == 206
+    assert "Content-Encoding" not in partial.headers
+    assert await partial.read() == source[:64]
+
+
 async def test_static_files_and_traversal(client):
     css = await client.get("/app/css/app.css")
     assert css.status == 200 and "text/css" in css.headers["Content-Type"]

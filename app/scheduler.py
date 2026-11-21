@@ -11,11 +11,11 @@ import logging
 import os
 import sqlite3
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 from aiogram.types import FSInputFile
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -281,10 +281,21 @@ async def dispatch_craving_followups(db: sqlite3.Connection, bot) -> None:
             user = repo.get_user_by_tg(db, event["tg_id"])
             text = (await craving.followup_message(db, user, event) if user
                     else craving.followup_text(event))
+            current = repo.get_craving(db, event["user_id"], event["id"])
+            if (not current or current["outcome"] != "open" or current["followup_sent"]
+                    or current["followup_at_utc"] != event["followup_at_utc"]):
+                continue
             await bot.send_message(event["tg_id"], text)
-        except Exception:  # noqa: BLE001
+        except (TelegramForbiddenError, TelegramBadRequest):
+            log.warning("Telegram отклонил продолжение эпизода id=%s", event["id"], exc_info=True)
+            repo.finish_craving_followup(db, event)
+        except Exception as exc:  # noqa: BLE001 — временный сбой, повторит планировщик
             log.exception("не отправлено продолжение эпизода id=%s", event["id"])
-        repo.update_craving(db, event["id"], followup_sent=1)
+            delay = max(60, exc.retry_after) if isinstance(exc, TelegramRetryAfter) else 60
+            retry_at = datetime.now(timezone.utc) + timedelta(seconds=delay)
+            repo.finish_craving_followup(db, event, retry_at=retry_at.strftime("%Y-%m-%d %H:%M:%S"))
+        else:
+            repo.finish_craving_followup(db, event, text=html.unescape(text))
 
 
 def _is_due(kind: str, local_time: str, now: datetime, days: str | None = None) -> bool:

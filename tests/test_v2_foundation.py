@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import shutil
+import sqlite3
 import tempfile
 
 import pytest
@@ -104,14 +106,12 @@ def test_second_activity_screenshot_keeps_earlier_values(db):
 
 def test_migrations_014_015_backfill_on_v13_db(tmp_path):
     conn = connect(tmp_path / "v13.db")
-    # применяем всё до 013 включительно, как на боевой базе
-    for f in sorted(MIGRATIONS_DIR.glob("*.sql")):
-        v = int(f.name.split("_", 1)[0])
-        if v > 13:
-            break
-        conn.executescript(f.read_text(encoding="utf-8"))
-        conn.execute(f"PRAGMA user_version = {v}")
-    assert user_version(conn) == 13
+    old_migrations = tmp_path / "v13"
+    old_migrations.mkdir()
+    for script in MIGRATIONS_DIR.glob("*.sql"):
+        if int(script.name.split("_", 1)[0]) <= 13:
+            shutil.copyfile(script, old_migrations / script.name)
+    assert migrate(conn, old_migrations) == 13
     uid = repo.create_user(conn, 5)
     fid = repo.upsert_food(conn, "рис", "rice", 130, 2.7, 0.3, 28, "user", "r1")
     conn.execute("INSERT INTO meals (id, user_id, eaten_at_utc, local_date, local_time, "
@@ -134,3 +134,47 @@ def test_migrations_014_015_backfill_on_v13_db(tmp_path):
     assert [(r["meal_id"], r["path"]) for r in conn.execute("SELECT * FROM meal_photos")] == \
         [(1, "p1.jpg")]
     conn.close()
+
+
+def test_failed_migration_rolls_back_and_can_run_again(tmp_path):
+    migrations = tmp_path / "migrations"
+    migrations.mkdir()
+    first = migrations / "001_data.sql"
+    first.write_text("CREATE TABLE data(value TEXT); INSERT INTO data VALUES ('a;b');", encoding="utf8")
+    second = migrations / "002_events.sql"
+    second.write_text("CREATE TABLE events(value TEXT); INSERT INTO absent VALUES (1);", encoding="utf8")
+    conn = connect(tmp_path / "test.db")
+    try:
+        # The SQLite and libSQL drivers use different exception types for failed statements.
+        with pytest.raises((sqlite3.OperationalError, ValueError), match="absent"):
+            migrate(conn, migrations)
+        assert user_version(conn) == 1
+        assert conn.execute("SELECT value FROM data").fetchone()[0] == "a;b"
+        assert conn.execute("SELECT name FROM sqlite_master WHERE name='events'").fetchone() is None
+        second.write_text("CREATE TABLE events(value TEXT);", encoding="utf8")
+        assert migrate(conn, migrations) == 2
+        assert migrate(conn, migrations) == 2
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("replace", [False, True])
+def test_meal_write_rolls_back_before_unrelated_commit(db, monkeypatch, replace):
+    uid = repo.create_user(db, 1)
+    mid = _meal(db, uid) if replace else None
+
+    def fail(*_args):
+        raise RuntimeError("item writing failed")
+
+    monkeypatch.setattr(repo, "_insert_items", fail)
+    with pytest.raises(RuntimeError, match="item writing failed"):
+        if replace:
+            repo.replace_meal_items(db, uid, mid, _calc(100))
+        else:
+            _meal(db, uid)
+    repo.create_user(db, 2)
+    if replace:
+        assert repo.get_meal_items(db, mid)[0]["grams"] == 200
+        assert repo.get_meal(db, uid, mid)["kcal_total"] == 220
+    else:
+        assert db.execute("SELECT COUNT(*) FROM meals").fetchone()[0] == 0

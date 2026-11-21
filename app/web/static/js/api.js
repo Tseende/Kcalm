@@ -1,5 +1,4 @@
 // Fetch wrapper for the Mini App <-> bot API (see docs/V2_API.md).
-import { mockRequest, mockCsv } from './mock.js';
 import { t } from './i18n.js';
 
 export const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
@@ -13,6 +12,11 @@ const modeListeners = [];
 
 export const isMock = () => mockMode;
 export const onMockEnabled = (fn) => modeListeners.push(fn);
+
+async function requestMock(method, path, query, body) {
+  const { mockRequest } = await import('./mock.js');
+  return mockRequest(method, path, query || {}, body);
+}
 
 function enableMock() {
   if (mockMode) return;
@@ -66,7 +70,7 @@ function authHeaders() {
 }
 
 async function request(method, path, { query, body, timeout = 30000 } = {}) {
-  if (mockMode) return mockRequest(method, path, query || {}, body);
+  if (mockMode) return requestMock(method, path, query, body);
   const headers = authHeaders();
   const init = { method, headers };
   if (body instanceof FormData) init.body = body;
@@ -86,7 +90,7 @@ async function request(method, path, { query, body, timeout = 30000 } = {}) {
     } catch (e) {
       if (!realOk && isLocalHost) {
         enableMock();
-        return mockRequest(method, path, query || {}, body);
+        return requestMock(method, path, query, body);
       }
       if (e && e.name === 'AbortError') throw timedOut();
       throw new ApiError(0, 'network', t('err.network'));
@@ -106,7 +110,7 @@ async function request(method, path, { query, body, timeout = 30000 } = {}) {
     if (!res.ok) {
       if (!realOk && isLocalHost && !ct.includes('json') && [404, 405, 501].includes(res.status)) {
         enableMock();
-        return mockRequest(method, path, query || {}, body);
+        return requestMock(method, path, query, body);
       }
       throw errorFrom(res.status, data);
     }
@@ -176,6 +180,7 @@ export async function downloadCsv(kind) {
   let blob;
   let name = kind + '.csv';
   if (mockMode) {
+    const { mockCsv } = await import('./mock.js');
     blob = new Blob([mockCsv(kind)], { type: 'text/csv;charset=utf-8' });
   } else {
     const res = await fetch(BASE + '/export.csv' + qs({ kind }), { headers: authHeaders() });

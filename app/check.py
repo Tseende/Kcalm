@@ -343,10 +343,10 @@ def t_insights():
     assert not analytics.plateau_check(0.5, 300).is_plateau
 
     # сравнение недель по поздней еде: <3 недель в группе → None
-    w = lambda late: {"late_evenings": late, "avg_late_kcal": 300, "late_share": 0.1}  # noqa: E731
+    w = lambda late: {"late_evenings": late, "avg_late_kcal": 300 if late else 0, "late_share": 0.1}  # noqa: E731
     assert analytics.compare_late_weeks([w(0), w(0), w(0), w(5), w(5)]) is None
     cmp = analytics.compare_late_weeks([w(0)] * 3 + [w(5)] * 3)
-    assert cmp and cmp["wild_avg_kcal"] == 300
+    assert cmp and cmp["calm_avg_kcal"] == 0 and cmp["wild_avg_kcal"] == 300
 
     # EWMA на ряде с пропусками
     from app.domain.targets import ewma

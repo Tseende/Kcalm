@@ -2,10 +2,6 @@
 // t(ключ, {имя: значение}) подставляет {имя}; tn(ключ, n, vars) выбирает форму числа (ru: one/few/many, en: one/other).
 // Язык выбирается один раз при загрузке (после смены в настройках страница перезагружается):
 //   ?lang=en|ru в адресе -> localStorage 'lang' -> language_code пользователя Telegram -> русский.
-import ru from './i18n/ru.js';
-import en from './i18n/en.js';
-
-const DICTS = { ru, en };
 const RU_LIKE = ['ru', 'uk', 'be', 'kk'];   // ru/uk/be/kk -> русский, всё остальное -> английский
 const KEY = 'lang';
 
@@ -24,7 +20,10 @@ function fromTelegram() {
   } catch (e) { return null; }
 }
 
-let cur = fromUrl() || stored() || fromTelegram() || 'ru';
+const cur = fromUrl() || stored() || fromTelegram() || 'ru';
+const { default: dict } = cur === 'en'
+  ? await import('./i18n/en.js')
+  : await import('./i18n/ru.js');
 try { document.documentElement.lang = cur; } catch (e) { /* без документа */ }
 
 export const lang = () => cur;
@@ -45,10 +44,9 @@ export function setLang(v) {
 
 const warned = new Set();
 function lookup(key) {
-  const d = DICTS[cur];
-  if (d && key in d) return d[key];
+  if (Object.prototype.hasOwnProperty.call(dict, key)) return dict[key];
   if (cur !== 'ru' && !warned.has(key)) { warned.add(key); console.warn('[i18n] нет перевода:', key); }
-  return key in ru ? ru[key] : key;
+  return key;
 }
 const fill = (s, vars) => (vars ? String(s).replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m)) : String(s));
 

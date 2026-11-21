@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import gzip
 import hashlib
 import importlib
 import inspect
@@ -15,6 +16,7 @@ import logging
 import re
 import sqlite3
 from datetime import date, datetime, timedelta
+from functools import lru_cache
 from pathlib import Path
 
 from aiohttp import web
@@ -1839,13 +1841,81 @@ async def root(request: web.Request) -> web.Response:
     raise web.HTTPFound("/app/")
 
 
+STATIC_TEXT_TYPES = {
+    ".html": "text/html",
+    ".css": "text/css",
+    ".js": "text/javascript",
+    ".svg": "image/svg+xml",
+}
+
+
+@lru_cache(maxsize=128)
+def _gzip_asset(path: Path, etag: str) -> bytes:
+    # ETag входит в ключ, чтобы при изменении файла сжать его заново.
+    return gzip.compress(path.read_bytes(), compresslevel=6, mtime=0)
+
+
+async def _static_response(request: web.Request, path: Path) -> web.StreamResponse:
+    headers = {**NO_CACHE, "X-Content-Type-Options": "nosniff"}
+    content_type = STATIC_TEXT_TYPES.get(path.suffix)
+    if content_type is None:
+        return web.FileResponse(path, headers=headers)
+
+    headers["Vary"] = "Accept-Encoding"
+    # Частичный ответ должен сохранить смещения в байтах исходного файла.
+    if "Range" in request.headers or not _accepts_gzip(request):
+        return web.FileResponse(path, headers=headers)
+
+    stat = await asyncio.to_thread(path.stat)
+    etag = f"{stat.st_mtime_ns:x}-{stat.st_size:x}-gzip"
+    if_match = request.if_match
+    if if_match is not None:
+        if not any(tag.value == "*" or (tag.value == etag and not tag.is_weak) for tag in if_match):
+            return web.Response(status=412, headers=headers)
+    elif request.if_unmodified_since and stat.st_mtime > request.if_unmodified_since.timestamp():
+        return web.Response(status=412, headers=headers)
+
+    if_none_match = request.if_none_match
+    if if_none_match is not None:
+        unchanged = any(tag.value in ("*", etag) for tag in if_none_match)
+    else:
+        unchanged = bool(request.if_modified_since and stat.st_mtime <= request.if_modified_since.timestamp())
+
+    if unchanged:
+        response = web.Response(status=304, headers=headers)
+    else:
+        body = await asyncio.to_thread(_gzip_asset, path, etag)
+        headers["Content-Encoding"] = "gzip"
+        charset = "utf-8" if path.suffix != ".svg" else None
+        response = web.Response(body=body, headers=headers, content_type=content_type, charset=charset)
+    response.etag = etag
+    response.last_modified = stat.st_mtime
+    return response
+
+
+def _accepts_gzip(request: web.Request) -> bool:
+    qualities = {}
+    for header in request.headers.getall("Accept-Encoding", []):
+        for encoding in header.lower().split(","):
+            name, sep, parameter = encoding.partition(";")
+            key, _, value = parameter.strip().partition("=")
+            if not sep:
+                qualities[name.strip()] = 1.0
+            elif key.strip() == "q":
+                try:
+                    qualities[name.strip()] = float(value)
+                except ValueError:
+                    qualities[name.strip()] = 0.0
+    return 0 < qualities.get("gzip", qualities.get("*", 0)) <= 1
+
+
 @routes.get("/app")
 @routes.get("/app/")
 async def app_index(request: web.Request) -> web.StreamResponse:
     index = STATIC_DIR / "index.html"
     if not index.is_file():
         raise web.HTTPNotFound()
-    return web.FileResponse(index, headers=NO_CACHE)
+    return await _static_response(request, index)
 
 
 @routes.get("/app/{path:.+}")
@@ -1854,7 +1924,7 @@ async def app_file(request: web.Request) -> web.StreamResponse:
     path = (root_dir / request.match_info["path"]).resolve()
     if root_dir not in path.parents or not path.is_file():
         raise web.HTTPNotFound()
-    return web.FileResponse(path, headers={**NO_CACHE, "X-Content-Type-Options": "nosniff"})
+    return await _static_response(request, path)
 
 
 # ------------------------------------------------------------------ сборка и запуск
