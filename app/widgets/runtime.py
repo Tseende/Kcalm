@@ -24,8 +24,8 @@ class Runtime:
     cfg: Config
     loop: asyncio.AbstractEventLoop
     username: str = ""
-    # (user_id, local_date): сегодня Telegram виджет не принял (старый сервер, ошибка), больше не пробуем
-    blocked: set = field(default_factory=set)
+    # (user_id, local_date): Telegram не принял виджет паузы, не повторяем сегодня
+    pause_blocked: set = field(default_factory=set)
     # (user_id, local_date): человек удалил карточку дня, новую в тот же день не навязываем
     deleted: set = field(default_factory=set)
 

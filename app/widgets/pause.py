@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from aiogram.exceptions import TelegramAPIError
 
-from app.services import craving as cravingsvc
+from app.services import craving as cravingsvc, referral
 from app.storage import repo
 from app.timeutils import local_now
 from app.widgets import chatdata, pages, runtime
@@ -54,10 +54,10 @@ async def _send_later(rt, user_id: int, event_id: int) -> None:
 async def send(rt, user_id: int, event_id: int) -> str:
     db = rt.db
     user = repo.get_user_by_id(db, user_id)
-    if not user or not rt.cfg.is_allowed(user["tg_id"]):
+    if not user or not referral.has_access(db, user["tg_id"], rt.cfg):
         return "skipped"
     today = local_now(user["tz"]).strftime("%Y-%m-%d")
-    if repo.widget_for_ref(db, "pause", event_id) or (user_id, today) in rt.blocked:
+    if repo.widget_for_ref(db, "pause", event_id) or (user_id, today) in rt.pause_blocked:
         return "skipped"
     event = repo.get_craving(db, user_id, event_id)
     if not event or event["outcome"] != "open":
@@ -69,7 +69,7 @@ async def send(rt, user_id: int, event_id: int) -> str:
             caption="Пауза", allow_queries=True, disable_notification=True))
     except TelegramAPIError as e:
         log.info("widgets: sendWidget (пауза) отклонён (%s), сегодня не повторяю", e)
-        rt.blocked.add((user_id, today))
+        rt.pause_blocked.add((user_id, today))
         return "skipped"
     repo.add_widget_message(db, user_id, "pause", today, msg.chat.id, msg.message_id, event_id)
     return "sent"

@@ -10,7 +10,7 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.methods import SendMessage
+from aiogram.methods import AnswerCallbackQuery, EditMessageText, SendMessage
 from aiogram.types import Chat, Message
 
 from app.config import get_config
@@ -27,7 +27,7 @@ class WSession(FakeSession):
     def __init__(self) -> None:
         super().__init__()
         self.calls: list = []
-        self.fail_send = False
+        self.send_error = None
         self._mid = 1000
 
     async def make_request(self, bot, method, timeout=None):  # noqa: ANN001
@@ -35,13 +35,13 @@ class WSession(FakeSession):
             self.calls.append(method)
             self.methods.append(type(method).__name__)
             if isinstance(method, api.SendWidget):
-                if self.fail_send:
-                    raise TelegramBadRequest(method=method, message="Bad Request: method not found")
+                if self.send_error:
+                    raise TelegramBadRequest(method=method, message=self.send_error)
                 self._mid += 1
                 return Message(message_id=self._mid, date=dt.datetime.now(tz=dt.timezone.utc),
                                chat=Chat(id=method.chat_id, type="private"), text="w").as_(bot)
             return True
-        if isinstance(method, SendMessage):
+        if isinstance(method, (SendMessage, EditMessageText, AnswerCallbackQuery)):
             self.calls.append(method)
         return await super().make_request(bot, method, timeout)
 
@@ -291,15 +291,40 @@ async def test_first_record_sends_second_only_edits(env):
     assert json.loads(session.of(api.EditMessageWidgetData)[-1].chat_data)["w"][0] == 250
 
 
-async def test_send_failure_is_not_retried_same_day(env):
+async def test_send_failure_is_retried_on_next_record(env):
     bot, dp, session, uid, rt = env
-    session.fail_send = True
+    session.send_error = "Bad Request: method not found"
     eat(rt.db, uid)
     await day.wait_idle()
+    session.send_error = None
     eat(rt.db, uid, 100, "12:00", "lunch")
     await day.wait_idle()
-    assert len(session.of(api.SendWidget)) == 1
-    assert repo.widget_for_day(rt.db, uid, "day", foodsvc.local_now("Europe/Minsk").strftime("%Y-%m-%d")) is None
+    assert len(session.of(api.SendWidget)) == 2
+    today = foodsvc.local_now("Europe/Minsk").date().isoformat()
+    assert repo.widget_for_day(rt.db, uid, "day", today)
+
+
+async def test_restricted_widget_falls_back_to_interactive_message(env):
+    bot, dp, session, uid, rt = env
+    session.send_error = "Bad Request: INPUT_MEDIA_WIDGET_NOT_ALLOWED"
+    eat(rt.db, uid)
+    await day.wait_idle()
+    [card] = session.of(SendMessage)
+    assert "Карточка дня" in card.text
+    today = foodsvc.local_now("Europe/Minsk").date().isoformat()
+    row = repo.widget_for_day(rt.db, uid, day.MESSAGE_KIND, today)
+    await dp.feed_raw_update(bot, {"update_id": 6, "callback_query": {
+        "id": "cb1", "chat_instance": "ci",
+        "from": {"id": 1, "is_bot": False, "first_name": "T"},
+        "message": {"message_id": row["message_id"], "date": 0,
+                    "chat": {"id": 1, "type": "private"}},
+        "data": card.reply_markup.inline_keyboard[0][0].callback_data,
+    }})
+    await day.wait_idle()
+    assert repo.day_water_ml(rt.db, uid, today) == 250
+    assert session.of(AnswerCallbackQuery)[-1].text == "+250 мл ✓"
+    assert "Вода — 250" in session.of(EditMessageText)[-1].text
+    assert len(session.of(SendMessage)) == len(session.of(api.SendWidget)) == 1
 
 
 async def test_touch_is_noop_without_runtime_or_when_disabled(db, monkeypatch):  # noqa: F811

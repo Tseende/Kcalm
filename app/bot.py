@@ -22,7 +22,7 @@ from app.scheduler import build_scheduler
 from app.services import referral
 from app.storage import photos
 from app.web.server import WEBHOOK_PATH, start_web
-from app.widgets import runtime as widgets_runtime
+from app.widgets import handler as widgets_handler, runtime as widgets_runtime
 from app.widgets.dispatcher import WidgetDispatcher
 
 log = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ BOT_COMMANDS = [
     BotCommand(command="undo", description="Отменить последнюю запись"),
 ]
 
-ROUTERS = (onboarding.router, menu.router, reports.router, commands.router, support.router, craving.router, dishes.router, products.router, tracking.router, intake.router)
+ROUTERS = (onboarding.router, menu.router, reports.router, commands.router, support.router, craving.router, dishes.router, products.router, tracking.router, widgets_handler.router, intake.router)
 
 
 ERROR_TEXT = "Что-то пошло не так, попробуй ещё раз."

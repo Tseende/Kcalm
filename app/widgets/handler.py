@@ -7,16 +7,18 @@ from __future__ import annotations
 
 import logging
 
-from aiogram import Bot
+from aiogram import Bot, F, Router
+from aiogram.types import CallbackQuery
 from aiogram.exceptions import TelegramAPIError
 
-from app.services import water as watersvc
+from app.services import referral, water as watersvc
 from app.storage import repo
 from app.timeutils import local_now
 from app.widgets import day, pause, runtime
 from app.widgets.api import AnswerWidgetQuery, WidgetQuery
 
 log = logging.getLogger(__name__)
+router = Router(name="daycard")
 
 FAIL = "Не получилось, попробуйте ещё раз"
 UNKNOWN = "Не понял команду"
@@ -59,8 +61,8 @@ async def _process(raw: dict) -> tuple[str, object | None]:
         return DISABLED, None
     if query is None or query.chat_id is None or query.message_id is None:
         return UNKNOWN, None
-    if not rt.cfg.is_allowed(query.user_id):
-        log.info("widgets: запрос от %s отклонён whitelist", query.user_id)
+    if not referral.has_access(rt.db, query.user_id, rt.cfg):
+        log.info("widgets: доступ к карточке для %s отклонён", query.user_id)
         return FAIL, None
     row = repo.widget_by_message(rt.db, query.chat_id, query.message_id)
     user = repo.get_user_by_tg(rt.db, query.user_id)
@@ -73,6 +75,26 @@ async def _process(raw: dict) -> tuple[str, object | None]:
     if row["kind"] == "pause" and code in PAUSE_CODES:
         return await pause.handle(rt, user, row, code)
     return UNKNOWN, None
+
+
+@router.callback_query(F.data.startswith(day.WATER_CALLBACK))
+async def message_card_water(cb: CallbackQuery) -> None:
+    rt = runtime.active()
+    code = cb.data.removeprefix(day.WATER_CALLBACK)
+    if rt is None or cb.message is None or cb.message.chat.id != cb.from_user.id or code not in WATER_CODES:
+        await cb.answer(FAIL)
+        return
+    row = repo.widget_by_message(rt.db, cb.message.chat.id, cb.message.message_id)
+    user = repo.get_user_by_tg(rt.db, cb.from_user.id)
+    if not row or not user or row["kind"] != day.MESSAGE_KIND or row["user_id"] != user["id"]:
+        await cb.answer(FAIL)
+        return
+    text, follow = await _water(rt, user, row, code)
+    try:
+        await cb.answer(text)
+    finally:
+        if follow is not None:
+            await follow
 
 
 async def _water(rt, user, row, code: str) -> tuple[str, object | None]:
