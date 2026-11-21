@@ -1,30 +1,38 @@
 // "Мои продукты" list
 import { api } from '../api.js';
-import { drinkPic, foodPic, foodPicKey, foodGroupOf, FOOD_GROUPS, groupLabel } from '../pics.js';
+import { assetUrl, drinkPic, foodPic, foodPicKey, foodGroupOf, FOOD_GROUPS, groupLabel } from '../pics.js';
 import { h, icon, tile, nav, pageHead, sheet, skeletonCards, emptyState, errorState, debounce, fmtN, mainButton, macroChips } from '../ui.js';
-import { COLUMNS, ROWS, KEYS } from '../food_atlas.js';
+import { COLUMNS, TILES } from '../food_atlas.js';
 import { t, tn } from '../i18n.js';
 
 const PALETTE = ['blue', 'green', 'orange', 'purple', 'teal', 'pink', 'red'];
 const ORDER = [...new Set([...FOOD_GROUPS.map(([t]) => t), 'Другое'])];
 const PAGE_SIZE = 40;
 const ATLAS_THRESHOLD = 120;
-const ATLAS = new URL('../../img/food-atlas.webp', import.meta.url).href;
-const ATLAS_INDEX = new Map(KEYS.map((key, i) => [key, i]));
+const ATLAS_INDEX = new Map(TILES.flatMap(({ asset, rows, keys }) => {
+  const url = assetUrl(asset);
+  return keys.map((key, i) => [key, { url, rows, i }]);
+}));
 const DRINKS = '\u0000drinks';   // служебный ключ чипа «Напитки» (каталог напитков, не свои продукты)
 
-function cataloguePic(product, useAtlas) {
+function cataloguePic(product, useAtlas, observer) {
   const key = useAtlas ? foodPicKey(product.name, product.icon) : null;
-  const i = ATLAS_INDEX.get(key);
-  if (i === undefined) return foodPic(product.name, 48, product.icon);
-  const x = (i % COLUMNS) * 100 / Math.max(1, COLUMNS - 1);
-  const y = Math.floor(i / COLUMNS) * 100 / Math.max(1, ROWS - 1);
-  return h('span', { class: 'pic', 'aria-hidden': 'true', style: { width: '48px', height: '48px' } },
-    h('span', { class: 'pic-sprite', style: {
-      backgroundImage: `url("${ATLAS}")`,
-      backgroundSize: `${COLUMNS * 100}% ${ROWS * 100}%`,
-      backgroundPosition: `${x}% ${y}%`,
-    } }));
+  const cell = ATLAS_INDEX.get(key);
+  if (!cell) return foodPic(product.name, 48, product.icon);
+  const { i, rows, url } = cell;
+  const x = (i % COLUMNS) * 100 / (COLUMNS - 1);
+  const y = Math.floor(i / COLUMNS) * 100 / Math.max(1, rows - 1);
+  const sprite = h('span', { class: 'pic-sprite', style: {
+    backgroundSize: `${COLUMNS * 100}% ${rows * 100}%`,
+    backgroundPosition: `${x}% ${y}%`,
+  } });
+  if (observer) {
+    sprite.dataset.spriteUrl = url;
+    observer.observe(sprite);
+  } else {
+    sprite.style.backgroundImage = `url("${url}")`;
+  }
+  return h('span', { class: 'pic', 'aria-hidden': 'true', style: { width: '48px', height: '48px' } }, sprite);
 }
 
 
@@ -43,6 +51,13 @@ export default async function render(root, ctx) {
 
   let all = [];
   let cat = null;
+  const observer = typeof IntersectionObserver === 'function' ? new IntersectionObserver((entries) => {
+    for (const { target, isIntersecting } of entries) {
+      if (!isIntersecting || !target.isConnected) continue;
+      target.style.backgroundImage = `url("${target.dataset.spriteUrl}")`;
+      observer.unobserve(target);
+    }
+  }, { rootMargin: '160px' }) : null;
 
   function openAdd() {
     const go = (path) => { s.close(); nav.go(path); };
@@ -54,6 +69,7 @@ export default async function render(root, ctx) {
   }
 
   function paint() {
+    observer?.disconnect();
     const groups = new Map();
     for (const p of all) {
       const g = p.group;
@@ -71,7 +87,7 @@ export default async function render(root, ctx) {
     const shown = cat ? all.filter((p) => p.group === cat) : all;
     const rows = h('div', { class: 'list tiles prod-list' });
     const row = (p) => h('button', { class: 'row prod-row', type: 'button', onclick: () => nav.go('/menu/product/' + p.id) },
-      cataloguePic(p, shown.length >= ATLAS_THRESHOLD) || tile('package', PALETTE[Math.abs(Number(p.id) || 0) % PALETTE.length]),
+      cataloguePic(p, shown.length >= ATLAS_THRESHOLD, observer) || tile('package', PALETTE[Math.abs(Number(p.id) || 0) % PALETTE.length]),
       h('span', { class: 'grow' },
         h('span', { class: 'row-title' }, p.name),
         p.brand ? h('span', { class: 'row-sub' }, p.brand) : null,
@@ -131,4 +147,5 @@ export default async function render(root, ctx) {
     } catch (e) { if (ctx.alive()) errorState(list, e, load); }
   }
   await load();
+  return () => observer?.disconnect();
 }

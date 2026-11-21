@@ -26,8 +26,6 @@ from app.routers import commands, intake, onboarding
 from app.services import food as foodsvc
 from app.storage import repo
 
-pytestmark = pytest.mark.asyncio
-
 TOKEN = "42:TEST-TOKEN"
 _ids = itertools.count(1)
 

@@ -13,9 +13,6 @@ from tests.test_photo_flow import _drain, _feed, _photo, build, db  # noqa: F401
 from tests.test_refine import _items, _photo_meal, _press
 from tests.test_routers_smoke import onboard, send
 
-pytestmark = pytest.mark.asyncio
-
-
 # ------------------------------------------------------------------ «Уточнить»
 
 async def test_refine_result_lands_at_the_bottom_with_buttons(db, monkeypatch):

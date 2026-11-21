@@ -57,7 +57,12 @@ globalThis.window = { addEventListener() {} };
 globalThis.location = { search: '', hostname: 'localhost', protocol: 'http:' };
 const url = pathToFileURL(process.argv[1]);
 const { foodPicName, FOOD_GROUPS: groups, FOOD_ICONS: keys } = await import(url);
-const { KEYS: atlas } = await import(new URL('./food_atlas.js', url));
+const { TILES } = await import(new URL('./food_atlas.js', url));
+const atlas = TILES.flatMap(tile => tile.keys);
+if (TILES.length !== 4 || new Set(atlas).size !== atlas.length) throw new Error('Invalid atlas partition');
+for (const tile of TILES) {
+  if (!fs.existsSync(new URL('../' + tile.asset, url))) throw new Error('Missing tile: ' + tile.asset);
+}
 const cases = JSON.parse(process.argv[2]);
 for (const [name, expected] of Object.entries(cases)) {
   const actual = foodPicName(name);

@@ -24,10 +24,9 @@ from app.services import assistant
 from app.services import food as foodsvc
 from app.storage import repo
 from app.web import server
+from app.web.static_assets import build_index, file_version
 from app.web.auth import InitDataError, compute_hash, validate_init_data
 from tests.test_photo_flow import _food
-
-pytestmark = pytest.mark.asyncio
 
 TOKEN = "42:TEST-TOKEN"
 NOW = dt.datetime(2026, 5, 20, 14, 30)
@@ -810,8 +809,8 @@ async def test_static_index_and_redirect(client):
         assert resp.headers["Cache-Control"] == "no-cache"
         assert "text/html" in resp.headers["Content-Type"]
         page = await resp.text()
-        assert re.search(r'src="/app/v/[a-f0-9]{20}/js/main.js"', page)
-        assert re.search(r'href="/app/v/[a-f0-9]{20}/css/app.css"', page)
+        assert re.search(r'src="/app/js/main\.js\?v=[a-f0-9]{20}"', page)
+        assert re.search(r'href="/app/css/app\.css\?v=[a-f0-9]{20}"', page)
     root = await client.get("/", allow_redirects=False)
     assert root.status == 302 and root.headers["Location"] == "/app/"
     health = await client.get("/healthz")
@@ -820,19 +819,56 @@ async def test_static_index_and_redirect(client):
 
 async def test_versioned_assets_are_immutable_on_entire_module_tree(client):
     page = await client.get("/app/")
-    revision = re.search(r'src="/app/v/([a-f0-9]{20})/js/main.js"', await page.text())[1]
-    for file in ("js/main.js", "js/api.js", "js/i18n/en.js", "css/coach.css", "img/food-atlas.webp"):
-        response = await client.get(f"/app/v/{revision}/{file}")
+    html = await page.text()
+    imports = json.loads(re.search(r'<script type="importmap">(.*?)</script>', html)[1])["imports"]
+    images = json.loads(re.search(r'<script id="asset-versions" type="application/json">(.*?)</script>', html)[1])
+    for file in ("js/main.js", "js/api.js", "js/i18n/en.js", "css/coach.css", "img/food-atlas-1.webp"):
+        path = server.STATIC_DIR / file
+        version = file_version(path)
+        url = f"/app/{file}?v={version}"
+        if file.endswith(".js"):
+            assert imports[f"/app/{file}"] == url
+        elif file.endswith(".webp"):
+            assert images[file] == version
+        response = await client.get(url)
         assert response.status == 200
         assert response.headers["Cache-Control"] == "public, max-age=31536000, immutable"
-        assert await response.read() == (server.STATIC_DIR / file).read_bytes()
+        assert await response.read() == path.read_bytes()
     response = await client.get("/app/js/api.js")
     assert "immutable" not in response.headers["Cache-Control"]
-    obsolete = "0" * 20
-    response = await client.get(f"/app/v/{obsolete}/js/main.js")
+    response = await client.get("/app/js/main.js?v=" + "0" * 20)
     assert response.status == 404
     cached = await client.get("/app/", headers={"If-None-Match": page.headers["ETag"]})
     assert cached.status == 304 and cached.headers["Cache-Control"] == "no-cache"
+
+
+def test_static_html_versions_any_local_tag_and_unchanged_files_keep_versions(tmp_path):
+    html = """<!doctype html><html><head>
+    <link rel='modulepreload' href='runtime/module.mjs'>
+    <link rel='manifest' href='app.webmanifest'>
+    <link rel='icon' href='logo.svg?theme=light#mark'>
+    <link rel='preconnect' href='https://example.invalid'>
+    </head><body><video poster='logo.svg'></video></body></html>"""
+    builds = []
+    for color in ("red", "blue"):
+        root = tmp_path / color
+        (root / "runtime").mkdir(parents=True)
+        (root / "index.html").write_text(html, encoding="utf-8")
+        (root / "runtime/module.mjs").write_text("export const x = 1;", encoding="utf-8")
+        (root / "app.webmanifest").write_text("{}", encoding="utf-8")
+        (root / "logo.svg").write_text(f'<svg fill="{color}"/>', encoding="utf-8")
+        tag, data = build_index(root)
+        rendered = data.decode()
+        for asset in ("runtime/module.mjs", "app.webmanifest"):
+            assert f'href="/app/{asset}?v={file_version(root / asset)}"' in rendered
+        icon = file_version(root / "logo.svg")
+        assert f'href="/app/logo.svg?theme=light&amp;v={icon}#mark"' in rendered
+        assert f'poster="/app/logo.svg?v={icon}"' in rendered
+        assert "href='https://example.invalid'" in rendered
+        assert rendered.index('type="importmap"') < rendered.index('rel="modulepreload"')
+        builds.append((tag, icon, file_version(root / "runtime/module.mjs")))
+    assert builds[0][:2] != builds[1][:2]
+    assert builds[0][2] == builds[1][2]
 
 
 async def test_activity_middleware_ignores_healthz(client, monkeypatch):

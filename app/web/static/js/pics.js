@@ -347,10 +347,19 @@ export function foodPicName(name) {
 }
 
 const assets = new URL('../', import.meta.url);
+const versions = JSON.parse(globalThis.document?.getElementById('asset-versions')?.textContent || '{}');
+
+export function assetUrl(path) {
+  const url = new URL(path, assets);
+  if (Object.prototype.hasOwnProperty.call(versions, path)) {
+    url.searchParams.set('v', versions[path]);
+  }
+  return url.href;
+}
 
 function pic(path, size) {
   return h('span', { class: 'pic', 'aria-hidden': 'true', style: { width: size + 'px', height: size + 'px' } },
-    h('img', { src: new URL(path, assets).href, alt: '', loading: 'lazy', decoding: 'async', width: size, height: size }));
+    h('img', { src: assetUrl(path), alt: '', loading: 'lazy', decoding: 'async', width: size, height: size }));
 }
 
 // null, если подходящей картинки нет: вызывающий код рисует обычную плитку.

@@ -4,7 +4,6 @@ import time
 from types import SimpleNamespace
 from urllib.parse import urlencode
 
-import pytest
 from aiogram.types import Message, User, Chat
 
 from app.middleware import _admitted
@@ -12,9 +11,6 @@ from app.services import referral
 from app.storage import repo
 from app.web.auth import compute_hash
 from tests.test_web_api import db, cfg, make_client, add_user, H, TOKEN  # noqa: F401
-
-pytestmark = pytest.mark.asyncio
-
 
 def signed(tg_id, code=None):
     data = {'auth_date': str(int(time.time())), 'user': json.dumps({'id': tg_id, 'first_name': 'Друг'})}

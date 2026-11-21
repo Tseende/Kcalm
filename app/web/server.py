@@ -45,6 +45,7 @@ from app.timeutils import validate_hhmm, validate_timezone
 from app.web import analysis
 from app.web import period as period_analysis
 from app.web import queries as q
+from app.web.static_assets import build_index, file_version
 from app.web.auth import InitDataError, validate_init_data
 from app.web.serializers import dish_json, food_json, meal_json, product_json, targets_json
 
@@ -63,6 +64,11 @@ DB = web.AppKey("db", sqlite3.Connection)
 CONFIG = web.AppKey("config", Config)
 BOT = web.AppKey("bot", object)
 MAX_BODY = web.AppKey("max_body", int)
+# aiohttp 3.9–3.13 поддерживает строковые ключи запроса.
+request_key = getattr(web, "RequestKey", str)
+REQUEST_USER = request_key("user")
+REQUEST_TG_ID = request_key("tg_id")
+REQUEST_FIRST_NAME = request_key("first_name")
 
 routes = web.RouteTableDef()
 
@@ -204,9 +210,9 @@ async def auth_middleware(request: web.Request, handler):
     user = repo.get_user_by_tg(db, tg_id)
     if (user is None or not user["onboarded"]) and (request.method, request.path) not in OPEN_BEFORE_ONBOARDING:
         raise ApiError(409, "not_onboarded", "Сначала пройдите настройку в чате с ботом.")
-    request["user"] = user
-    request["tg_id"] = tg_id
-    request["first_name"] = first_name
+    request[REQUEST_USER] = user
+    request[REQUEST_TG_ID] = tg_id
+    request[REQUEST_FIRST_NAME] = first_name
     return await handler(request)
 
 
@@ -228,7 +234,7 @@ def llm_failure(exc: Exception, message: str) -> ApiError:
 
 
 def ctx(request: web.Request):
-    return request.app[DB], request["user"], request.app[CONFIG]
+    return request.app[DB], request[REQUEST_USER], request.app[CONFIG]
 
 
 def bad(message: str, code: str = "bad_request") -> ApiError:
@@ -436,14 +442,14 @@ async def healthz(request: web.Request) -> web.Response:
 
 @routes.get("/api/me")
 async def api_me(request: web.Request) -> web.Response:
-    user = request["user"]
+    user = request[REQUEST_USER]
     if user is None or not user["onboarded"]:
-        return ok({"onboarded": False, "user": {"first_name": request["first_name"]}})
+        return ok({"onboarded": False, "user": {"first_name": request[REQUEST_FIRST_NAME]}})
     db, user, _ = ctx(request)
     today = now_local(user).date().isoformat()
     return ok({
         "onboarded": True,
-        "user": {"tg_id": user["tg_id"], "first_name": request["first_name"],
+        "user": {"tg_id": user["tg_id"], "first_name": request[REQUEST_FIRST_NAME],
                  "sex": user["sex"], "height_cm": user["height_cm"],
                  "goal_weight_kg": user["goal_weight_kg"], "tz": user["tz"],
                  "eating_cutoff": user["eating_cutoff"]},
@@ -462,7 +468,7 @@ def _profile_response(db, user, extra: dict | None = None) -> web.Response:
 @routes.get("/api/profile")
 async def api_profile_get(request: web.Request) -> web.Response:
     db, user, _ = ctx(request)
-    return _profile_response(db, user, {"first_name": request["first_name"]})
+    return _profile_response(db, user, {"first_name": request[REQUEST_FIRST_NAME]})
 
 
 @routes.patch("/api/profile")
@@ -597,7 +603,7 @@ ONBOARDING_REMINDERS = ("morning", "midday", "evening", "weekly", "water", "weig
 async def api_onboarding(request: web.Request) -> web.Response:
     """Первичная настройка из Mini App: профиль, норма, напоминания. Логика общая с чатом."""
     db, config = request.app[DB], request.app[CONFIG]
-    user = request["user"]
+    user = request[REQUEST_USER]
     if user is not None and user["onboarded"]:
         raise ApiError(409, "already_onboarded", "Профиль уже настроен.")
     data = await read_json(request)
@@ -635,7 +641,7 @@ async def api_onboarding(request: web.Request) -> web.Response:
             raise bad("reminders: объект вида {\"morning\": true, ...}.", "bad_field")
         clean["reminders"] = reminders
     try:
-        result = onboardingsvc.complete(db, request["tg_id"], clean)
+        result = onboardingsvc.complete(db, request[REQUEST_TG_ID], clean)
     except onboardingsvc.OnboardingError as exc:
         raise bad(str(exc), exc.code) from None
     await _announce_profile_ready(request, result, care)
@@ -653,7 +659,7 @@ async def _announce_profile_ready(request: web.Request, result: dict, care: bool
             else "Еду добавляйте в приложении кнопкой «+», а здесь можно поговорить, если вечером потянет к холодильнику.")
     try:
         from app.routers import menu
-        await bot.send_message(request["tg_id"], f"{head} {tail}", reply_markup=menu.main_kb())
+        await bot.send_message(request[REQUEST_TG_ID], f"{head} {tail}", reply_markup=menu.main_kb())
     except Exception:                                        # noqa: BLE001
         log.warning("не удалось отправить сообщение о готовности профиля", exc_info=True)
 
@@ -1846,22 +1852,10 @@ STATIC_TEXT_TYPES = {
     ".html": "text/html",
     ".css": "text/css",
     ".js": "text/javascript",
+    ".mjs": "text/javascript",
+    ".webmanifest": "application/manifest+json",
     ".svg": "image/svg+xml",
 }
-
-
-@lru_cache(maxsize=4)
-def _asset_build(root: Path) -> tuple[str, bytes]:
-    digest = hashlib.sha256()
-    for asset in sorted(root.rglob("*")):
-        if asset.is_file():
-            digest.update(asset.relative_to(root).as_posix().encode() + b"\0")
-            digest.update(hashlib.sha256(asset.read_bytes()).digest())
-    revision = digest.hexdigest()[:20]
-    index = (root / "index.html").read_bytes()
-    index = re.sub(rb'(href|src)="((?:css|js)/[^"]+)"',
-                   rb'\1="/app/v/' + revision.encode() + rb'/\2"', index)
-    return revision, index
 
 
 @lru_cache(maxsize=128)
@@ -1942,7 +1936,7 @@ async def app_index(request: web.Request) -> web.StreamResponse:
     index = STATIC_DIR / "index.html"
     if not index.is_file():
         raise web.HTTPNotFound()
-    build = await asyncio.to_thread(_asset_build, STATIC_DIR)
+    build = await asyncio.to_thread(build_index, STATIC_DIR)
     return await _static_response(request, index, cache=NO_CACHE, index=build)
 
 
@@ -1954,23 +1948,18 @@ def _asset_path(relative: str) -> Path:
     return path
 
 
-@routes.get("/app/v/{revision:[a-f0-9]{20}}/{path:.+}")
-async def app_versioned_file(request: web.Request) -> web.StreamResponse:
-    revision, _ = await asyncio.to_thread(_asset_build, STATIC_DIR)
-    if request.match_info["revision"] != revision:
-        raise web.HTTPNotFound()
-    path = _asset_path(request.match_info["path"])
-    if path.name == "index.html":
-        raise web.HTTPNotFound()
-    return await _static_response(request, path, cache=IMMUTABLE)
-
-
 @routes.get("/app/{path:.+}")
 async def app_file(request: web.Request) -> web.StreamResponse:
     path = _asset_path(request.match_info["path"])
     if path.name == "index.html":
         return await app_index(request)
-    return await _static_response(request, path, cache="public, max-age=300")
+    cache = "public, max-age=300"
+    version = request.query.get("v", "")
+    if re.fullmatch(r"[a-f0-9]{20}", version):
+        if version != await asyncio.to_thread(file_version, path):
+            raise web.HTTPNotFound()
+        cache = IMMUTABLE
+    return await _static_response(request, path, cache=cache)
 
 
 # ------------------------------------------------------------------ сборка и запуск

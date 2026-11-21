@@ -5,7 +5,6 @@ import asyncio
 import datetime as dt
 import json
 
-import pytest
 import pytest_asyncio
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
@@ -21,9 +20,6 @@ from app.storage import repo
 from app.widgets import api, chatdata, day, pages, pause, runtime
 from app.widgets.dispatcher import WidgetDispatcher
 from tests.test_routers_smoke import TOKEN, FakeSession, build, db, onboard  # noqa: F401
-
-pytestmark = pytest.mark.asyncio
-
 
 class WSession(FakeSession):
     """FakeSession, который понимает методы виджетов и ведёт журнал вызовов."""

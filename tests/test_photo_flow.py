@@ -26,8 +26,6 @@ from app.services import food as foodsvc
 from app.storage import repo
 from tests.test_routers_smoke import FakeSession, message, onboard, send
 
-pytestmark = pytest.mark.asyncio
-
 _ids = itertools.count(10_000)
 NOW = dt.datetime(2026, 5, 20, 14, 30)        # среда, 14:30
 

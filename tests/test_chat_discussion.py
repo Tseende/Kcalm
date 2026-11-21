@@ -18,7 +18,6 @@ from tests.test_photo_flow import db  # noqa: F401  (фикстура)
 from tests.test_photo_flow import _fast  # noqa: F401  (autouse: время и справочник)
 from tests.test_routers_smoke import message, onboard, send
 
-pytestmark = pytest.mark.asyncio
 TODAY = screens.local_date_of("Europe/Minsk")      # как у парсера скриншотов: реальная дата
 
 

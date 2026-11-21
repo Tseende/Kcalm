@@ -14,9 +14,6 @@ from tests.test_photo_flow import (_drain, _fast, _feed, _food, _ids, _photo,  #
                                    build, db)
 from tests.test_routers_smoke import message, onboard, send
 
-pytestmark = pytest.mark.asyncio
-
-
 def _items(*pairs: tuple[str, float]) -> foodsvc.MealUnderstanding:
     return foodsvc.understanding_from_json({
         "items": [{"name_ru": n, "name_en": n, "amount": {"kind": "grams", "grams": g},

@@ -10,8 +10,6 @@ from tests.test_routers_smoke import FakeSession, build, message, onboard, send 
 from tests.test_routers_smoke import db as smoke_db  # noqa: F401
 from tests.test_web_api import H, _fixed_now, auth, cfg, client, db, make_client, make_config  # noqa: F401
 
-pytestmark = pytest.mark.asyncio
-
 FEMALE = {"sex": "female", "birth_year": 1991, "height_cm": 168, "weight_kg": 82.4,
           "goal_weight_kg": 72, "rate_kg_week": 0.5, "activity": 2, "eating_cutoff": "21:00",
           "tz": "Europe/Minsk", "care_mode": False, "goal": "lose",

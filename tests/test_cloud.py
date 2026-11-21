@@ -114,9 +114,12 @@ async def test_webhook_route_checks_secret(tmp_path, monkeypatch):
     bot = Bot("123456:TESTTOKEN")
     app = build_app(db, bot, cfg, Dispatcher())
     async with TestClient(TestServer(app)) as client:
-        bad = await client.post(WEBHOOK_PATH, json={"update_id": 1})
+        update = {"update_id": 1, "message": {
+            "message_id": 1, "date": 1, "chat": {"id": 1, "type": "private"}, "text": "test",
+        }}
+        bad = await client.post(WEBHOOK_PATH, json=update)
         assert bad.status == 401                       # без секрета апдейт не принимается
-        ok = await client.post(WEBHOOK_PATH, json={"update_id": 1},
+        ok = await client.post(WEBHOOK_PATH, json=update,
                                headers={"X-Telegram-Bot-Api-Secret-Token": cfg.webhook_secret_value})
         assert ok.status == 200
         assert scheduler._last_activity is not None    # апдейт Telegram продлевает окно keep-alive

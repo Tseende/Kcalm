@@ -2,6 +2,8 @@
 Сети нет: транскрипция подменена."""
 from __future__ import annotations
 
+from io import BytesIO
+
 import aiohttp
 import pytest
 
@@ -10,8 +12,6 @@ from app.web import server
 from tests.test_web_api import H, add_user, make_config  # noqa: F401
 from tests.test_web_api import _fixed_now, cfg, client, db, make_client, user_id  # noqa: F401
 
-pytestmark = pytest.mark.asyncio
-
 WEBM = b"\x1a\x45\xdf\xa3" + b"x" * 64
 MP4 = b"\x00\x00\x00\x18ftypM4A " + b"x" * 64
 
@@ -19,7 +19,7 @@ MP4 = b"\x00\x00\x00\x18ftypM4A " + b"x" * 64
 def audio_form(data: bytes | None, content_type: str = "audio/webm;codecs=opus"):
     form = aiohttp.FormData(default_to_multipart=True)
     if data is not None:
-        form.add_field("audio", data, filename="voice.bin", content_type=content_type)
+        form.add_field("audio", BytesIO(data), filename="voice.bin", content_type=content_type)
     else:
         form.add_field("other", "x")
     return form

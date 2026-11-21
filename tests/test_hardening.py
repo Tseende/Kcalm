@@ -42,9 +42,6 @@ from tests.test_web_api import (H, JPEG, TOKEN, _fixed_now, add_user, auth, cfg,
                                 db, fake_food, jpeg, make_client, make_config, photo_form,
                                 post_meal, user_id)
 
-pytestmark = pytest.mark.asyncio
-
-
 def use_config(monkeypatch, **kw) -> Config:
     config = Config(_env_file=None, **kw)
     monkeypatch.setattr(config_mod, "_config", config)

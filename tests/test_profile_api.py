@@ -1,13 +1,9 @@
 """Профиль, ручная норма, напоминания и удаление данных из Mini App."""
 from __future__ import annotations
 
-import pytest
 
 from app.storage import repo
 from tests.test_web_api import H, _fixed_now, cfg, client, db, make_client, user_id  # noqa: F401  (фикстуры)
-
-pytestmark = pytest.mark.asyncio
-
 
 async def test_profile_get_shape(client):
     body = await (await client.get("/api/profile", headers=H)).json()
