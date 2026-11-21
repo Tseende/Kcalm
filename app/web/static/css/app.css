@@ -86,6 +86,7 @@ img { max-width: 100%; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  .bar i { transition: none !important; }
   .stg, .ch-grow, .ch-draw, .ch-fade, .ch-halo, .hm-in, .xfade, .day-in, .bar-scale i { animation: none !important; }
 }
 
@@ -207,7 +208,7 @@ input::placeholder, textarea::placeholder { color: var(--c-hint); opacity: .8; }
 
 /* ---------- overlays ---------- */
 .sheet-wrap { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0); display: flex; align-items: flex-end; justify-content: center; transition: background .2s; }
-.sheet { width: 100%; max-width: 560px; max-height: 92vh; max-height: min(92vh, calc(var(--tg-viewport-stable-height, 100vh) * .92)); overflow-y: auto; overscroll-behavior: contain; outline: none; touch-action: pan-y; background: var(--c-bg); border-radius: 20px 20px 0 0; padding: 8px 16px calc(16px + var(--safe-b)); transform: translateY(100%); transition: transform .22s ease-out; }
+.sheet { width: 100%; max-width: 560px; max-height: 92vh; max-height: calc(var(--kb-visible-h) * .92); overflow-y: auto; overscroll-behavior: contain; outline: none; touch-action: pan-y; background: var(--c-bg); border-radius: 20px 20px 0 0; padding: 8px 16px calc(16px + var(--safe-b)); transform: translateY(100%); transition: transform .22s ease-out; }
 .sheet-wrap.open .sheet { transform: none; }
 .grabber { width: 36px; height: 4px; border-radius: 2px; background: var(--c-sep); margin: 0 auto 10px; }
 .sheet-title { font-size: 17px; font-weight: 600; text-align: center; margin-bottom: 12px; }
@@ -242,7 +243,7 @@ html.scheme-dark .toast.ok { background: color-mix(in srgb, var(--c-green) 60%, 
 .unit { font-size: 15px; font-weight: 500; color: var(--c-hint); }
 .range-hint { color: var(--c-header); margin-top: 4px; }
 .bar { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--c-hint) 20%, transparent); overflow: hidden; }
-.bar i { display: block; height: 100%; border-radius: 4px; transition: width .4s; background: var(--c-btn); }
+.bar i { display: block; width: 100%; height: 100%; border-radius: 4px; transform-origin: left center; transition: transform .4s; background: var(--c-btn); }
 .bar-p i { background: var(--c-p); } .bar-f i { background: var(--c-f); } .bar-c i { background: var(--c-c); } .bar-w i { background: var(--c-water); }
 .water-num b { font-size: 18px; }
 .quick { display: flex; gap: 8px; }
@@ -440,7 +441,10 @@ input[type=text], input[type=number], input[type=time], input[type=search], inpu
 .card.mini:active, .row-btn:active { transform: none; }
 
 /* ---------- экранная клавиатура ---------- */
-:root { --kb-h: 0px; --kb-visible-h: 100vh; }
+:root { --kb-h: 0px; --kb-visible-h: var(--tg-viewport-stable-height, 100vh); }
+@supports (height: 100dvh) {
+  :root { --kb-visible-h: var(--tg-viewport-stable-height, 100dvh); }
+}
 body.kb-open .tabbar, body.kb-open .mainbar { display: none; }
 body.kb-open { --safe-b: 0px; padding-bottom: calc(var(--kb-h) + 24px); }
 body.kb-open.has-tabbar, body.kb-open.has-main { padding-bottom: calc(var(--kb-h) + 24px); }
@@ -550,6 +554,7 @@ html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
 
 /* картинки продуктов и напитков: светлая плитка как у иконок iOS, в обеих темах одинаково */
 .pic { display: inline-flex; align-items: center; justify-content: center; flex: none; border-radius: 22.5%; background: var(--c-pic); box-shadow: inset 0 0 0 .5px var(--c-pic-edge); overflow: hidden; }
+.pic-sprite { width: 84%; height: 84%; background-repeat: no-repeat; filter: var(--pic-shadow); }
 .pic img { width: 84%; height: 84%; object-fit: contain; display: block; filter: var(--pic-shadow); }
 .row:has(.pic) { padding-left: 15px; }
 
@@ -904,7 +909,7 @@ input.time-in[type="time"] { width: 104px; flex: none; min-height: 36px; padding
 .today .water-sub.done { color: var(--c-water); }
 .today .water-card .water-num { white-space: nowrap; }
 .today .water-card .bar-w { height: 10px; -webkit-mask: none; mask: none; border-radius: 99px; background: color-mix(in srgb, var(--c-text) 9%, transparent); }
-.today .water-card .bar-w i { border-radius: 99px; background: linear-gradient(90deg, color-mix(in srgb, var(--c-water) 70%, #fff), var(--c-water)); transition: width .35s cubic-bezier(.2,.8,.2,1); }
+.today .water-card .bar-w i { border-radius: 99px; background: linear-gradient(90deg, color-mix(in srgb, var(--c-water) 70%, #fff), var(--c-water)); transition: transform .35s cubic-bezier(.2,.8,.2,1); }
 .today .water-card .quick .btn-tonal { flex-direction: row; gap: 4px; min-height: 36px; border-radius: 99px; background: color-mix(in srgb, var(--c-text) 7%, transparent); }
 .today .water-card .quick .btn-tonal b { font-size: 15px; font-weight: 600; }
 .today .water-card .quick .btn-tonal small { font-size: 12px; color: var(--c-hint); }

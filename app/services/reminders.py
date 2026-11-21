@@ -10,7 +10,7 @@ import sqlite3
 from datetime import datetime
 
 from app.storage import repo
-from app.timeutils import validate_hhmm
+from app.timeutils import reminder_minutes, validate_hhmm
 
 MAX_PER_USER = 20
 MAX_TITLE = 60
@@ -230,15 +230,15 @@ def is_due(local_time: str, days: str | None, every_min: int | None, until_time:
            now: datetime) -> bool:
     if days and str(now.weekday()) not in days:
         return False
-    cur = now.hour * 60 + now.minute
+    slots = reminder_minutes(now)
     try:
         start = _minutes(local_time)
         if not every_min:
-            return cur == start
+            return start in slots
         end = _minutes(until_time) if until_time else 23 * 60 + 59
     except (ValueError, TypeError):
         return False
-    return start <= cur <= end and (cur - start) % every_min == 0
+    return any(start <= cur <= end and (cur - start) % every_min == 0 for cur in slots)
 
 
 def row_is_due(r, now: datetime) -> bool:

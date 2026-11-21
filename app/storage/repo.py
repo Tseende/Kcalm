@@ -410,17 +410,48 @@ def _insert_items(conn: sqlite3.Connection, meal_id: int, calc: MealCalculation)
         _insert_item(conn, meal_id, it)
 
 
+class AlbumAlreadySaved(Exception):
+    def __init__(self, meal_id: int) -> None:
+        self.meal_id = meal_id
+        super().__init__(meal_id)
+
+
+def telegram_album_meal(conn: sqlite3.Connection, user_id: int, group: str) -> int | None:
+    row = conn.execute(
+        "SELECT meal_id FROM meal_telegram_albums WHERE user_id=? AND media_group_id=?",
+        (user_id, group),
+    ).fetchone()
+    return row["meal_id"] if row else None
+
+
+def bind_telegram_album(conn: sqlite3.Connection, user_id: int, group: str, meal_id: int) -> int:
+    """Привязать альбом к готовому приёму, сохранив первую назначенную запись."""
+    with write_transaction(conn):
+        conn.execute(
+            """INSERT INTO meal_telegram_albums (user_id, media_group_id, meal_id) VALUES (?,?,?)
+               ON CONFLICT(user_id, media_group_id) DO NOTHING""",
+            (user_id, group, meal_id),
+        )
+        return telegram_album_meal(conn, user_id, group)
+
+
+
 def save_meal(conn: sqlite3.Connection, user_id: int, eaten_utc: str, local_date: str,
               local_time: str, meal_type: str, source: str, calc: MealCalculation,
               photo_path: str | None = None, transcript: str | None = None,
               photo_paths: list[str] | None = None,
-              dish_ids: list[int | None] | None = None, notify: bool = True) -> int:
+              dish_ids: list[int | None] | None = None, notify: bool = True,
+              *, telegram_album: str | None = None) -> int:
     """photo_paths — все фото приёма по порядку (альбом); photo_path остаётся первым.
     dish_ids — посуда каждого фото (того же порядка), None — без посуды.
     notify=False: служебная запись (образец избранного), рефералы и заморозки её не видят."""
     paths = [p for p in (photo_paths or ([photo_path] if photo_path else [])) if p]
     photo_path = photo_path or (paths[0] if paths else None)
     with write_transaction(conn):
+        if telegram_album is not None:
+            existing = telegram_album_meal(conn, user_id, telegram_album)
+            if existing is not None:
+                raise AlbumAlreadySaved(existing)
         cur = conn.execute(
             """INSERT INTO meals (user_id, eaten_at_utc, local_date, local_time, meal_type,
                source, photo_path, transcript, kcal_total, protein_g, fat_g, carbs_g,
@@ -431,6 +462,11 @@ def save_meal(conn: sqlite3.Connection, user_id: int, eaten_utc: str, local_date
              calc.kcal_low, calc.kcal_high, calc.confidence, calc.method),
         )
         meal_id = cur.lastrowid
+        if telegram_album is not None:
+            conn.execute(
+                "INSERT INTO meal_telegram_albums (user_id, media_group_id, meal_id) VALUES (?,?,?)",
+                (user_id, telegram_album, meal_id),
+            )
         _insert_items(conn, meal_id, calc)
         add_meal_photos(conn, meal_id, paths, dish_ids=dish_ids, commit=False)
         sync_meal_water(conn, meal_id)
@@ -1791,14 +1827,45 @@ def rules_for_category(conn: sqlite3.Connection, user_id: int,
         (user_id, category, category, limit)).fetchall()
 
 
-def due_rules(conn: sqlite3.Connection, user_id: int, hhmm: str, local_date: str) -> list[sqlite3.Row]:
+def due_rules(conn: sqlite3.Connection, user_id: int, local_date: str) -> list[sqlite3.Row]:
     return conn.execute(
-        """SELECT * FROM if_then_rules WHERE user_id=? AND remind_time=?
-           AND COALESCE(last_sent_date,'') != ?""", (user_id, hhmm, local_date)).fetchall()
+        """SELECT * FROM if_then_rules WHERE user_id=? AND remind_time IS NOT NULL
+           AND last_sent_date IS NOT ?""", (user_id, local_date)).fetchall()
 
 
-def mark_rule_sent(conn: sqlite3.Connection, rule_id: int, local_date: str) -> None:
-    conn.execute("UPDATE if_then_rules SET last_sent_date=? WHERE id=?", (local_date, rule_id))
+def claim_rule(conn: sqlite3.Connection, rule, local_date: str) -> bool:
+    cur = conn.execute(
+        """UPDATE if_then_rules SET last_sent_date=? WHERE id=? AND remind_time=?
+           AND last_sent_date IS NOT ?""", (local_date, rule["id"], rule["remind_time"], local_date))
+    conn.commit()
+    return cur.rowcount == 1
+
+
+def release_rule(conn: sqlite3.Connection, rule, local_date: str) -> None:
+    conn.execute(
+        "UPDATE if_then_rules SET last_sent_date=? WHERE id=? AND last_sent_date=?",
+        (rule["last_sent_date"], rule["id"], local_date),
+    )
+    conn.commit()
+
+
+def claim_reminder(conn: sqlite3.Connection, row, marker: str, *, custom: bool = False) -> bool:
+    table = "user_reminders" if custom else "reminders"
+    cur = conn.execute(
+        f"""UPDATE {table} SET last_sent_at=? WHERE id=? AND enabled=1
+            AND local_time=? AND last_sent_at IS NOT ?""",
+        (marker, row["id"], row["local_time"], marker),
+    )
+    conn.commit()
+    return cur.rowcount == 1
+
+
+def release_reminder(conn: sqlite3.Connection, row, marker: str, *, custom: bool = False) -> None:
+    table = "user_reminders" if custom else "reminders"
+    conn.execute(
+        f"UPDATE {table} SET last_sent_at=? WHERE id=? AND last_sent_at=?",
+        (row["last_sent_at"], row["id"], marker),
+    )
     conn.commit()
 
 

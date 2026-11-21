@@ -101,27 +101,46 @@ function interactive(svg, items, box) {
   const marker = s('line', { y1: box.t, y2: box.b, class: 'ch-marker' });
   svg.append(marker);
   let down = false;
-  const update = (e) => {
+  let frame = 0;
+  let pointerX;
+  let current = null;
+  let scale;
+  const update = () => {
+    frame = 0;
+    if (!wrap.isConnected) return;
     const rect = svg.getBoundingClientRect();
     if (!rect.width) return;
     const k = rect.width / W;
-    const vx = (e.clientX - rect.left) / k;
+    const vx = (pointerX - rect.left) / k;
     let best = items[0];
     items.forEach((it) => { if (Math.abs(it.x - vx) < Math.abs(best.x - vx)) best = it; });
+    if (best === current && k === scale) return;
+    current = best;
+    scale = k;
     marker.setAttribute('x1', best.x);
     marker.setAttribute('x2', best.x);
     marker.classList.add('on');
     tip.show(best.x * k, best.y * k, best.lines);
   };
-  svg.addEventListener('pointerdown', (e) => { down = true; update(e); });
-  svg.addEventListener('pointermove', (e) => { if (down || e.pointerType === 'mouse') update(e); });
-  const up = () => { down = false; };
-  svg.addEventListener('pointerup', up);
-  svg.addEventListener('pointercancel', up);
-  svg.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') { marker.classList.remove('on'); tip.hide(); } });
+  const queue = (e) => {
+    pointerX = e.clientX;
+    if (!frame) frame = requestAnimationFrame(update);
+  };
+  const hide = () => {
+    if (frame) cancelAnimationFrame(frame);
+    frame = 0;
+    current = null;
+    marker.classList.remove('on');
+    tip.hide();
+  };
+  svg.addEventListener('pointerdown', (e) => { down = true; queue(e); });
+  svg.addEventListener('pointermove', (e) => { if (down || e.pointerType === 'mouse') queue(e); });
+  svg.addEventListener('pointerup', () => { down = false; });
+  svg.addEventListener('pointercancel', () => { down = false; hide(); });
+  svg.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') hide(); });
   document.addEventListener('pointerdown', function off(e) {
     if (!wrap.isConnected) { document.removeEventListener('pointerdown', off, true); return; }
-    if (!wrap.contains(e.target)) marker.classList.remove('on');
+    if (!wrap.contains(e.target)) hide();
   }, true);
   return wrap;
 }

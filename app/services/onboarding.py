@@ -60,7 +60,13 @@ def complete(db: sqlite3.Connection, tg_id: int, data: dict, *, log_weight: bool
     age = today.year - int(data["birth_year"])
     if age < MIN_AGE:
         raise OnboardingError(UNDERAGE_TEXT, "underage")
-    weight, height = float(data["weight_kg"]), float(data["height_cm"])
+    try:
+        weight, height = float(data["weight_kg"]), float(data["height_cm"])
+    except (TypeError, ValueError) as exc:
+        raise OnboardingError("Укажи корректные рост и вес.", "bad_profile") from exc
+    current_bmi = bmi(weight, height)
+    if current_bmi is None:
+        raise OnboardingError("Укажи корректные рост и вес.", "bad_profile")
     activity = int(data.get("activity") or 2)
     care = bool(data.get("care_mode"))
     cutoff = data.get("eating_cutoff") or "21:00"
@@ -69,10 +75,10 @@ def complete(db: sqlite3.Connection, tg_id: int, data: dict, *, log_weight: bool
     rate = min(rate, MAX_RATE)
     notes: list[str] = []
 
-    if bmi(weight, height) < MIN_BMI:
+    if current_bmi < MIN_BMI:
         # ИМТ уже ниже нормы: дефицит не ставим, цель — поддержание веса
         rate = 0.0
-        notes.append(f"ИМТ {bmi(weight, height):.1f} ниже нормы — дефицит не включаю, "
+        notes.append(f"ИМТ {current_bmi:.1f} ниже нормы — дефицит не включаю, "
                      "цель считаю на поддержание веса.")
     if care and rate > CARE_MAX_RATE:
         rate = CARE_MAX_RATE

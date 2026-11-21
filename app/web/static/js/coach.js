@@ -440,7 +440,7 @@ function layout() {
   const w = Math.max(0, x1 - x0); const hh = Math.max(0, y1 - y0);
   const rad = Math.min(a.tip.round ? 999 : (a.tip.radius ?? 18), w / 2, hh / 2);
   a.rect = { x0, y0, x1, y1 };
-  Object.assign(a.hole.style, { left: x0 + 'px', top: y0 + 'px', width: w + 'px', height: hh + 'px', borderRadius: rad + 'px' });
+  Object.assign(a.hole.style, { transform: `translate3d(${x0}px, ${y0}px, 0)`, width: w + 'px', height: hh + 'px', borderRadius: rad + 'px' });
 
   const set = (c, x, y, ww, h2) => Object.assign(c.style, { left: x + 'px', top: y + 'px', width: Math.max(0, ww) + 'px', height: Math.max(0, h2) + 'px' });
   const [ct, cb, cl, cr] = a.catchers;

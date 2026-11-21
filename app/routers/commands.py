@@ -621,13 +621,14 @@ def weekly_report(db: sqlite3.Connection, uid: int, today: date | None = None,
         and len(day_meals) >= 2 and not any(m["incomplete"] for m in day_meals)
     }
     adaptive_weights, _ = repo.trend_weight_series(db, uid, adaptive_from, adaptive_to)
-    if adaptive_weights:
+    height_cm = user["height_cm"]
+    weight_kg = adaptive_weights[-1]["weight_kg"] if adaptive_weights else None
+    current_bmi = bmi(weight_kg, height_cm)
+    if current_bmi is not None:
         wp = _weight_points(adaptive_weights)
         age = (today.year - int(str(user["birth_date"])[:4])) if user["birth_date"] else 35
-        height_cm = user["height_cm"] or 175
-        weight_kg = adaptive_weights[-1]["weight_kg"]
-        rate = user["target_rate_kg_week"]
-        if age < MIN_AGE or bmi(weight_kg, height_cm) < MIN_BMI:
+        rate = user["target_rate_kg_week"] or 0
+        if age < MIN_AGE or current_bmi < MIN_BMI:
             rate = max(rate, 0.0)                      # без дефицита, как при онбординге
         res = adaptive_tdee(wp, intake_covered, target,
                             rate_kg_week=rate,

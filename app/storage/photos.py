@@ -1,9 +1,4 @@
-"""Фото на диске + копия в БД (только в облачном режиме).
-
-Render теряет диск при каждом рестарте, а остальной код читает фото по пути из БД. Поэтому
-каждый записанный файл дублируется в photo_blobs, а при старте `restore()` возвращает на диск
-всё, чего там нет. Локально (`enable` не вызывали) работает как обычная запись файла.
-"""
+"""Фото на диске с облачной копией и восстановлением по запросу."""
 from __future__ import annotations
 
 import logging
@@ -11,11 +6,13 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 _db = None
+_root: Path | None = None
 
 
-def enable(db) -> None:
-    global _db
+def enable(db, root: str | Path | None = None) -> None:
+    global _db, _root
     _db = db
+    _root = Path(root).resolve() if root is not None else None
 
 
 def write(path: str | Path, data: bytes) -> str:
@@ -32,6 +29,33 @@ def write(path: str | Path, data: bytes) -> str:
     return str(p)
 
 
+def ensure(path: str | Path) -> Path:
+    """Восстановить один файл из БД, если локальная копия потеряна."""
+    p = Path(path)
+    if p.is_file() or _db is None:
+        return p
+    if _root is not None and _root not in p.resolve().parents:
+        return p
+    try:
+        _restore_file(_db, p)
+    except Exception:  # noqa: BLE001 — вызывающий код сохранит обычную обработку отсутствующего файла
+        log.warning("не удалось восстановить фото: %s", p, exc_info=True)
+    return p
+
+
+def read(path: str | Path) -> bytes:
+    return ensure(path).read_bytes()
+
+
+def _restore_file(db, path: Path) -> bool:
+    blob = db.execute("SELECT data FROM photo_blobs WHERE path = ?", (str(path),)).fetchone()
+    if blob is None:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(bytes(blob[0]))
+    return True
+
+
 def restore(db) -> int:
     """Вернуть на диск фото из photo_blobs, которых там нет. Возвращает число файлов."""
     n = 0
@@ -39,10 +63,5 @@ def restore(db) -> int:
         p = Path(row[0])
         if p.exists():
             continue
-        blob = db.execute("SELECT data FROM photo_blobs WHERE path = ?", (row[0],)).fetchone()
-        if blob is None:
-            continue
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_bytes(bytes(blob[0]))
-        n += 1
+        n += _restore_file(db, p)
     return n

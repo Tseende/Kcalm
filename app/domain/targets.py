@@ -28,8 +28,17 @@ def pal_from_pa(pa: float | None) -> float:
     return _PAL_BY_PA[min(_PAL_BY_PA, key=lambda known: abs(known - pa))]
 
 
-def bmi(weight_kg: float, height_cm: float) -> float:
-    return weight_kg / (height_cm / 100.0) ** 2
+def bmi(weight_kg: float | None, height_cm: float | None) -> float | None:
+    """Вернуть ИМТ при наличии положительных конечных значений роста и веса."""
+    if height_cm is None or weight_kg is None:
+        return None
+    if not (math.isfinite(height_cm) and math.isfinite(weight_kg) and height_cm > 0 and weight_kg > 0):
+        return None
+    area = (height_cm / 100.0) * (height_cm / 100.0)
+    if not area:
+        return None
+    index = weight_kg / area
+    return index if math.isfinite(index) and index > 0 else None
 
 
 def min_goal_weight(height_cm: float) -> float:
@@ -98,13 +107,16 @@ def compute_target(sex: str, age: int, weight_kg: float, height_cm: float,
                    pal: float, rate_kg_week: float = -0.5,
                    goal_weight_kg: float | None = None) -> Target:
     """target = TEE + adjustment, adjustment гасится taper'ом у цели."""
+    current_bmi = bmi(weight_kg, height_cm)
+    if current_bmi is None:
+        raise ValueError("Для расчёта цели нужны корректные рост и вес.")
     pa = pa_from_pal(pal, sex)
     height_m = height_cm / 100.0
     tee = tee_iom(sex, age, weight_kg, height_m, pa)
     crosscheck_tee(tee, sex, age, weight_kg, height_cm, pal)
 
     rate = max(-MAX_RATE, min(MAX_RATE, rate_kg_week))
-    if age < MIN_AGE or bmi(weight_kg, height_cm) < MIN_BMI:
+    if age < MIN_AGE or current_bmi < MIN_BMI:
         rate = max(rate, 0.0)                        # нет дефицита: только поддержание
     adjustment = rate * KCAL_PER_KG / 7              # rate<0 (похудение) → дефицит
 

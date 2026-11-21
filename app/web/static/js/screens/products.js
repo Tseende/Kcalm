@@ -1,13 +1,32 @@
 // "Мои продукты" list
 import { api } from '../api.js';
-import { foodPic, foodGroupOf, FOOD_GROUPS, groupLabel } from '../pics.js';
+import { drinkPic, foodPic, foodPicKey, foodGroupOf, FOOD_GROUPS, groupLabel } from '../pics.js';
 import { h, icon, tile, nav, pageHead, sheet, skeletonCards, emptyState, errorState, debounce, fmtN, mainButton, macroChips } from '../ui.js';
-import { drinkPic } from '../pics.js';
+import { COLUMNS, ROWS, KEYS } from '../food_atlas.js';
 import { t, tn } from '../i18n.js';
 
 const PALETTE = ['blue', 'green', 'orange', 'purple', 'teal', 'pink', 'red'];
 const ORDER = [...new Set([...FOOD_GROUPS.map(([t]) => t), 'Другое'])];
+const PAGE_SIZE = 40;
+const ATLAS_THRESHOLD = 120;
+const ATLAS = new URL('../../img/food-atlas.webp', import.meta.url).href;
+const ATLAS_INDEX = new Map(KEYS.map((key, i) => [key, i]));
 const DRINKS = '\u0000drinks';   // служебный ключ чипа «Напитки» (каталог напитков, не свои продукты)
+
+function cataloguePic(product, useAtlas) {
+  const key = useAtlas ? foodPicKey(product.name, product.icon) : null;
+  const i = ATLAS_INDEX.get(key);
+  if (i === undefined) return foodPic(product.name, 48, product.icon);
+  const x = (i % COLUMNS) * 100 / Math.max(1, COLUMNS - 1);
+  const y = Math.floor(i / COLUMNS) * 100 / Math.max(1, ROWS - 1);
+  return h('span', { class: 'pic', 'aria-hidden': 'true', style: { width: '48px', height: '48px' } },
+    h('span', { class: 'pic-sprite', style: {
+      backgroundImage: `url("${ATLAS}")`,
+      backgroundSize: `${COLUMNS * 100}% ${ROWS * 100}%`,
+      backgroundPosition: `${x}% ${y}%`,
+    } }));
+}
+
 
 export default async function render(root, ctx) {
   const view = h('div', { class: 'screen' });
@@ -37,7 +56,7 @@ export default async function render(root, ctx) {
   function paint() {
     const groups = new Map();
     for (const p of all) {
-      const g = foodGroupOf(p.name, p.icon);
+      const g = p.group;
       groups.set(g, (groups.get(g) || 0) + 1);
     }
     if (cat && cat !== DRINKS && !groups.has(cat)) cat = null;
@@ -49,15 +68,27 @@ export default async function render(root, ctx) {
     chips.scrollLeft = keepX;
     chips.querySelector('.chip.active')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
     if (cat === DRINKS) return;
-    const shown = cat ? all.filter((p) => foodGroupOf(p.name, p.icon) === cat) : all;
-    list.replaceChildren(h('div', { class: 'list tiles prod-list' }, shown.map((p) => h('button', { class: 'row prod-row', type: 'button', onclick: () => nav.go('/menu/product/' + p.id) },
-      foodPic(p.name, 48, p.icon) || tile('package', PALETTE[Math.abs(Number(p.id) || 0) % PALETTE.length]),
+    const shown = cat ? all.filter((p) => p.group === cat) : all;
+    const rows = h('div', { class: 'list tiles prod-list' });
+    const row = (p) => h('button', { class: 'row prod-row', type: 'button', onclick: () => nav.go('/menu/product/' + p.id) },
+      cataloguePic(p, shown.length >= ATLAS_THRESHOLD) || tile('package', PALETTE[Math.abs(Number(p.id) || 0) % PALETTE.length]),
       h('span', { class: 'grow' },
         h('span', { class: 'row-title' }, p.name),
         p.brand ? h('span', { class: 'row-sub' }, p.brand) : null,
         macroChips({ p: p.protein, f: p.fat, c: p.carbs })),
-      h('span', { class: 'prod-kcal' }, h('b', null, fmtN(p.kcal)), h('span', null, t('unit.kcal')))))),
-      h('div', { class: 'footnote' }, t('prod.count', { n: tn('prod.n', shown.length) })));
+      h('span', { class: 'prod-kcal' }, h('b', null, fmtN(p.kcal)), h('span', null, t('unit.kcal'))));
+    let displayed = 0;
+    const more = h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => appendPage(true) }, t('prod.more'));
+    function appendPage(focusFirst = false) {
+      const batch = shown.slice(displayed, displayed + PAGE_SIZE).map(row);
+      rows.append(...batch);
+      displayed += batch.length;
+      if (focusFirst) batch[0]?.focus();
+      if (displayed >= shown.length) more.remove();
+    }
+    appendPage();
+    list.replaceChildren(rows, h('div', { class: 'footnote' }, t('prod.count', { n: tn('prod.n', shown.length) })));
+    if (displayed < shown.length) list.append(more);
   }
 
   // Напитки: готовый каталог с калориями на 100 мл; тап открывает ввод напитка с этим выбором.
@@ -66,7 +97,7 @@ export default async function render(root, ctx) {
     if (!list.children.length) list.replaceChildren(skeletonCards(3, 64));
     try {
       const { drinks } = await api.get('/drinks');
-      if (!ctx.alive() || cat !== DRINKS) return;
+      if (!ctx.alive() || cat !== DRINKS || q !== search.value.trim().toLowerCase()) return;
       const shown = drinks.filter((d) => !q || d.name.toLowerCase().includes(q));
       if (!shown.length) { list.replaceChildren(emptyState('search', t('common.not_found'), t('common.try_other'))); return; }
       list.replaceChildren(h('div', { class: 'list tiles prod-list' }, shown.map((d) => h('button', {
@@ -88,8 +119,8 @@ export default async function render(root, ctx) {
     if (!list.children.length) list.replaceChildren(skeletonCards(3, 64));
     try {
       const { products } = await api.get('/products', { q });
-      if (!ctx.alive() || q !== search.value.trim()) return;
-      all = products;
+      if (!ctx.alive() || cat === DRINKS || q !== search.value.trim()) return;
+      all = products.map((p) => ({ ...p, group: foodGroupOf(p.name, p.icon) }));
       if (!products.length) {
         paint();
         list.replaceChildren(q ? emptyState('search', t('common.not_found'), t('common.try_other'))

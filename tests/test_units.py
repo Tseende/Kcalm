@@ -357,3 +357,15 @@ def test_message_card_length_bound():
     card = format_card("20:40", "Ужин", calculate_meal(items), 0, 2000, 0, 100,
                        late=False, late_kcal=0)
     assert len(card.plain()) <= 4096
+
+
+@pytest.mark.parametrize("height", [None, 0, -170, float("inf"), float("nan")])
+def test_bmi_missing_or_invalid_height(height):
+    assert targets.bmi(70, height) is None
+    with pytest.raises(ValueError, match="рост и вес"):
+        targets.compute_target("female", 30, 70, height, 1.5)
+
+
+def test_bmi_missing_weight_and_valid_profile():
+    assert targets.bmi(None, 175) is None
+    assert targets.bmi(70, 175) == pytest.approx(22.86, abs=0.01)

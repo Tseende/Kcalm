@@ -66,7 +66,7 @@ function profileCard(me, name) {
       const pct = Math.round((done / total) * 100);
       text = t('menu.prog', { s: losing ? '−' : '+', a: fmtN(done), b: fmtN(total), left: fmtN(left) });
       sub2 = `${fmtN(now)} → ${fmtN(goal)} ${t('unit.kg')}`;
-      const fill = h('i', { style: { width: pct + '%' } });
+      const fill = h('i', { style: { transform: `scaleX(${pct / 100})` } });
       bar = h('div', { class: 'bar bar-goal', role: 'progressbar', 'aria-label': t('stats.goal_progress'), 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': pct }, fill);
     } else {
       text = t('menu.left_kg', { v: fmtN(left) });

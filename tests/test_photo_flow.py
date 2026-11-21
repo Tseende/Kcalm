@@ -401,3 +401,26 @@ async def test_typing_indicator_instead_of_status_chain(db, monkeypatch):
     for gone in ("📷 скачиваю…", "📷 распознаю…", "🔢 считаю…"):
         assert gone not in session.texts
     await _drain()
+
+
+async def test_late_album_photo_is_added_to_saved_meal(db, monkeypatch):
+    bot, dp, _ = build(db)
+    uid = await onboard(dp, bot)
+
+    async def fake_photo(b64, caption, user_id, conn, **kw):
+        import base64
+        name = "суп" if b"early" in base64.b64decode(b64) else "хлеб"
+        return _food(name, 200 if name == "суп" else 40)
+
+    monkeypatch.setattr(foodsvc, "parse_photo", fake_photo)
+    await _feed(dp, bot, _photo(bot, "early", caption="обед", group="late-group"))
+    await _drain()
+    assert not intake._ALBUMS
+    original = repo.telegram_album_meal(db, uid, "late-group")
+    assert original
+    await _feed(dp, bot, _photo(bot, "late", group="late-group"))
+    await _drain()
+
+    assert [r[0] for r in db.execute("SELECT id FROM meals WHERE user_id=?", (uid,))] == [original]
+    assert len(repo.meal_photos(db, original)) == 2
+    assert sorted(r["name_ru"] for r in repo.get_meal_items(db, original)) == ["суп", "хлеб"]

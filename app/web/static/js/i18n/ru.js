@@ -781,6 +781,7 @@ export default {
   "prod.by_label_sub": "Несколько фото упаковки или поиск в Open Food Facts",
   "prod.search_drink": "Поиск напитка",
   "prod.all": "Все {n}",
+  "prod.more": "Показать ещё",
   "prod.count": "{n} · значения на 100 г",
   "prod.n": {"one": "{n} продукт", "few": "{n} продукта", "many": "{n} продуктов"},
   "prod.sugar": " · можно с сахаром",

@@ -346,15 +346,21 @@ export function foodPicName(name) {
   return null;
 }
 
+const assets = new URL('../', import.meta.url);
+
 function pic(path, size) {
   return h('span', { class: 'pic', 'aria-hidden': 'true', style: { width: size + 'px', height: size + 'px' } },
-    h('img', { src: path, alt: '', loading: 'lazy', decoding: 'async', width: size, height: size }));
+    h('img', { src: new URL(path, assets).href, alt: '', loading: 'lazy', decoding: 'async', width: size, height: size }));
 }
 
 // null, если подходящей картинки нет: вызывающий код рисует обычную плитку.
+export function foodPicKey(name, icon) {
+  return FOOD_ICONS.includes(icon) ? icon : foodPicName(name);
+}
+
 export function foodPic(name, size = 40, icon = null) {
-  const f = FOOD_ICONS.includes(icon) ? icon : foodPicName(name);
-  return f ? pic(`img/food/${f}.webp?v=8`, size) : null;
+  const f = foodPicKey(name, icon);
+  return f ? pic(`img/food/${f}.webp`, size) : null;
 }
 
 const DRINKS = new Set(['cola', 'cola_zero', 'fanta', 'tea', 'americano', 'cappuccino', 'flat_white', 'latte', 'juice', 'water', 'smoothie', 'beer', 'beer0', 'wine', 'energy', 'shake', 'juice_apple', 'juice_orange', 'juice_tomato', 'juice_cherry', 'juice_multi', 'juice_grape', 'sparkling', 'cocoa', 'lemonade', 'icetea', 'oatmilk', 'kvass']);
@@ -362,18 +368,18 @@ const DRINK_ALIAS = { juice: 'juice_box', beer0: 'beer' };
 
 export function drinkPic(id, size = 48) {
   if (!DRINKS.has(id)) return null;
-  return pic(`img/drink/${DRINK_ALIAS[id] || id}.webp?v=5`, size);
+  return pic(`img/drink/${DRINK_ALIAS[id] || id}.webp`, size);
 }
 
 const DISH_PICS = { dessert_plate: 'dessert_plate', square_plate: 'square_plate', oval_plate: 'oval_plate', rectangular_plate: 'rectangular_plate', pasta_plate: 'pasta_plate', divided_plate: 'divided_plate', platter: 'platter', ramekin: 'ramekin', plate: 'plate', deep_plate: 'deep_plate', bowl: 'bowl', salad_bowl: 'salad_bowl', mug: 'mug', cup: 'cup', glass: 'glass', pan: 'pan', pot: 'pot', container: 'lunchbox', jar: 'jar', thermos: 'thermos' };
 
 // null для «другое»: вызывающий код рисует обычную плитку.
 export function dishPic(kind, size = 48) {
-  return DISH_PICS[kind] ? pic(`img/dish/${DISH_PICS[kind]}.webp?v=4`, size) : null;
+  return DISH_PICS[kind] ? pic(`img/dish/${DISH_PICS[kind]}.webp`, size) : null;
 }
 
 export function mealPic(type, size = 48) {
-  return ['breakfast', 'lunch', 'dinner', 'snack'].includes(type) ? pic(`img/meal/${type}.webp?v=4`, size) : null;
+  return ['breakfast', 'lunch', 'dinner', 'snack'].includes(type) ? pic(`img/meal/${type}.webp`, size) : null;
 }
 
 // Напитки по названию позиции. Порядок важен: частные случаи раньше общих.
@@ -424,7 +430,7 @@ export function mealIcon(meal, size = 56) {
     const d = drinkPicName(it.name);
     if (d) return drinkPic(d, size);
     const f = foodPicName(it.name);
-    if (f) return pic(`img/food/${f}.webp?v=8`, size);
+    if (f) return pic(`img/food/${f}.webp`, size);
   }
   return mealPic(meal.type, size);
 }

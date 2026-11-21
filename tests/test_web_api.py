@@ -6,6 +6,7 @@ from __future__ import annotations
 import datetime as dt
 import importlib.util
 import json
+import re
 import time
 from types import SimpleNamespace
 from urllib.parse import urlencode
@@ -808,11 +809,30 @@ async def test_static_index_and_redirect(client):
         assert resp.status == 200, path
         assert resp.headers["Cache-Control"] == "no-cache"
         assert "text/html" in resp.headers["Content-Type"]
-        assert (await resp.read()) == (server.STATIC_DIR / "index.html").read_bytes()
+        page = await resp.text()
+        assert re.search(r'src="/app/v/[a-f0-9]{20}/js/main.js"', page)
+        assert re.search(r'href="/app/v/[a-f0-9]{20}/css/app.css"', page)
     root = await client.get("/", allow_redirects=False)
     assert root.status == 302 and root.headers["Location"] == "/app/"
     health = await client.get("/healthz")
     assert health.status == 200 and (await health.json()) == {"ok": True}
+
+
+async def test_versioned_assets_are_immutable_on_entire_module_tree(client):
+    page = await client.get("/app/")
+    revision = re.search(r'src="/app/v/([a-f0-9]{20})/js/main.js"', await page.text())[1]
+    for file in ("js/main.js", "js/api.js", "js/i18n/en.js", "css/coach.css", "img/food-atlas.webp"):
+        response = await client.get(f"/app/v/{revision}/{file}")
+        assert response.status == 200
+        assert response.headers["Cache-Control"] == "public, max-age=31536000, immutable"
+        assert await response.read() == (server.STATIC_DIR / file).read_bytes()
+    response = await client.get("/app/js/api.js")
+    assert "immutable" not in response.headers["Cache-Control"]
+    obsolete = "0" * 20
+    response = await client.get(f"/app/v/{obsolete}/js/main.js")
+    assert response.status == 404
+    cached = await client.get("/app/", headers={"If-None-Match": page.headers["ETag"]})
+    assert cached.status == 304 and cached.headers["Cache-Control"] == "no-cache"
 
 
 async def test_activity_middleware_ignores_healthz(client, monkeypatch):

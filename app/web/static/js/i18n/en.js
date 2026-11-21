@@ -781,6 +781,7 @@ export default {
   "prod.by_label_sub": "A few photos of the packaging, or a search in Open Food Facts",
   "prod.search_drink": "Search drinks",
   "prod.all": "All {n}",
+  "prod.more": "Show more",
   "prod.count": "{n} · values per 100 g",
   "prod.n": {"one": "{n} product", "other": "{n} products"},
   "prod.sugar": " · can be sweetened",

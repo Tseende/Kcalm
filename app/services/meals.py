@@ -10,12 +10,11 @@ import logging
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from app.domain import mealtime
 from app.services import food as foodsvc
-from app.storage import repo
+from app.storage import photos, repo
 
 log = logging.getLogger(__name__)
 
@@ -125,7 +124,7 @@ def read_images_b64(paths: list[str]) -> tuple[list[str], list[int]]:
     out, idx = [], []
     for i, path in enumerate(paths):
         try:
-            out.append(base64.b64encode(Path(path).read_bytes()).decode())
+            out.append(base64.b64encode(photos.read(path)).decode())
             idx.append(i)
         except OSError:
             log.warning("файл фото не читается: %s", path)
@@ -150,7 +149,8 @@ async def save_understanding(db: sqlite3.Connection, user, u, *, text: str | Non
                              dish_ids: list[int | None] | None = None,
                              transcript: str | None = None, calc=None,
                              taken_at: datetime | None = None,
-                             explicit_at: datetime | None = None) -> SavedMeal:
+                             explicit_at: datetime | None = None,
+                             telegram_album: str | None = None) -> SavedMeal:
     """Посчитать и записать приём пищи. u.items должны быть непустыми."""
     uid = user["id"]
     now_local = foodsvc.local_now(user["tz"])
@@ -171,7 +171,7 @@ async def save_understanding(db: sqlite3.Connection, user, u, *, text: str | Non
         db, uid, utc_of(user["tz"], local_date, local_time),
         local_date, local_time, meal_type, source, calc,
         photo_path=photo_path, transcript=transcript or text,
-        photo_paths=photo_paths, dish_ids=dish_ids,
+        photo_paths=photo_paths, dish_ids=dish_ids, telegram_album=telegram_album,
     )
     touch_foods(db, uid, u, calc)
     return SavedMeal(meal_id, calc, local_date, local_time, meal_type)

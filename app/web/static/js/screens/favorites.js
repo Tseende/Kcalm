@@ -3,7 +3,7 @@ import { api } from '../api.js';
 import { foodPic, mealPic } from '../pics.js';
 import { t, tn } from '../i18n.js';
 import {
-  h, nav, mainButton, pageHead, emptyState, errorState, skeletonCards, fmtN, photoImg, macroChips, icon, sheet, segmented, sectionTitle,
+  debounce, h, nav, mainButton, pageHead, emptyState, errorState, skeletonCards, fmtN, photoImg, macroChips, icon, sheet, segmented, sectionTitle,
   toast, haptic, MEAL_TYPES, todayISO, addDays, dataChanged,
 } from '../ui.js';
 
@@ -53,7 +53,7 @@ export default async function render(root, ctx) {
     chips.replaceChildren(mk(null, t('prod.all', { n: items.length })), ...CATEGORIES.filter(([k]) => counts.has(k)).map(([k, label]) => mk(k, `${label} ${counts.get(k)}`)));
   }
   const count = h('div', { class: 'footnote' }, t('fav.count', { n: tn('fav.dishes', items.length) }));
-  const search = h('input', { type: 'search', placeholder: t('fav.search_ph'), 'aria-label': t('common.search'), autocomplete: 'off', oninput: () => paint() });
+  const search = h('input', { type: 'search', placeholder: t('fav.search_ph'), 'aria-label': t('common.search'), autocomplete: 'off', oninput: debounce(() => { if (ctx.alive()) paint(); }, 250) });
 
   function row(f) {
     const names = (f.names || []).filter(Boolean);

@@ -38,7 +38,7 @@ def gather(db: sqlite3.Connection, user, today: date) -> dom.SafetyInputs:
     loss_pct = None
     if slope is not None and weight and points[-1][0] - points[0][0] >= 7:
         loss_pct = -slope / weight * 100
-    current_bmi = bmi(weight, user["height_cm"]) if weight and user["height_cm"] else None
+    current_bmi = bmi(weight, user["height_cm"])
     return dom.SafetyInputs(
         very_low_days=very_low, logged_days=logged,
         overate_14d=sum(1 for e in events14 if e["outcome"] == "overate"),

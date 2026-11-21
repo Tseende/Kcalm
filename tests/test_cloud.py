@@ -62,6 +62,28 @@ def test_photo_copy_and_restore(cloud_db, tmp_path):
         photos.enable(None)
 
 
+def test_photo_read_recovers_after_restart_and_restricts_path(cloud_db, tmp_path):
+    root = tmp_path / "photos"
+    photos.enable(cloud_db, root=root)
+    try:
+        path = root / "dishes" / "cup.jpg"
+        original = b"image bytes"
+        photos.write(path, original)
+        path.unlink()
+
+        photos.enable(None)
+        photos.enable(cloud_db, root=root)
+        assert photos.read(path) == original
+        assert path.is_file()
+
+        outside = tmp_path / "outside.jpg"
+        cloud_db.execute("INSERT INTO photo_blobs (path, data) VALUES (?, ?)", (str(outside), original))
+        cloud_db.commit()
+        assert not photos.ensure(outside).exists()
+    finally:
+        photos.enable(None)
+
+
 def test_photo_write_without_cloud_is_plain_file(tmp_path):
     photos.enable(None)
     photos.write(tmp_path / "x.jpg", b"1")

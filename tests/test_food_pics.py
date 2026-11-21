@@ -51,20 +51,19 @@ def test_food_card_matching_and_assets():
         'Картофель': 'potato',
     }
     script = r'''
-const fs = require('node:fs');
-const vm = require('node:vm');
-const source = fs.readFileSync(process.argv[1], 'utf8')
-  .replace(/^import .*;\r?\n/gm, '').replace(/\bexport /g, '');
-const ctx = { t: x => x };
-vm.createContext(ctx);
-vm.runInContext(source, ctx);
+import fs from 'node:fs';
+import { pathToFileURL } from 'node:url';
+globalThis.window = { addEventListener() {} };
+globalThis.location = { search: '', hostname: 'localhost', protocol: 'http:' };
+const url = pathToFileURL(process.argv[1]);
+const { foodPicName, FOOD_GROUPS: groups, FOOD_ICONS: keys } = await import(url);
+const { KEYS: atlas } = await import(new URL('./food_atlas.js', url));
 const cases = JSON.parse(process.argv[2]);
 for (const [name, expected] of Object.entries(cases)) {
-  const actual = ctx.foodPicName(name);
+  const actual = foodPicName(name);
   if (actual !== expected) throw new Error(`${name}: ${actual} != ${expected}`);
 }
-const groups = vm.runInContext('FOOD_GROUPS', ctx);
-const keys = vm.runInContext('FOOD_ICONS', ctx);
+for (const key of keys) if (!atlas.includes(key)) throw new Error('Missing sprite cell: ' + key);
 for (const key of keys) {
   if (!fs.existsSync(process.argv[3] + '/' + key + '.webp')) throw new Error('Missing asset: ' + key);
 }
@@ -74,7 +73,7 @@ for (const key of ['chips', 'ridgedchips', 'croutons', 'nachos', 'popcorn']) {
 }
 if (new Set(groups.flatMap(([, keys]) => keys)).size !== keys.length) throw new Error('Ungrouped icon');
 '''
-    result = subprocess.run([node, '-e', script, str(ROOT / 'app/web/static/js/pics.js'),
+    result = subprocess.run([node, '--input-type=module', '-e', script, str(ROOT / 'app/web/static/js/pics.js'),
                              json.dumps(cases, ensure_ascii=False), str(ROOT / 'app/web/static/img/food')],
                             text=True, capture_output=True)
     assert result.returncode == 0, result.stderr

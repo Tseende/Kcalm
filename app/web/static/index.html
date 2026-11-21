@@ -6,12 +6,16 @@
   <meta name="color-scheme" content="light dark">
   <title>Дневник питания</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="css/app.css?v=127">
-  <link rel="stylesheet" href="css/coach.css?v=121">
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script>
     // Применяем сохранённую тему до первой отрисовки. В режиме «Как в системе» слушаем Telegram или браузер.
-    (function () {
+    window.telegramReady = new Promise(function (resolve) {
+      var script = document.createElement('script');
+      script.src = 'https://telegram.org/js/telegram-web-app.js';
+      script.async = true;
+      script.onload = script.onerror = resolve;
+      document.head.appendChild(script);
+    });
+    function applyTheme() {
       var d = document.documentElement, scheme = 'light';
       try {
         var p = localStorage.getItem('theme'), tg = window.Telegram && Telegram.WebApp;
@@ -23,9 +27,14 @@
           scheme = dark ? 'dark' : 'light';
         }
       } catch (e) { /* без хранилища */ }
+      d.classList.remove('scheme-light', 'scheme-dark', 'scheme-cosmic');
       d.classList.add('scheme-' + scheme);
-    })();
+    }
+    applyTheme();
+    window.telegramReady.then(applyTheme);
   </script>
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/coach.css">
 </head>
 <body>
   <div id="boot" class="boot"><div class="spinner"></div></div>
@@ -35,6 +44,6 @@
   <div id="overlay"></div>
   <div id="toasts" aria-live="polite"></div>
   <noscript>Для работы приложения нужен JavaScript. / JavaScript is required.</noscript>
-  <script type="module" src="js/main.js?v=128"></script>
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>

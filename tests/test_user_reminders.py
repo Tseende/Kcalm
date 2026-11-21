@@ -19,8 +19,6 @@ from app.storage import repo
 from tests.test_scheduler import FakeBot
 from tests.test_web_api import H, _fixed_now, cfg, client, db, make_client, user_id  # noqa: F401  (фикстуры)
 
-SCRATCH = Path("/private/tmp/claude-502/-Users-Zhan-Python---------------/"
-               "2ab85c70-51ef-4c37-ad0b-150a5425b8b6/scratchpad")
 REAL_DB = Path(__file__).resolve().parent.parent / "data" / "health.db"
 
 
@@ -373,14 +371,12 @@ async def test_morning_reminder_now_sends_message(db):
 
 # ------------------------------------------------------------------ миграция 027
 
-def test_migration_027_on_copy_of_real_db_and_rerun():
-    SCRATCH.mkdir(parents=True, exist_ok=True)
+def test_migration_027_on_copy_of_real_db_and_rerun(tmp_path, monkeypatch):
     if not REAL_DB.exists():
         pytest.skip("нет data/health.db")
-    copy = SCRATCH / "health_copy_027.db"
-    for suffix in ("", "-wal", "-shm"):
-        if (SCRATCH / f"health_copy_027.db{suffix}").exists():
-            (SCRATCH / f"health_copy_027.db{suffix}").unlink()
+    # Это копия SQLite с версией в PRAGMA user_version, а не реплика Turso.
+    monkeypatch.delenv("HEALTHBOT_TEST_LIBSQL", raising=False)
+    copy = tmp_path / "health_copy_027.db"
     src = sqlite3.connect(REAL_DB)
     dst = sqlite3.connect(copy)
     src.backup(dst)                                    # согласованная копия, оригинал не меняется

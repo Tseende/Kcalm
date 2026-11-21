@@ -86,7 +86,7 @@ export default async function render(root, ctx) {
       const left = target - val;
       const isOver = target > 0 && left < -0.05;
       const pct = target > 0 ? Math.min(100, (val / target) * 100) : 0;
-      const fill = h('i', { style: { width: pct + '%' } });
+      const fill = h('i', { style: { transform: `scaleX(${pct / 100})` } });
       const bar = h('div', { class: 'bar bar-m' + (animate ? ' bar-scale' : ''), role: 'progressbar', 'aria-label': name, 'aria-valuemin': 0, 'aria-valuemax': Math.round(target), 'aria-valuenow': Math.round(val) }, fill);
       fill.style.setProperty('--i', macroIdx++);
       return h('div', { class: 'macro ' + cls + (isOver ? ' is-over' : '') },
@@ -122,7 +122,7 @@ export default async function render(root, ctx) {
       const left = tgt.water_ml - waterMl;
       waterSub.textContent = left > 0 ? t('today.water_left', { v: fmtKcal(left) }) : t('today.water_done');
       waterSub.classList.toggle('done', left <= 0);
-      waterBar.firstChild.style.width = Math.min(100, (waterMl / tgt.water_ml) * 100) + '%';
+      waterBar.firstChild.style.transform = `scaleX(${Math.min(1, waterMl / tgt.water_ml)})`;
       waterBar.setAttribute('aria-valuenow', waterMl);
       undoBtn.disabled = !waterUndo.length || curDate !== todayISO();
     }

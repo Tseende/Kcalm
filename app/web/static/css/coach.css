@@ -8,7 +8,7 @@ html:is(.scheme-dark, .scheme-cosmic) .coach { --coach-dim: rgba(0, 0, 0, .68); 
 /* «Дыра» в затемнении: огромная тень вокруг прозрачного скруглённого прямоугольника */
 .coach-hole { position: fixed; left: 0; top: 0; width: 0; height: 0; border-radius: 18px; pointer-events: none;
   box-shadow: 0 0 0 200vmax var(--coach-dim);
-  transition: left .32s var(--ease-spring, cubic-bezier(.2, .8, .2, 1)), top .32s var(--ease-spring, cubic-bezier(.2, .8, .2, 1)), width .32s var(--ease-spring, cubic-bezier(.2, .8, .2, 1)), height .32s var(--ease-spring, cubic-bezier(.2, .8, .2, 1)), border-radius .32s ease; }
+  transition: transform .32s var(--ease-spring, cubic-bezier(.2, .8, .2, 1)); }
 .coach.no-tr .coach-hole { transition: none; }
 .coach-hole::after { content: ""; position: absolute; inset: -2px; border-radius: inherit; border: 2px solid rgba(255, 255, 255, .92); animation: coach-ring 1.6s ease-out infinite; }
 @keyframes coach-ring { 0% { transform: scale(1); opacity: .95; } 100% { transform: scale(1.12, 1.3); opacity: 0; } }

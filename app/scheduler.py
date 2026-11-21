@@ -26,6 +26,7 @@ from app.storage import repo
 from app.timeutils import minutes_before
 
 log = logging.getLogger(__name__)
+REMINDER_WORKERS = 8
 REMINDER_IMAGES = Path(__file__).resolve().parent / "assets" / "reminders"
 
 
@@ -137,12 +138,13 @@ async def dispatch_due_reminders(db: sqlite3.Connection, bot,
             log.warning("предпроверка напоминаний не удалась", exc_info=True)
 
     users = db.execute("SELECT * FROM users WHERE onboarded=1").fetchall()
-    # Сбой у одного человека не должен останавливать остальных и продолжения эпизодов.
-    results = await asyncio.gather(*(_dispatch_user_safe(db, bot, user, now_utc) for user in users),
-                                   return_exceptions=True)
-    for user, res in zip(users, results):
-        if isinstance(res, BaseException):
-            log.error("напоминания: сбой у user=%s", user["id"], exc_info=res)
+    pending = iter(users)
+
+    async def worker():
+        for user in pending:
+            await _dispatch_user_safe(db, bot, user, now_utc)
+
+    await asyncio.gather(*(worker() for _ in range(min(len(users), REMINDER_WORKERS))))
     try:
         await dispatch_craving_followups(db, bot)
     except Exception:  # noqa: BLE001
@@ -173,7 +175,7 @@ def _has_due_work(db, now_utc: datetime) -> bool:
                          if r["kind"] == "kitchen_close" else r["local_time"])
                 if _is_due(r["kind"], time_, now, r["days"]) and r["last_sent_at"] != marker:
                     return True
-            if repo.due_rules(conn, user["id"], now.strftime("%H:%M"), now.strftime("%Y-%m-%d")):
+            if _due_rules(conn, user["id"], now):
                 return True
         return False
     finally:
@@ -210,16 +212,14 @@ async def _dispatch_user(db: sqlite3.Connection, bot, user, now_utc: datetime) -
         if not _is_due(reminder["kind"], reminder_time, now, reminder["days"]):
             continue
         marker = now.strftime("%Y-%m-%d %H:%M")
-        if reminder["last_sent_at"] == marker:
+        if reminder["last_sent_at"] == marker or not repo.claim_reminder(db, reminder, marker):
             continue
         try:
             await _send_reminder(db, bot, user, reminder["kind"], now)
         except Exception:  # noqa: BLE001 - логируем, не блокируя других пользователей
             log.exception("не отправлено напоминание user=%s kind=%s",
                           user["id"], reminder["kind"])
-            continue
-        db.execute("UPDATE reminders SET last_sent_at=? WHERE id=?", (marker, reminder["id"]))
-        db.commit()
+            repo.release_reminder(db, reminder, marker)
     await _dispatch_custom(db, bot, user, now)
     await _dispatch_rules(db, bot, user, now)
 
@@ -229,16 +229,13 @@ async def _dispatch_custom(db: sqlite3.Connection, bot, user, now: datetime) -> 
     marker = now.strftime("%Y-%m-%d %H:%M")
     rows = db.execute("SELECT * FROM user_reminders WHERE user_id=? AND enabled=1", (user["id"],)).fetchall()
     for r in rows:
-        if not remsvc.row_is_due(r, now):
+        if not remsvc.row_is_due(r, now) or not repo.claim_reminder(db, r, marker, custom=True):
             continue
         try:
             await _send_custom(db, bot, user, r, now)
         except Exception:  # noqa: BLE001
             log.exception("не отправлено своё напоминание user=%s id=%s", user["id"], r["id"])
-            continue
-        # метка и при пропуске: в эту же минуту второй раз не пробуем
-        db.execute("UPDATE user_reminders SET last_sent_at=? WHERE id=?", (marker, r["id"]))
-        db.commit()
+            repo.release_reminder(db, r, marker, custom=True)
 
 
 async def _send_custom(db: sqlite3.Connection, bot, user, r, now: datetime) -> None:
@@ -258,18 +255,24 @@ async def _send_custom(db: sqlite3.Connection, bot, user, r, now: datetime) -> N
     await _send_notification(bot, user["tg_id"], text, r["template"] if tpl else "custom", screen, button)
 
 
+def _due_rules(db, user_id: int, now: datetime):
+    return [rule for rule in repo.due_rules(db, user_id, now.date().isoformat())
+            if remsvc.is_due(rule["remind_time"], None, None, None, now)]
+
+
 async def _dispatch_rules(db: sqlite3.Connection, bot, user, now: datetime) -> None:
     """Правила «если-то» с временем напоминания: «в 21:00 поужинал(а) → почищу зубы…»."""
     from app.services import plan as plansvc
-    today = now.strftime("%Y-%m-%d")
-    for rule in repo.due_rules(db, user["id"], now.strftime("%H:%M"), today):
+    today = now.date().isoformat()
+    for rule in _due_rules(db, user["id"], now):
+        if not repo.claim_rule(db, rule, today):
+            continue
         try:
             await _send_notification(bot, user["tg_id"], "🧭 Твоё правило на этот час:\n" +
                                      plansvc.format_rule(rule), "rule")
         except Exception:  # noqa: BLE001
             log.exception("не отправлено правило id=%s", rule["id"])
-            continue
-        repo.mark_rule_sent(db, rule["id"], today)
+            repo.release_rule(db, rule, today)
 
 
 async def dispatch_craving_followups(db: sqlite3.Connection, bot) -> None:
@@ -299,11 +302,17 @@ async def dispatch_craving_followups(db: sqlite3.Connection, bot) -> None:
 
 
 def _is_due(kind: str, local_time: str, now: datetime, days: str | None = None) -> bool:
-    if local_time != now.strftime("%H:%M"):
-        return False
-    if days and str(now.weekday()) not in days:       # напоминание только в выбранные дни
-        return False
-    return kind != "weekly" or now.weekday() == 6
+    return (kind != "weekly" or now.weekday() == 6) and remsvc.is_due(local_time, days, None, None, now)
+
+
+async def _send_with_flood_wait(send, *args, **kwargs) -> None:
+    try:
+        await send(*args, **kwargs)
+    except TelegramRetryAfter as exc:
+        if exc.retry_after > 25:  # не задерживаем следующий минутный тик
+            raise
+        await asyncio.sleep(max(0, exc.retry_after))
+        await send(*args, **kwargs)
 
 
 async def _send_notification(bot, tg_id: int, text: str, kind: str,
@@ -315,11 +324,11 @@ async def _send_notification(bot, tg_id: int, text: str, kind: str,
     image = REMINDER_IMAGES / f"{kind}.jpg"
     if image.is_file():
         try:
-            await bot.send_photo(tg_id, FSInputFile(image), caption=text, **options)
+            await _send_with_flood_wait(bot.send_photo, tg_id, FSInputFile(image), caption=text, **options)
             return
         except (TelegramBadRequest, OSError) as exc:
             log.warning("картинка напоминания %s недоступна: %s", kind, exc)
-    await bot.send_message(tg_id, text, **options)
+    await _send_with_flood_wait(bot.send_message, tg_id, text, **options)
 
 
 async def _send_reminder(db: sqlite3.Connection, bot, user, kind: str,

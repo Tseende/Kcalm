@@ -1,6 +1,7 @@
 """Планировщик: напоминание про воду, продолжение эпизода тяги, параллельная рассылка."""
 from __future__ import annotations
 
+import asyncio
 import os
 import tempfile
 from unittest.mock import AsyncMock
@@ -45,6 +46,15 @@ async def test_reminder_image_rejection_falls_back_to_text():
     bot = RejectPhotoBot()
     await scheduler._send_notification(bot, 10, "Время завтрака", "breakfast")
     assert bot.sent == [(10, "Время завтрака")]
+
+
+@pytest.mark.asyncio
+async def test_reminder_retries_short_flood_wait():
+    error = TelegramRetryAfter(SendMessage(chat_id=10, text="text"), "flood control", retry_after=0)
+    bot = FakeBot()
+    bot.send_message = AsyncMock(side_effect=[error, None])
+    await scheduler._send_notification(bot, 10, "text", "without_image")
+    assert bot.send_message.await_count == 2
 
 
 @pytest.fixture()
@@ -271,3 +281,61 @@ def test_build_scheduler_registers_keepalive_by_default_on_render(monkeypatch):
     assert scheduler.build_scheduler(None, None).get_job("keepalive") is not None
     monkeypatch.setenv("KEEPALIVE_HOURS", "0")
     assert scheduler.build_scheduler(None, None).get_job("keepalive") is None
+
+
+@pytest.mark.asyncio
+async def test_simultaneous_dispatches_claim_once(db, monkeypatch):
+    _user(db)
+    sent = asyncio.Event()
+    done = asyncio.Event()
+
+    async def send(*_):
+        sent.set()
+        await done.wait()
+
+    sender = AsyncMock(side_effect=send)
+    monkeypatch.setattr(scheduler, "_send_reminder", sender)
+    now = _utc_for_local(16, 0)
+    first = asyncio.create_task(scheduler.dispatch_due_reminders(db, FakeBot(), now_utc=now))
+    try:
+        await asyncio.wait_for(sent.wait(), timeout=1)
+        await asyncio.wait_for(scheduler.dispatch_due_reminders(db, FakeBot(), now_utc=now), timeout=1)
+    finally:
+        done.set()
+        await first
+    assert sender.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_due_reminders_at_dst_gap_and_fold(db):
+    uid, _ = _user(db, tz="Europe/Berlin")
+    repo.set_reminder(db, uid, "water", "02:30")
+    bot = FakeBot()
+    for tick in (
+        datetime(2026, 3, 29, 0, 59, tzinfo=timezone.utc),  # 01:59
+        datetime(2026, 3, 29, 1, 0, tzinfo=timezone.utc),   # часы перескочили на 03:00
+        datetime(2026, 3, 29, 1, 1, tzinfo=timezone.utc),
+        datetime(2026, 10, 25, 0, 30, tzinfo=timezone.utc), # первые 02:30
+        datetime(2026, 10, 25, 1, 30, tzinfo=timezone.utc), # вторые 02:30
+    ):
+        await scheduler.dispatch_due_reminders(db, bot, now_utc=tick)
+    assert len(bot.sent) == 2
+
+
+@pytest.mark.asyncio
+async def test_reminder_workers_bound_concurrent_sends(db, monkeypatch):
+    for tg in range(20):
+        _user(db, tg=tg + 100)
+    running = peak = completed = 0
+
+    async def send(*_):
+        nonlocal running, peak, completed
+        running += 1
+        peak = max(peak, running)
+        await asyncio.sleep(0.01)
+        running -= 1
+        completed += 1
+
+    monkeypatch.setattr(scheduler, "_send_reminder", send)
+    await scheduler.dispatch_due_reminders(db, FakeBot(), now_utc=_utc_for_local(16, 0))
+    assert peak == scheduler.REMINDER_WORKERS and completed == 20

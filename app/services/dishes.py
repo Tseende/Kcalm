@@ -23,6 +23,6 @@ def photo_b64(dish) -> str | None:
     if not path:
         return None
     try:
-        return base64.b64encode(Path(path).read_bytes()).decode()
+        return base64.b64encode(photos.read(path)).decode()
     except OSError:
         return None

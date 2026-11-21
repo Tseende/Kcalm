@@ -56,7 +56,8 @@ MAX_FIELD_BYTES = 64 * 1024
 MEAL_TYPES = ("breakfast", "lunch", "dinner", "snack")
 LOCAL_HOSTS = ("127.0.0.1", "::1")
 PROXY_HEADERS = ("X-Forwarded-For", "Forwarded", "X-Real-IP", "X-Forwarded-Host")
-NO_CACHE = {"Cache-Control": "no-cache"}
+NO_CACHE = "no-cache"
+IMMUTABLE = "public, max-age=31536000, immutable"
 
 DB = web.AppKey("db", sqlite3.Connection)
 CONFIG = web.AppKey("config", Config)
@@ -366,7 +367,7 @@ def serve_photo(config: Config, stored_path: str | None) -> web.StreamResponse:
         path = Path(stored_path or "").resolve()
     except (OSError, RuntimeError):
         path = None
-    if not path or root not in path.parents or not path.is_file():
+    if not path or root not in path.parents or not photos.ensure(stored_path).is_file():
         raise ApiError(404, "not_found", "Не найдено.")
     return web.FileResponse(path, headers={"Cache-Control": "private, max-age=86400",
                                            "X-Content-Type-Options": "nosniff"})
@@ -1849,47 +1850,73 @@ STATIC_TEXT_TYPES = {
 }
 
 
+@lru_cache(maxsize=4)
+def _asset_build(root: Path) -> tuple[str, bytes]:
+    digest = hashlib.sha256()
+    for asset in sorted(root.rglob("*")):
+        if asset.is_file():
+            digest.update(asset.relative_to(root).as_posix().encode() + b"\0")
+            digest.update(hashlib.sha256(asset.read_bytes()).digest())
+    revision = digest.hexdigest()[:20]
+    index = (root / "index.html").read_bytes()
+    index = re.sub(rb'(href|src)="((?:css|js)/[^"]+)"',
+                   rb'\1="/app/v/' + revision.encode() + rb'/\2"', index)
+    return revision, index
+
+
 @lru_cache(maxsize=128)
 def _gzip_asset(path: Path, etag: str) -> bytes:
     # ETag входит в ключ, чтобы при изменении файла сжать его заново.
     return gzip.compress(path.read_bytes(), compresslevel=6, mtime=0)
 
 
-async def _static_response(request: web.Request, path: Path) -> web.StreamResponse:
-    headers = {**NO_CACHE, "X-Content-Type-Options": "nosniff"}
+async def _static_response(request: web.Request, path: Path, *, cache: str,
+                           index: tuple[str, bytes] | None = None) -> web.StreamResponse:
+    headers = {"Cache-Control": cache, "X-Content-Type-Options": "nosniff"}
     content_type = STATIC_TEXT_TYPES.get(path.suffix)
     if content_type is None:
         return web.FileResponse(path, headers=headers)
 
     headers["Vary"] = "Accept-Encoding"
     # Частичный ответ должен сохранить смещения в байтах исходного файла.
-    if "Range" in request.headers or not _accepts_gzip(request):
+    compressed = "Range" not in request.headers and _accepts_gzip(request)
+    if index is None and not compressed:
         return web.FileResponse(path, headers=headers)
 
     stat = await asyncio.to_thread(path.stat)
-    etag = f"{stat.st_mtime_ns:x}-{stat.st_size:x}-gzip"
+    etag = index[0] if index is not None else f"{stat.st_mtime_ns:x}-{stat.st_size:x}"
+    if compressed:
+        etag += "-gzip"
     if_match = request.if_match
     if if_match is not None:
         if not any(tag.value == "*" or (tag.value == etag and not tag.is_weak) for tag in if_match):
             return web.Response(status=412, headers=headers)
-    elif request.if_unmodified_since and stat.st_mtime > request.if_unmodified_since.timestamp():
+    elif index is None and request.if_unmodified_since and stat.st_mtime > request.if_unmodified_since.timestamp():
         return web.Response(status=412, headers=headers)
 
     if_none_match = request.if_none_match
     if if_none_match is not None:
         unchanged = any(tag.value in ("*", etag) for tag in if_none_match)
     else:
-        unchanged = bool(request.if_modified_since and stat.st_mtime <= request.if_modified_since.timestamp())
+        unchanged = bool(index is None and request.if_modified_since
+                         and stat.st_mtime <= request.if_modified_since.timestamp())
 
     if unchanged:
         response = web.Response(status=304, headers=headers)
     else:
-        body = await asyncio.to_thread(_gzip_asset, path, etag)
-        headers["Content-Encoding"] = "gzip"
+        if index is None:
+            body = await asyncio.to_thread(_gzip_asset, path, etag)
+        else:
+            body = index[1]
+            if compressed:
+                body = gzip.compress(body, mtime=0)
+        if compressed:
+            headers["Content-Encoding"] = "gzip"
         charset = "utf-8" if path.suffix != ".svg" else None
         response = web.Response(body=body, headers=headers, content_type=content_type, charset=charset)
     response.etag = etag
-    response.last_modified = stat.st_mtime
+    if index is None:
+        response.last_modified = stat.st_mtime
     return response
 
 
@@ -1915,16 +1942,35 @@ async def app_index(request: web.Request) -> web.StreamResponse:
     index = STATIC_DIR / "index.html"
     if not index.is_file():
         raise web.HTTPNotFound()
-    return await _static_response(request, index)
+    build = await asyncio.to_thread(_asset_build, STATIC_DIR)
+    return await _static_response(request, index, cache=NO_CACHE, index=build)
+
+
+def _asset_path(relative: str) -> Path:
+    root = STATIC_DIR.resolve()
+    path = (root / relative).resolve()
+    if root not in path.parents or not path.is_file():
+        raise web.HTTPNotFound()
+    return path
+
+
+@routes.get("/app/v/{revision:[a-f0-9]{20}}/{path:.+}")
+async def app_versioned_file(request: web.Request) -> web.StreamResponse:
+    revision, _ = await asyncio.to_thread(_asset_build, STATIC_DIR)
+    if request.match_info["revision"] != revision:
+        raise web.HTTPNotFound()
+    path = _asset_path(request.match_info["path"])
+    if path.name == "index.html":
+        raise web.HTTPNotFound()
+    return await _static_response(request, path, cache=IMMUTABLE)
 
 
 @routes.get("/app/{path:.+}")
 async def app_file(request: web.Request) -> web.StreamResponse:
-    root_dir = STATIC_DIR.resolve()
-    path = (root_dir / request.match_info["path"]).resolve()
-    if root_dir not in path.parents or not path.is_file():
-        raise web.HTTPNotFound()
-    return await _static_response(request, path)
+    path = _asset_path(request.match_info["path"])
+    if path.name == "index.html":
+        return await app_index(request)
+    return await _static_response(request, path, cache="public, max-age=300")
 
 
 # ------------------------------------------------------------------ сборка и запуск

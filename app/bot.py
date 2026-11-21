@@ -20,6 +20,7 @@ from app.routers import (commands, craving, dishes, intake, menu, onboarding, pr
                          support, tracking)
 from app.scheduler import build_scheduler
 from app.services import referral
+from app.storage import photos
 from app.web.server import WEBHOOK_PATH, start_web
 from app.widgets import runtime as widgets_runtime
 from app.widgets.dispatcher import WidgetDispatcher
@@ -105,8 +106,7 @@ async def main() -> None:
     db = connect_from_config(cfg)
     version = migrate(db)
     logging.info("БД готова (%s), schema v%s", "Turso" if cfg.turso_database_url else "локальный SQLite", version)
-    # Фото в БД не копируем: база хранит только данные. На временном диске Render файлы живут
-    # до рестарта (хватает, чтобы разобрать и показать приём), потом карточка идёт без картинки.
+    photos.enable(db if cfg.turso_database_url else None, cfg.photos_dir)
 
     bot = Bot(cfg.telegram_bot_token,
               default=DefaultBotProperties(parse_mode=ParseMode.HTML))
@@ -167,6 +167,7 @@ async def main() -> None:
         widgets_runtime.teardown()
         referral.uninstall()
         sched.shutdown(wait=False)
+        photos.enable(None)
         db.close()
         await bot.session.close()
         await llm_client.close_client()

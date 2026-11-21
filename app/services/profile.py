@@ -58,12 +58,13 @@ def recompute_target(db: sqlite3.Connection, user, today: date, reason: str) -> 
     """Новая норма по текущему профилю и последнему весу. Возвращает {old, new, notes}."""
     weight = repo.latest_weight_kg(db, user["id"])
     height = user["height_cm"]
-    if not weight or not height:
+    current_bmi = bmi(weight, height)
+    if current_bmi is None:
         raise ProfileError("Нужны рост и вес: сначала запишите вес.")
     age = age_of(user, today)
     rate = -float(user["target_rate_kg_week"] or 0)
     notes: list[str] = []
-    if rate > 0 and (age < 18 or bmi(weight, height) < 18.5):
+    if rate > 0 and (age < 18 or current_bmi < 18.5):
         notes.append("Дефицит не включён: возраст или ИМТ ниже безопасного порога, считаю поддержание.")
     t = compute_target(sex=user["sex"], age=age, weight_kg=weight, height_cm=height,
                        pal=pal_from_pa(user["activity_pa"]), rate_kg_week=-rate,

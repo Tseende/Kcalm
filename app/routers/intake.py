@@ -11,7 +11,6 @@ import sqlite3
 import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
-from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from aiogram import F, Router
@@ -398,9 +397,15 @@ async def _ingest_image(msg: Message, db: sqlite3.Connection, file_id: str,
         return
 
     caption = (msg.caption or "").strip()
-    if album is not None:
-        album.images.append(image)
-        album.caption = album.caption or caption
+    if group and album is not None:
+        # Долгое скачивание может закончиться после финализации предыдущей пачки.
+        current = _ALBUMS.get(group)
+        if current is None:
+            current = _ALBUMS[group] = _Album(msg=msg, user=user, db=db, add_to=album.add_to)
+            _spawn(_flush_album(group))
+        current.images.append(image)
+        current.caption = current.caption or caption
+        current.last_seen = time.monotonic()
         return
 
     if add_to:
@@ -506,36 +511,51 @@ async def _flush_album(group: tuple[int, str]) -> None:
         if album is None or album.pending <= 0:
             break
         await asyncio.sleep(0.3)
-    album = _ALBUMS.pop(group, None)
     if album is None:
         return
-    msg, db, user = album.msg, album.db, album.user
-    if not album.images:
-        if album.duplicates:
-            await msg.answer("Эти фото я уже записал пару минут назад 🙂")
-        return
     try:
-        if album.add_to:
-            repo.delete_pending_input(db, album.add_to["id"], user["id"])
-            status = await msg.answer("📷 добавляю фото к приёму…")
-            await _add_photos_to_meal(msg, db, user, album.images, album.add_to,
-                                      album.caption or None, status)
-            return
-        if album.caption and proddom.caption_says_label(album.caption):
-            status = await msg.answer("🥫 читаю этикетку…")
-            await products_router.from_label_photo(
-                msg, db, user, base64.b64encode(album.images[0].data).decode(), status)
-            return
-        if not get_config().chat_logs_food:
-            for image in album.images:
-                status = await msg.answer("📷 смотрю…")
-                await _screenshot_or_hint(msg, db, user, image, status)
-            return
-        status = await msg.answer("📷 смотрю фото…")
-        await _recognize_images(msg, db, user, album.images, album.caption or None, status,
-                                source="combo" if album.caption else "photo")
-    except Exception:                                        # noqa: BLE001
+        if not album.images and album.duplicates:
+            await album.msg.answer("Эти фото я уже записал пару минут назад 🙂")
+        while album.images:
+            images, album.images = album.images, []
+            caption, album.caption = album.caption, ""
+            await _process_album(group[1], album, images, caption)
+            deadline = time.monotonic() + 30
+            while album.pending and time.monotonic() < deadline:
+                await asyncio.sleep(0.3)
+    except Exception:  # noqa: BLE001
         log.exception("альбом не обработан")
+    finally:
+        _ALBUMS.pop(group, None)
+
+
+async def _process_album(group: str, album: _Album, images: list[_Image], caption: str) -> None:
+    msg, db, user = album.msg, album.db, album.user
+    uid = user["id"]
+    meal_id = repo.telegram_album_meal(db, uid, group)
+    add_to = album.add_to
+    if meal_id is None and add_to:
+        meal = repo.get_meal(db, uid, add_to["meal_id"])
+        if meal and not meal["deleted_at"]:
+            meal_id = repo.bind_telegram_album(db, uid, group, meal["id"])
+    if meal_id is not None or add_to:
+        pending = add_to if add_to and (meal_id is None or meal_id == add_to["meal_id"]) else {"meal_id": meal_id}
+        if pending is add_to:
+            repo.delete_pending_input(db, add_to["id"], uid)
+            album.add_to = None
+        status = await msg.answer("📷 добавляю фото к приёму…")
+        await _add_photos_to_meal(msg, db, user, images, pending, caption or None, status)
+    elif caption and proddom.caption_says_label(caption):
+        status = await msg.answer("🥫 читаю этикетку…")
+        await products_router.from_label_photo(msg, db, user, base64.b64encode(images[0].data).decode(), status)
+    elif not get_config().chat_logs_food:
+        for image in images:
+            status = await msg.answer("📷 смотрю…")
+            await _screenshot_or_hint(msg, db, user, image, status)
+    else:
+        status = await msg.answer("📷 смотрю фото…")
+        await _recognize_images(msg, db, user, images, caption or None, status,
+                                source="combo" if caption else "photo", telegram_album=group)
 
 
 _SCREEN_CAPTION_RE = re.compile(
@@ -599,7 +619,8 @@ def _drop_label_task(task) -> None:
 
 
 async def _recognize_images(msg: Message, db: sqlite3.Connection, user, images: list[_Image],
-                            caption: str | None, status: Message, source: str) -> None:
+                            caption: str | None, status: Message, source: str, *,
+                            telegram_album: str | None = None) -> None:
     """Распознать фото (одно или весь альбом) сразу и записать одним приёмом пищи.
 
     Подпись, пришедшая позже, правит этот же приём (см. _apply_late_caption).
@@ -638,11 +659,15 @@ async def _recognize_images(msg: Message, db: sqlite3.Connection, user, images: 
             await status.edit_text("Не увидел еды на этих фото. Опиши текстом, что было съедено.")
         return
     taken = next((im.taken_at for im in images if im.taken_at), None)
-    meal_id = await _save_and_reply(msg, db, user, u, text=caption,
-                                    photo_path=images[0].photo_path, source=source,
-                                    status=status, taken_at=taken,
-                                    photo_paths=[im.photo_path for im in images],
-                                    dish_ids=[d["id"] if d is not None else None for d in dishes])
+    try:
+        meal_id = await _save_and_reply(
+            msg, db, user, u, text=caption, photo_path=images[0].photo_path, source=source,
+            status=status, taken_at=taken, photo_paths=[im.photo_path for im in images],
+            dish_ids=[d["id"] if d is not None else None for d in dishes], telegram_album=telegram_album,
+        )
+    except repo.AlbumAlreadySaved as exc:
+        await _add_photos_to_meal(msg, db, user, images, {"meal_id": exc.meal_id}, caption, status)
+        return
     if meal_id is None:
         return
     if not caption:
@@ -726,7 +751,7 @@ async def _add_photos_to_meal(msg: Message, db: sqlite3.Connection, user, images
     comment = None
     if caption:
         old = meal["transcript"]
-        comment = f"{old}; {caption}" if old and caption not in old else caption
+        comment = (old if caption in old else f"{old}; {caption}") if old else caption
     await _typing(msg)
     try:
         u = await meals_svc.rerecognize_meal(
@@ -982,7 +1007,8 @@ async def _save_and_reply(msg: Message, db: sqlite3.Connection, user,
                           transcript: str | None = None, calc=None,
                           taken_at: datetime | None = None,
                           photo_paths: list[str] | None = None,
-                          dish_ids: list[int | None] | None = None) -> int | None:
+                          dish_ids: list[int | None] | None = None,
+                          telegram_album: str | None = None) -> int | None:
     """Записать приём пищи и заменить статус карточкой. Возвращает id записи (None — не записано)."""
     if not u.items:
         await status.edit_text("Не увидел еды в сообщении. Опиши подробнее, что было съедено.")
@@ -991,7 +1017,7 @@ async def _save_and_reply(msg: Message, db: sqlite3.Connection, user,
     await _typing(msg)
     saved = await meals_svc.save_understanding(
         db, user, u, text=text, source=source, photo_path=photo_path, photo_paths=photo_paths,
-        dish_ids=dish_ids, transcript=transcript, calc=calc, taken_at=taken_at)
+        dish_ids=dish_ids, transcript=transcript, calc=calc, taken_at=taken_at, telegram_album=telegram_album)
     meal_id = saved.meal_id
     card = _build_card(db, user, saved.local_date, saved.local_time, saved.meal_type,
                        saved.calc, u, meal_id=meal_id)
@@ -1088,7 +1114,7 @@ async def cmd_retry(msg: Message, db: sqlite3.Connection) -> None:
     if row["kind"] in {"photo", "screenshot"}:
         try:
             path = payload["path"]
-            data = Path(path).read_bytes()
+            data = photos.read(path)
         except (KeyError, OSError):
             await msg.answer("Исходный файл для повтора не найден. Пришли его ещё раз.")
             return

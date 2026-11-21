@@ -20,6 +20,7 @@ function fromTelegram() {
   } catch (e) { return null; }
 }
 
+await globalThis.telegramReady;
 const cur = fromUrl() || stored() || fromTelegram() || 'ru';
 const { default: dict } = cur === 'en'
   ? await import('./i18n/en.js')
