@@ -1585,10 +1585,10 @@ def widget_by_message(conn: sqlite3.Connection, chat_id: int, message_id: int) -
 
 
 def widget_for_day(conn: sqlite3.Connection, user_id: int, kind: str,
-                   local_date: str, *, fallback_kind: str | None = None) -> sqlite3.Row | None:
+                   local_date: str) -> sqlite3.Row | None:
     return conn.execute(
-        """SELECT * FROM widget_messages WHERE user_id=? AND kind IN (?, ?) AND local_date=?
-           ORDER BY id DESC LIMIT 1""", (user_id, kind, fallback_kind or kind, local_date)).fetchone()
+        """SELECT * FROM widget_messages WHERE user_id=? AND kind=? AND local_date=?
+           ORDER BY id DESC LIMIT 1""", (user_id, kind, local_date)).fetchone()
 
 
 def widget_for_ref(conn: sqlite3.Connection, kind: str, ref_id: int) -> sqlite3.Row | None:

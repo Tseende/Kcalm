@@ -7,14 +7,11 @@ repo.day_changed, оттуда сюда приходит touch(); обновле
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramNotFound
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.services import referral
-
 from app.storage import repo
 from app.timeutils import local_now
 from app.widgets import chatdata, pages, runtime
@@ -23,8 +20,6 @@ from app.widgets.api import EditMessageWidgetData, SendWidget
 log = logging.getLogger(__name__)
 
 DEBOUNCE_S = 2.0
-MESSAGE_KIND = "day_message"
-WATER_CALLBACK = "daycard:"
 
 _timers: dict[int, asyncio.TimerHandle] = {}
 _running: dict[int, asyncio.Task] = {}
@@ -142,7 +137,7 @@ async def flush(user_id: int, create: bool = True) -> str:
     today, hhmm = now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
     if (user_id, today) in rt.deleted:
         return "skipped"
-    row = repo.widget_for_day(db, user_id, "day", today, fallback_kind=MESSAGE_KIND)
+    row = repo.widget_for_day(db, user_id, "day", today)
     if row:
         return await _edit(rt, user, row, hhmm)
     if not create or not _has_records(db, user_id, today):
@@ -157,7 +152,7 @@ async def refresh(user, local_date: str | None = None) -> bool:
         return False
     now = local_now(user["tz"])
     today, hhmm = now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
-    row = repo.widget_for_day(rt.db, user["id"], "day", local_date or today, fallback_kind=MESSAGE_KIND)
+    row = repo.widget_for_day(rt.db, user["id"], "day", local_date or today)
     if not row:
         return False
     cancel_pending(user["id"])
@@ -167,12 +162,8 @@ async def refresh(user, local_date: str | None = None) -> bool:
 async def _edit(rt, user, row, hhmm: str) -> str:
     data = chatdata.day_data(rt.db, user, row["local_date"], hhmm)
     try:
-        if row["kind"] == MESSAGE_KIND:
-            await rt.bot.edit_message_text(chat_id=row["chat_id"], message_id=row["message_id"],
-                                           text=message_text(data), reply_markup=message_keyboard())
-        else:
-            await rt.bot(EditMessageWidgetData(chat_id=row["chat_id"], message_id=row["message_id"],
-                                               chat_data=data))
+        await rt.bot(EditMessageWidgetData(chat_id=row["chat_id"], message_id=row["message_id"],
+                                           chat_data=data))
         return "edited"
     except (TelegramBadRequest, TelegramNotFound) as e:
         text = str(e).lower()
@@ -181,8 +172,6 @@ async def _edit(rt, user, row, hhmm: str) -> str:
         if "message to edit not found" in text:
             repo.delete_widget_message(rt.db, row["id"])
             rt.deleted.add((user["id"], row["local_date"]))
-        elif "input_media_widget_not_allowed" in text and row["kind"] == "day":
-            return await send_message_card(rt, user, row["local_date"], data)
         log.info("widgets: карточка дня не обновилась (%s)", e)
         return "skipped"
     except TelegramAPIError:
@@ -205,45 +194,8 @@ async def _send(rt, user, today: str, hhmm: str) -> str:
         msg = await rt.bot(SendWidget(
             chat_id=user["tg_id"], html=html, chat_data=data,
             allow_queries=True, disable_notification=True))
-    except TelegramBadRequest as e:
-        if "INPUT_MEDIA_WIDGET_NOT_ALLOWED" in str(e):
-            log.info("widgets: Telegram ограничил sendWidget, отправляю карточку сообщением")
-            return await send_message_card(rt, user, today, data)
-        log.info("widgets: sendWidget отклонён (%s)", e)
-        return "skipped"
     except TelegramAPIError as e:
         log.info("widgets: sendWidget не прошёл (%s)", e)
         return "skipped"
     repo.add_widget_message(rt.db, user["id"], "day", today, msg.chat.id, msg.message_id)
-    return "sent"
-
-
-def message_text(data: str) -> str:
-    facts = json.loads(data)
-    lines = ["📊 Карточка дня"]
-    if facts.get("d"):
-        lines[0] += f" · {facts['d']}"
-    if not facts["c"]:
-        eaten, goal = facts["k"]
-        lines.append(f"Энергия — {eaten} из {goal} ккал")
-    lines.append(" · ".join(
-        f"{label} {facts[key][0]}/{facts[key][1]} г"
-        for key, label in (("p", "Б"), ("f", "Ж"), ("u", "У"))
-    ))
-    water, water_goal = facts["w"]
-    lines.append(f"💧 Вода — {water} из {water_goal} мл")
-    return "\n".join(lines)
-
-
-def message_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text=label, callback_data=WATER_CALLBACK + code)
-        for label, code in (("+250 мл", "w:+250"), ("+500 мл", "w:+500"), ("Отменить", "w:undo"))
-    ]])
-
-
-async def send_message_card(rt, user, today: str, data: str) -> str:
-    msg = await rt.bot.send_message(user["tg_id"], message_text(data), reply_markup=message_keyboard(),
-                                    disable_notification=True)
-    repo.add_widget_message(rt.db, user["id"], MESSAGE_KIND, today, msg.chat.id, msg.message_id)
     return "sent"

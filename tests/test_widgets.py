@@ -10,7 +10,7 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.methods import AnswerCallbackQuery, EditMessageText, SendMessage
+from aiogram.methods import SendMessage
 from aiogram.types import Chat, Message
 
 from app.config import get_config
@@ -41,7 +41,7 @@ class WSession(FakeSession):
                 return Message(message_id=self._mid, date=dt.datetime.now(tz=dt.timezone.utc),
                                chat=Chat(id=method.chat_id, type="private"), text="w").as_(bot)
             return True
-        if isinstance(method, (SendMessage, EditMessageText, AnswerCallbackQuery)):
+        if isinstance(method, SendMessage):
             self.calls.append(method)
         return await super().make_request(bot, method, timeout)
 
@@ -304,27 +304,20 @@ async def test_send_failure_is_retried_on_next_record(env):
     assert repo.widget_for_day(rt.db, uid, "day", today)
 
 
-async def test_restricted_widget_falls_back_to_interactive_message(env):
+async def test_restricted_widget_can_recover_same_day(env):
     bot, dp, session, uid, rt = env
+    today = foodsvc.local_now("Europe/Minsk").date().isoformat()
     session.send_error = "Bad Request: INPUT_MEDIA_WIDGET_NOT_ALLOWED"
     eat(rt.db, uid)
     await day.wait_idle()
-    [card] = session.of(SendMessage)
-    assert "Карточка дня" in card.text
-    today = foodsvc.local_now("Europe/Minsk").date().isoformat()
-    row = repo.widget_for_day(rt.db, uid, day.MESSAGE_KIND, today)
-    await dp.feed_raw_update(bot, {"update_id": 6, "callback_query": {
-        "id": "cb1", "chat_instance": "ci",
-        "from": {"id": 1, "is_bot": False, "first_name": "T"},
-        "message": {"message_id": row["message_id"], "date": 0,
-                    "chat": {"id": 1, "type": "private"}},
-        "data": card.reply_markup.inline_keyboard[0][0].callback_data,
-    }})
+    assert not repo.widget_for_day(rt.db, uid, "day", today)
+    assert not session.of(SendMessage)
+
+    session.send_error = None
+    eat(rt.db, uid, 150, "13:00", "lunch")
     await day.wait_idle()
-    assert repo.day_water_ml(rt.db, uid, today) == 250
-    assert session.of(AnswerCallbackQuery)[-1].text == "+250 мл ✓"
-    assert "Вода — 250" in session.of(EditMessageText)[-1].text
-    assert len(session.of(SendMessage)) == len(session.of(api.SendWidget)) == 1
+    assert repo.widget_for_day(rt.db, uid, "day", today)
+    assert len(session.of(api.SendWidget)) == 2
 
 
 async def test_touch_is_noop_without_runtime_or_when_disabled(db, monkeypatch):  # noqa: F811
