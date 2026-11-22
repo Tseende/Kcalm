@@ -94,7 +94,7 @@ export default {
   "add.show_more": "Show {n} more",
   "add.more": "Add to this meal",
   "add.comment": "Comment",
-  "add.or_describe": "Or describe it in words",
+  "add.or_describe": "What did you eat?",
   "add.recognizing": "Recognizing…",
   "add.recognizing_sub": "This can take up to a minute",
   "add.dish_hint": "Dishware size helps estimate the portion more accurately. ",

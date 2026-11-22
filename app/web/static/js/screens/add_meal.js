@@ -578,8 +578,8 @@ export default async function render(root, ctx) {
     pageHead(t('add.meal'), { parent: '/today' }),
     h('div', { class: 'stack' },
       h('div', { class: 'meta-row' }, whenButton),
-      capture, dishList, prodBox, noDishHint,
       textField,
+      capture, dishList, prodBox, noDishHint,
       catalog.element,
       camera, gallery, codeShot));
 

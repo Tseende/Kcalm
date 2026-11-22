@@ -28,6 +28,7 @@ export function initKeyboard() {
   let open = false;
   let idle = viewport();
   let timer = 0;
+  let tapAnchor = null;
 
   function viewport() {
     const top = vv ? Math.max(0, vv.offsetTop) : 0;
@@ -55,7 +56,7 @@ export function initKeyboard() {
         bottom = Math.min(bottom, bounds.bottom - 12);
       } else {
         const safe = parseFloat(getComputedStyle(body).paddingTop) || 0;
-        top = Math.max(top, safe + 8);
+        top = Math.max(top, view.top + safe + 8);
         const head = el.closest('.screen')?.querySelector('.page-head');
         if (head) top = Math.max(top, head.getBoundingClientRect().bottom + 8);
         const bar = document.getElementById('kbbar');
@@ -63,6 +64,14 @@ export function initKeyboard() {
       }
       if (bottom <= top) return; // Ignore intermediate geometry during a keyboard animation.
       const rect = el.getBoundingClientRect();
+      // Mobile WebViews may scroll an already visible input during keyboard opening.
+      // Restore its tapped position once, bounded by the header and keyboard toolbar.
+      if (open && tapAnchor?.el === el && rect.height <= bottom - top) {
+        const target = Math.max(top, Math.min(view.top + tapAnchor.y, bottom - rect.height));
+        tapAnchor = null;
+        moveField(el, Math.round(rect.top - target));
+        return;
+      }
       // A tall textarea cannot fit in the visible area. Align its top rather than
       // its bottom: bottom-alignment is what used to send the input above the screen.
       if (rect.height > bottom - top) {
@@ -103,6 +112,7 @@ export function initKeyboard() {
     setTimeout(() => {
       if (isField(document.activeElement)) return;
       focused = false;
+      tapAnchor = null;
       clearTimeout(timer);
       body.classList.remove('kb-focus');
       update();
@@ -124,6 +134,13 @@ export function initKeyboard() {
     try { tg.onEvent('viewportChanged', resized); } catch (e) { /* old client */ }
   }
   document.addEventListener('pointerdown', (e) => {
+    tapAnchor = null;
+    const el = isField(e.target) ? e.target : e.target.closest('label')?.control;
+    if (!open && isField(el) && !el.closest('.sheet')) {
+      const view = viewport();
+      const rect = el.getBoundingClientRect();
+      if (rect.top >= view.top && rect.bottom <= view.bottom) tapAnchor = { el, y: rect.top - view.top };
+    }
     if (focused && !isField(e.target) && !e.target.closest('button, a, label, .composer, .sheet')) document.activeElement?.blur?.();
   }, { passive: true });
 }

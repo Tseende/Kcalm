@@ -178,3 +178,25 @@ test('meal search stays in place when Telegram and a panned visual viewport repo
   assert.equal(s.root.style.values['--kb-h'], '340px');
   assert.deepEqual(s.scrolls, []);
 });
+
+test('a tapped steps field keeps its position when the keyboard scrolls the activity form', () => {
+  const s = setup({ telegram: true, toolbar: true });
+  const rect = { top: 140, bottom: 186, height: 46 };
+  const steps = s.field('INPUT', rect, s.screen);
+  s.dispatch('pointerdown', { target: steps });
+  s.focus(steps);
+  rect.top -= 65; rect.bottom -= 65;
+  s.keyboard(400);
+  assert.deepEqual(s.scrolls, [['by', 0, -65]]);
+  s.dispatch('resize'); s.flush();
+  assert.equal(s.scrolls.length, 1);
+});
+
+test('a panned viewport reserves the Telegram header above the steps field', () => {
+  const s = setup({ telegram: true });
+  s.body.paddingTop = '88px';
+  s.focus(s.field('INPUT', { top: 130, bottom: 176, height: 46 }));
+  s.vv.offsetTop = 90;
+  s.keyboard(400);
+  assert.deepEqual(s.scrolls, [['by', 0, -56]]);
+});

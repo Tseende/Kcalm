@@ -94,7 +94,7 @@ export default {
   "add.show_more": "Показать ещё {n}",
   "add.more": "Добавить к приёму",
   "add.comment": "Комментарий",
-  "add.or_describe": "Или опишите словами",
+  "add.or_describe": "Что вы ели?",
   "add.recognizing": "Распознаю…",
   "add.recognizing_sub": "Это может занять до минуты",
   "add.dish_hint": "Размер посуды помогает точнее оценить порцию. ",

@@ -493,7 +493,7 @@ export function toast(msg, kind = '', { undo } = {}) {
 export function dataChanged() { window.dispatchEvent(new Event('app:data')); }
 
 const openSheets = new Set();
-export function closeAllSheets() { [...openSheets].forEach((s) => s.close()); }
+export function closeAllSheets() { [...openSheets].reverse().forEach((s) => s.close()); }
 
 export function sheet({ title, content, onClose, initialFocus } = {}) {
   const wrap = h('div', { class: 'sheet-wrap' });
@@ -512,6 +512,7 @@ export function sheet({ title, content, onClose, initialFocus } = {}) {
     document.removeEventListener('keydown', onKey);
     if (!openSheets.size) document.body.classList.remove('sheet-open');
     if (inTelegram && tg.BackButton) { if (prevBack) backButton.show(prevBack); else backButton.hide(); }
+    wrap.inert = true;
     wrap.style.pointerEvents = 'none';
     wrap.classList.remove('open');
     panel.style.transform = '';
@@ -519,7 +520,20 @@ export function sheet({ title, content, onClose, initialFocus } = {}) {
     if (prevFocus && prevFocus.isConnected && prevFocus.focus) { try { prevFocus.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
     if (onClose) onClose();
   }
-  function onKey(e) { if (e.key === 'Escape') close(); }
+  function onKey(e) {
+    if (Array.from(openSheets).pop() !== api_) return;
+    if (e.key === 'Escape') { close(); return; }
+    if (e.key !== 'Tab') return;
+    const controls = Array.from(panel.querySelectorAll('button, input, select, textarea, a[href], [tabindex]'))
+      .filter(el => el.tabIndex >= 0 && !el.matches(':disabled') && !el.closest('[inert]')
+        && el.getClientRects().length && getComputedStyle(el).visibility === 'visible');
+    const first = controls[0], last = controls[controls.length - 1];
+    const active = document.activeElement;
+    if (!controls.includes(active) || active === (e.shiftKey ? first : last)) {
+      e.preventDefault();
+      ((e.shiftKey ? last : first) || panel).focus();
+    }
+  }
   wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
 
   // Свайп вниз закрывает шторку: тянем с любого места, если содержимое прокручено к началу.
