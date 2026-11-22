@@ -207,9 +207,13 @@ export function lineChart({ points, height = 190, decimals = 1, color = 'var(--c
     svg.append(s('text', { x: W - pad.r, y: yOf(goal) - 5, class: 'ch-axis ch-goal-label', 'text-anchor': 'end' }, t('chart.goal', { v: fmt(goal, decimals) })));
   }
   const tIdx = points.map((p, i) => i).filter((i) => points[i].t !== null && points[i].t !== undefined);
-  if (tIdx.length > 1) {
+  // In unmeasured gaps the API carries the previous trend forward. Connect the
+  // actual updates, retaining the boundaries so a stale trailing trend stays flat.
+  const anchors = tIdx.filter((i, k) => k === 0 || k === tIdx.length - 1
+    || points[i].y != null || points[i].t !== points[tIdx[k - 1]].t);
+  if (anchors.length > 1) {
     const base = pad.t + ih;
-    const line = trendPath(tIdx.map(i => ({ x: x(i), y: yOf(points[i].t) })));
+    const line = trendPath(anchors.map(i => ({ x: x(i), y: yOf(points[i].t) })));
     svg.append(s('path', { d: `${line}L${x(tIdx[tIdx.length - 1]).toFixed(1)} ${base}L${x(tIdx[0]).toFixed(1)} ${base}Z`, fill: `url(#${gid})`, class: 'ch-area' + (animate ? ' ch-fade' : '') }));
     svg.append(s('path', { d: line, class: 'ch-trend' + (animate ? ' ch-draw' : ''), pathLength: animate ? 1 : null }));
   }
@@ -221,7 +225,9 @@ export function lineChart({ points, height = 190, decimals = 1, color = 'var(--c
     svg.append(s('circle', { cx: x(last), cy: yOf(points[last].t), r: 5, class: 'ch-halo' }));
     svg.append(s('circle', { cx: x(last), cy: yOf(points[last].t), r: 4.5, class: 'ch-last' }));
   }
+  const anchorSet = new Set(anchors);
   const items = points.map((p, i) => {
+    if (p.y == null && !anchorSet.has(i)) return null;
     const v = p.t !== null && p.t !== undefined ? p.t : p.y;
     if (v === null || v === undefined) return null;
     const raw = p.y !== null && p.y !== undefined && p.t !== null && p.t !== undefined && Math.abs(p.y - p.t) >= 0.05 ? t('chart.weighin', { v: fmt(p.y, decimals), unit }) : null;

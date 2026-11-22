@@ -184,7 +184,7 @@ def series(db: sqlite3.Connection, user: sqlite3.Row, start: date, n: int) -> li
             "target_kcal": target_on(key),
             "water_ml": water.get(key),
             "weight": weights.get(key),
-            "weight_trend": None if trend is None else round(trend, 1),
+            "weight_trend": trend,
             "sleep_min": sleep.get(key),
             "steps": steps.get(key),
         })

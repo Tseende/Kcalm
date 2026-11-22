@@ -188,7 +188,7 @@ function init() {
     };
     b.score = b.sleep_min ? Math.round(62 + rnd() * 33) : null;
     if (b.weight !== null) trend = trend === null ? b.weight : trend * 0.8 + b.weight * 0.2;
-    b.trend = trend === null ? null : r1(trend);
+    b.trend = trend;
     body.set(d, b);
   }
   products = [
@@ -605,7 +605,7 @@ const routes = [
     return { water_ml: waterOf(todayISO()), goal_ml: TARGETS.water_ml };
   }],
   ['POST', /^\/weight$/, (m, q, b) => {
-    const bd = body.get(b.date || todayISO()); if (!bd) return { weight: b.weight_kg, trend: b.weight_kg }; bd.weight = b.weight_kg; bd.trend = r1((bd.trend || b.weight_kg) * 0.8 + b.weight_kg * 0.2);
+    const bd = body.get(b.date || todayISO()); if (!bd) return { weight: b.weight_kg, trend: b.weight_kg }; bd.weight = b.weight_kg; bd.trend = (bd.trend || b.weight_kg) * 0.8 + b.weight_kg * 0.2;
     return { weight: b.weight_kg, trend: bd.trend };
   }],
   ['POST', /^\/screens$/, async () => {
