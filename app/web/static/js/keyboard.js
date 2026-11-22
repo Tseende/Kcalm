@@ -32,7 +32,10 @@ export function initKeyboard() {
   function viewport() {
     const top = vv ? Math.max(0, vv.offsetTop) : 0;
     const telegramH = inTelegram && Number(tg?.viewportHeight) > 0 ? Number(tg.viewportHeight) : window.innerHeight;
-    const bottom = Math.min(window.innerHeight, vv ? top + vv.height : window.innerHeight, telegramH);
+    // Telegram reports a height, while field and toolbar bounds use layout-viewport
+    // coordinates. Add the visual origin once, including when iOS pans on focus.
+    const visibleHeight = Math.min(vv ? vv.height : window.innerHeight, telegramH);
+    const bottom = Math.min(window.innerHeight, top + visibleHeight);
     return { top, bottom, height: Math.max(0, bottom - top), lift: Math.max(0, window.innerHeight - bottom) };
   }
 

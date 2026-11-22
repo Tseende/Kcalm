@@ -165,3 +165,16 @@ test('copying a read-only field leaves the page and keyboard toolbar alone', () 
   assert.equal(s.body.classList.contains('kb-focus'), false);
   assert.deepEqual(s.scrolls, []);
 });
+
+test('meal search stays in place when Telegram and a panned visual viewport report the same height', () => {
+  const s = setup({ telegram: true });
+  const search = s.field('INPUT', { top: 286, bottom: 330, height: 44 });
+  search.getAttribute = () => 'search';
+  s.focus(search);
+  s.vv.offsetTop = 110;
+  s.tg.viewportHeight = 350;
+  s.keyboard(350);
+  assert.equal(s.root.style.values['--kb-visible-h'], '350px');
+  assert.equal(s.root.style.values['--kb-h'], '340px');
+  assert.deepEqual(s.scrolls, []);
+});
