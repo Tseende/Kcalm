@@ -550,6 +550,7 @@ export default {
   "meal.no_items": "No items.",
   "meal.a_type": "Meal type: {n}",
   "meal.a_time": "{n}, change date and time",
+  "meal.check_portions": "Portion weights from photos are estimates. Tap a weight to adjust it.",
   "meal.items": "Items",
   "meal.in_fav": "In my meals",
   "meal.refine": "Refine",

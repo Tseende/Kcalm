@@ -550,6 +550,7 @@ export default {
   "meal.no_items": "Позиций нет.",
   "meal.a_type": "Тип приёма: {n}",
   "meal.a_time": "{n}, изменить дату и время",
+  "meal.check_portions": "Вес по фото приблизительный. Нажмите на граммы, чтобы уточнить порцию.",
   "meal.items": "Позиции",
   "meal.in_fav": "В моих блюдах",
   "meal.refine": "Уточнить",

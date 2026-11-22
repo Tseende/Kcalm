@@ -286,13 +286,13 @@ function startApp() {
     add_sleep: '#/add/sleep', add_weight: '#/add/weight', drinks: '#/add/drink' };
   const qs = new URLSearchParams(location.search);
   const screen = [qs.get('screen'), qs.get('tgWebAppStartParam'), window.Telegram?.WebApp?.initDataUnsafe?.start_param]
-    .find(v => typeof v === 'string' && Object.prototype.hasOwnProperty.call(DEEP, v));
+    .find(v => typeof v === 'string' && (Object.prototype.hasOwnProperty.call(DEEP, v) || /^meal_[1-9]\d*$/.test(v)));
   if (screen) {
     const rest = new URLSearchParams(location.search);
     rest.delete('screen');                            // one-shot: a later reload keeps the user's tab
     rest.delete('tgWebAppStartParam');
     const q = rest.toString();
-    const hash = DEEP[screen];
+    const hash = DEEP[screen] || '#/meal/' + screen.slice('meal_'.length);
     history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + hash);
   }
   window.addEventListener('hashchange', () => { nav._track(); render(); });

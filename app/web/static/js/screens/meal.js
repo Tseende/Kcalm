@@ -204,7 +204,7 @@ export default async function render(root, ctx) {
     let sent = it.grams;   // что уже отправлено или стоит в очереди
     let timer = null;
     const input = numInput({ value: it.grams, max: G_MAX, decimals: 1, class: 'g-input', 'aria-label': t('meal.a_grams', { n: it.name }) });
-    const field = h('span', { class: 'g-field' }, input, h('span', { class: 'g-unit', 'aria-hidden': 'true' }, t('unit.g')));
+    const field = h('label', { class: 'g-field' }, input, h('span', { class: 'g-unit', 'aria-hidden': 'true' }, t('unit.g')));
     const nameEl = h('button', { type: 'button', class: 'item-title item-title-btn', 'aria-label': t('fp.edit_title'), onclick: () => editItem() });
     const kcalEl = h('div', { class: 'item-kcal' });
     const macEl = h('div', { class: 'muted small' });
@@ -441,9 +441,11 @@ export default async function render(root, ctx) {
     if (!meal.items.length) itemsBox.append(h('div', { class: 'muted items-empty pad' }, t('meal.no_items')));
     const mt = mealType(meal.type);
     paintTotals();
+    const fromPhoto = ['photo', 'combo'].includes(meal.source);
+    const photos = carousel();
     view.replaceChildren(...[
       pageHead(t('add.meal'), { parent: '/today' }),
-      carousel(),
+      fromPhoto ? null : photos,
       h('div', { class: 'meta-row' },
         h('button', { class: 'chip', type: 'button', onclick: pickType, 'aria-label': t('meal.a_type', { n: mt.label }) }, (mealPic(meal.type, 24) || icon(mt.icon, 18)), mt.label),
         h('button', { class: 'chip', type: 'button', onclick: pickTime, 'aria-label': t('meal.a_time', { n: longDate(meal.date) + ' · ' + meal.time }) },
@@ -451,8 +453,11 @@ export default async function render(root, ctx) {
       totalsEl,
       meal.comment ? h('div', { class: 'card comment' }, h('div', { class: 'muted small' }, t('add.comment')), h('div', null, meal.comment)) : null,
       sectionTitle(t('meal.items')),
+      meal.items.length && fromPhoto
+        ? h('div', { class: 'muted small' }, t('meal.check_portions')) : null,
       itemsBox,
       h('button', { class: 'btn btn-secondary btn-block add-item-btn', type: 'button', onclick: addProduct }, icon('plus', 18), t('fp.add_item')),
+      fromPhoto ? photos : null,
       h('div', { class: 'meal-actions' },
         h('button', { class: 'act' + (meal.favorite_id ? ' star-on' : ''), type: 'button',
           'aria-pressed': String(!!meal.favorite_id), 'aria-label': meal.favorite_id ? t('favf.rm') : t('add.fav_aria'),

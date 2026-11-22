@@ -442,3 +442,32 @@ async def test_request_uses_detected_mime(monkeypatch, plain_db):
     assert _urls(calls[0])[0].startswith("data:image/png;base64,")
     await foodsvc.parse_photo("AAAA", None, 1, plain_db)
     assert _urls(calls[1])[0].startswith("data:image/jpeg;base64,")
+
+
+@pytest.mark.asyncio
+async def test_components_replace_parent_and_preserve_portion_total(plain_db, monkeypatch):
+    dish = {"name_ru": "рис с курицей", "amount": {"grams": 301}, "components": [
+        {"name_ru": "рис варёный", "share": 0.6}, {"name_ru": "курица", "share": 0.4}]}
+    u = foodsvc.understanding_from_json({"items": [dish, {"name_ru": "чай", "amount": {"grams": 200}}]})
+    assert [i.name_ru for i in u.items] == ["рис варёный", "курица", "чай"]
+    assert [round(i.grams_mid) for i in u.items] == [181, 120, 200]
+    assert [i.portion_component for i in u.items] == [True, True, False]
+    assert all(i.explicit_grams is None for i in u.items[:2])
+    refs = {name: FoodRef(food_id=i, name_ru=name, name_en=name, kcal_100g=kcal,
+                          protein_100g=0, fat_100g=0, carbs_100g=0, source="seed")
+            for i, (name, kcal) in enumerate([("рис варёный", 130), ("курица", 165), ("чай", 0)], 1)}
+    monkeypatch.setattr(foodsvc.matching, "find_food", lambda db, en, ru, **kw: refs[ru])
+    monkeypatch.setattr(repo, "user_default_grams", lambda *args: 500)
+    calc = await foodsvc.build_calc(u, plain_db, 1)
+    assert [i.grams for i in calc.items] == [181, 120, 200]
+    assert calc.kcal_total == 435
+
+
+@pytest.mark.parametrize("extra", [
+    {"components": [{"name_ru": "рис", "share": 0.2}, {"name_ru": "курица", "share": 0.3}]},
+    {"brand": "Brand", "components": [{"name_ru": "рис", "share": 0.5}, {"name_ru": "курица", "share": 0.5}]},
+])
+def test_incomplete_or_branded_dish_keeps_whole_portion(extra):
+    dish = {"name_ru": "готовое блюдо", "amount": {"grams": 300}, **extra}
+    items = foodsvc.understanding_from_json({"items": [dish]}).items
+    assert [(i.name_ru, i.explicit_grams) for i in items] == [("готовое блюдо", 300)]

@@ -21,6 +21,7 @@ class IngredientEstimate(BaseModel):
     grams_max: float = Field(..., ge=0)
     preparation: str = "unknown"
     brand: str | None = None
+    portion_component: bool = False  # граммы распределены из общей массы блюда
     explicit_grams: float | None = None  # масса, названная пользователем — главнее оценки
     confidence: Confidence = "medium"
 

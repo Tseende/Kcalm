@@ -22,6 +22,7 @@ from app.domain import dishes as dishdom
 from app.domain import products as proddom
 from app import rich
 from app.storage import photos
+from app.routers.menu import main_kb
 from app.routers import agent
 from app.routers import products as products_router
 from app.services import assistant
@@ -1023,7 +1024,12 @@ async def _save_and_reply(msg: Message, db: sqlite3.Connection, user,
                        saved.calc, u, meal_id=meal_id)
     if _wants_photo_tip(db, user["id"], u, source):
         card.text(PHOTO_TIP)
-    await rich.edit(status, card, reply_markup=_meal_kb(meal_id, _quick_rows(db, user["id"], meal_id, u)))
+    rows = _quick_rows(db, user["id"], meal_id, u)
+    if source in ("photo", "combo") and msg.chat.type == "private":
+        portions = main_kb(f"meal_{meal_id}", "⚖️ Уточнить граммы")
+        if portions:
+            rows = portions.inline_keyboard + rows
+    await rich.edit(status, card, reply_markup=_meal_kb(meal_id, rows))
     if source in ("text", "voice"):          # фото сообщает разговору о тяге само, после карточки
         await _food_logged_hook(msg, db, user, meal_id)
     return meal_id
@@ -1481,7 +1487,7 @@ async def cb_edit(cb: CallbackQuery, db: sqlite3.Connection) -> None:
         await cb.answer("Пусто", show_alert=True)
         return
     buttons = []
-    for it in items[:8]:
+    for it in items:
         row = [InlineKeyboardButton(
             text=f"{it['name_ru'][:20]} · {it['grams']:g} г",
             callback_data=f"item_edit:{it['id']}",

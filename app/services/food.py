@@ -62,6 +62,10 @@ def load_prompt(name: str) -> str:
     return (PROMPTS_DIR / f"{name}.md").read_text(encoding="utf-8")
 
 
+def _meal_prompt(name: str) -> str:
+    return load_prompt(name) + "\n\n" + load_prompt("meal_components")
+
+
 def local_now(tz_name: str) -> datetime:
     return _local_now(tz_name)
 
@@ -108,10 +112,49 @@ def understanding_from_json(data: dict, dish_photos: set[int] | None = None) -> 
         raise llm.LLMError(f"LLM вернул ответ неожиданной формы: {type(e).__name__}") from e
 
 
+def _portion_parts(parent: IngredientEstimate, parts, slots: int) -> list[IngredientEstimate]:
+    """Split an identified portion only when all shares and names are usable."""
+    if parent.brand or not isinstance(parts, list) or not 2 <= len(parts) <= slots:
+        return [parent]
+    names, shares = [], []
+    for part in parts:
+        if not isinstance(part, dict):
+            return [parent]
+        name = part.get("name_ru")
+        share = _opt_num(part.get("share"))
+        if not isinstance(name, str) or not 1 <= len(name.strip()) <= 240 or not share or share > 1:
+            return [parent]
+        names.append(name.strip())
+        shares.append(share)
+    total = sum(shares)
+    if not 0.98 <= total <= 1.02 or len(set(names)) != len(names):
+        return [parent]
+    # Largest remainders keep the displayed whole grams equal to the portion total.
+    grams = round(parent.explicit_grams or parent.grams_mid)
+    quotas = [grams * share / total for share in shares]
+    weights = [int(q) for q in quotas]
+    for i in sorted(range(len(parts)), key=lambda i: quotas[i] - weights[i], reverse=True)[:grams - sum(weights)]:
+        weights[i] += 1
+    if min(weights) < 1 or grams > 3000:
+        return [parent]
+    result = []
+    for name, part, weight in zip(names, parts, weights):
+        fraction = weight / parent.grams_mid
+        en = part.get("name_en")
+        prep = part.get("preparation")
+        result.append(IngredientEstimate(
+            name=en.strip() if isinstance(en, str) and 1 <= len(en.strip()) <= 240 else name,
+            name_ru=name, grams_min=parent.grams_min * fraction, grams_max=parent.grams_max * fraction,
+            preparation=prep if isinstance(prep, str) else "unknown", portion_component=True,
+            confidence="low" if parent.confidence == "low" else "medium"))
+    return result
+
+
 def _understanding_from_json(data: dict, dish_photos: set[int] | None = None) -> MealUnderstanding:
     items: list[IngredientEstimate] = []
     extra_assumptions: list[str] = []
-    for raw in data.get("items", []):
+    raw_items = data.get("items", [])
+    for index, raw in enumerate(raw_items):
         unknown_weight = False
         amount = raw.get("amount") or {}
         grams = amount.get("grams")
@@ -147,14 +190,17 @@ def _understanding_from_json(data: dict, dish_photos: set[int] | None = None) ->
         if unknown_weight:
             conf = min(conf, UNKNOWN_WEIGHT_CONF)
         conf_lit = "high" if conf >= 0.75 else ("low" if conf < 0.4 else "medium")
-        items.append(IngredientEstimate(
+        estimate = IngredientEstimate(
             name=raw.get("name_en") or raw.get("name_ru") or "unknown",
             name_ru=raw.get("name_ru") or raw.get("name_en") or "неизвестно",
             grams_min=lo, grams_max=hi,
             preparation=raw.get("preparation") or "unknown",
             brand=raw.get("brand"), explicit_grams=explicit,
             confidence=conf_lit,
-        ))
+        )
+        remaining = len(raw_items) - index - 1
+        slots = MAX_ITEMS - len(items) - remaining
+        items.extend(_portion_parts(estimate, raw.get("components") if not unknown_weight else None, slots))
     overall = float(data.get("overall_confidence", 0.5))
     conf_lit = "high" if overall >= 0.75 else ("low" if overall < 0.4 else "medium")
     nc = data.get("needs_clarification")
@@ -223,7 +269,7 @@ async def parse_text(text: str, user_id: int | None, db: sqlite3.Connection) -> 
     if cached is not None:
         _TEXT_CACHE.move_to_end(key)
         return understanding_from_json(cached)
-    prompt = load_prompt("text_parser")
+    prompt = _meal_prompt("text_parser")
     data, _ = await llm.chat_json(
         "food_text",
         [{"role": "system", "content": prompt},
@@ -500,7 +546,7 @@ async def parse_photo(photo_b64: str, caption: str | None, user_id: int | None,
     """Одно фото. dishes — известная посуда на фото (объект или список из одного).
     prompt_name не задан — берётся VISION_PROMPT из конфига."""
     prompt_name = vision_prompt_name(prompt_name)
-    prompt = load_prompt(prompt_name)
+    prompt = _meal_prompt(prompt_name)
     dish = _as_dish_list(dishes, 1)[0]
     text = prompt + _caption_block(caption) + _my_products_line(db, user_id)
     if dish is not None:
@@ -553,7 +599,7 @@ async def parse_photos(images_b64: list[str], caption: str | None, user_id: int 
     for i, dish in enumerate(dish_list, 1):
         if dish is not None:
             lines.append(dish_note(dish, f"Посуда на фото {i}"))
-    content: list[dict] = [{"type": "text", "text": load_prompt(prompt_name) + _caption_block(caption)
+    content: list[dict] = [{"type": "text", "text": _meal_prompt(prompt_name) + _caption_block(caption)
                             + _my_products_line(db, user_id) + "\n\n" + "\n".join(lines)}]
     parts = await asyncio.gather(*(_image_part_async(b64) for b64 in images))
     for i, part in enumerate(parts, 1):
@@ -685,7 +731,7 @@ async def build_calc(u: MealUnderstanding, conn: sqlite3.Connection,
     for item, ref in zip(u.items, refs):
         if ref.food_id:
             preset = repo.user_default_grams(conn, user_id, ref.food_id)
-            if preset and item.explicit_grams is None:
+            if preset and item.explicit_grams is None and not item.portion_component:
                 # персональный пресет начинает расчёт, диапазон вокруг него
                 item.grams_min, item.grams_max = preset * 0.85, preset * 1.15
         pairs.append((item, ref))
