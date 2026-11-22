@@ -5,7 +5,7 @@ import { t } from './i18n.js';
 import { drinkPic, foodPic } from './pics.js';
 import { h, haptic, icon, sectionTitle, tile } from './ui.js';
 
-const QUICK_SHOWN = 5;
+const QUICK_SHOWN = 3;
 const FOLD = (value) => value.toLowerCase().replaceAll('ё', 'е');
 
 export function mealCatalog({ alive, canRepeat, repeatRow, addFood, addDrink, addManual, addCustomDrink }) {
@@ -48,9 +48,27 @@ export function mealCatalog({ alive, canRepeat, repeatRow, addFood, addDrink, ad
       : drink.kcal_100 > 0 ? `${drink.kcal_100} ${t('unit.kcal')} ${t('drink.per100ml')}` : t('drink.no_kcal'),
     drinkPic(drink.id, 36) || tile('cup', drink.color, 36), () => addDrink(drink));
   const list = (rows) => h('div', { class: 'list tiles prod-list quick-list' }, rows);
-  const section = (title, rows) => rows.length ? [sectionTitle(title), list(rows)] : [];
   const link = (text, onclick) => h('button', { class: 'an-more quick-more', type: 'button', onclick }, text);
   const hint = (text) => h('div', { class: 'hint small pad' }, text);
+
+  function catalogRows(groups) {
+    const nodes = [];
+    let remaining = expanded ? Infinity : QUICK_SHOWN;
+    let hidden = 0;
+    for (const [title, entries, makeRow] of groups) {
+      const visible = entries.slice(0, remaining);
+      hidden += entries.length - visible.length;
+      remaining -= visible.length;
+      if (!visible.length) continue;
+      if (title) nodes.push(sectionTitle(title));
+      nodes.push(list(visible.map(makeRow)));
+    }
+    if (hidden) nodes.push(link(t('add.show_more', { n: hidden }), () => {
+      expanded = true;
+      paint();
+    }));
+    return nodes;
+  }
 
   function paint() {
     const options = [
@@ -66,7 +84,6 @@ export function mealCatalog({ alive, canRepeat, repeatRow, addFood, addDrink, ad
       onclick: () => {
         if (tab === key) return;
         tab = key;
-        expanded = false;
         try { localStorage.setItem('addmeal_quick_tab', key); } catch (e) { /* без хранилища */ }
         haptic('selection');
         search();
@@ -81,16 +98,17 @@ export function mealCatalog({ alive, canRepeat, repeatRow, addFood, addDrink, ad
         : raw.length === 1 && !foods.length ? t('fp.type_more')
           : !foods.length && !matchingDrinks.length && !matchingDishes.length ? (raw ? t('add.none_found') : t('fp.type_more')) : '');
       result.replaceChildren(
-        ...section(t('add.catalog_products'), foods.map(productRow)),
-        ...section(t('add.drinks'), matchingDrinks.map(drinkRow)),
-        ...section(t('fav.title'), matchingDishes.slice(0, QUICK_SHOWN).map(repeatRow)),
+        ...catalogRows([
+          [t('add.catalog_products'), foods, productRow],
+          [t('add.drinks'), matchingDrinks, drinkRow],
+          [t('fav.title'), matchingDishes, repeatRow],
+        ]),
         ...(status ? [hint(status)] : []),
         link(t('fp.manual'), () => { query.blur(); addManual(raw); }));
     } else if (tab === 'drinks') {
-      const recent = drinks.filter((drink) => drink.last_ml).slice(0, QUICK_SHOWN);
+      const recent = drinks.filter((drink) => drink.last_ml);
       const pinned = new Set(recent.map((drink) => drink.id));
       const rest = drinks.filter((drink) => !pinned.has(drink.id));
-      const visible = expanded ? rest : rest.slice(0, QUICK_SHOWN);
       const catalogNames = new Set(drinks.map((drink) => FOLD(drink.name)));
       const recorded = repeat ? items.filter((item) => {
         if (!item.is_drink) return false;
@@ -98,24 +116,22 @@ export function mealCatalog({ alive, canRepeat, repeatRow, addFood, addDrink, ad
         const base = FOLD(name || item.title).replace(/\s*[, +]\s*\d+\s*ч\.\s*л\.\s*сахара$/, '');
         return item.favorite_id || others.length > 0 || !catalogNames.has(base);
       }) : [];
-      const visibleRecorded = expanded ? recorded : recorded.slice(0, QUICK_SHOWN);
-      const hidden = rest.length - visible.length + recorded.length - visibleRecorded.length;
       result.replaceChildren(
-        ...section(t('add.frequent_drinks'), recent.map(drinkRow)),
-        ...section(t('add.all_drinks'), visible.map(drinkRow)),
-        ...section(t('add.recorded_drinks'), visibleRecorded.map(repeatRow)),
+        ...catalogRows([
+          [t('add.frequent_drinks'), recent, drinkRow],
+          [t('add.all_drinks'), rest, drinkRow],
+          [t('add.recorded_drinks'), recorded, repeatRow],
+        ]),
         ...(drinkError ? [hint(drinkError)] : []),
-        ...(hidden ? [link(t('add.show_more', { n: hidden }), () => { expanded = true; paint(); })] : []),
         link(t('drink.custom_title'), addCustomDrink));
     } else {
       const dishes = items.filter((item) => !item.is_drink && !!item.favorite_id === (tab === 'mine'));
-      const visible = expanded ? dishes : dishes.slice(0, QUICK_SHOWN);
-      result.replaceChildren(visible.length ? list(visible.map(repeatRow)) : hint(t('add.no_quick_meals')),
-        ...(dishes.length > visible.length ? [link(t('add.show_more', { n: dishes.length - visible.length }), () => { expanded = true; paint(); })] : []));
+      result.replaceChildren(...(dishes.length ? catalogRows([[null, dishes, repeatRow]]) : [hint(t('add.no_quick_meals'))]));
     }
   }
 
   function search() {
+    expanded = false;
     clearTimeout(timer);
     const current = ++request;
     const raw = query.value.trim();

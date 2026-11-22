@@ -100,6 +100,9 @@ function interactive(svg, items, box) {
   const tip = makeTip(wrap);
   const marker = s('line', { y1: box.t, y2: box.b, class: 'ch-marker' });
   svg.append(marker);
+  const weighIn = items.some(it => it.weighInY != null)
+    ? s('circle', { r: 3.5, class: 'ch-dot', visibility: 'hidden' }) : null;
+  if (weighIn) svg.append(weighIn);
   let down = false;
   let frame = 0;
   let pointerX;
@@ -120,6 +123,13 @@ function interactive(svg, items, box) {
     marker.setAttribute('x1', best.x);
     marker.setAttribute('x2', best.x);
     marker.classList.add('on');
+    if (weighIn) {
+      if (best.weighInY != null) {
+        weighIn.setAttribute('cx', best.x);
+        weighIn.setAttribute('cy', best.weighInY);
+      }
+      weighIn.setAttribute('visibility', best.weighInY == null ? 'hidden' : 'visible');
+    }
     tip.show(best.x * k, best.y * k, best.lines);
   };
   const queue = (e) => {
@@ -131,6 +141,7 @@ function interactive(svg, items, box) {
     frame = 0;
     current = null;
     marker.classList.remove('on');
+    if (weighIn) weighIn.setAttribute('visibility', 'hidden');
     tip.hide();
   };
   svg.addEventListener('pointerdown', (e) => { down = true; queue(e); });
@@ -217,21 +228,18 @@ export function lineChart({ points, height = 190, decimals = 1, color = 'var(--c
     svg.append(s('path', { d: `${line}L${x(tIdx[tIdx.length - 1]).toFixed(1)} ${base}L${x(tIdx[0]).toFixed(1)} ${base}Z`, fill: `url(#${gid})`, class: 'ch-area' + (animate ? ' ch-fade' : '') }));
     svg.append(s('path', { d: line, class: 'ch-trend' + (animate ? ' ch-draw' : ''), pathLength: animate ? 1 : null }));
   }
-  points.forEach((p, i) => {
-    if (p.y !== null && p.y !== undefined) svg.append(s('circle', { cx: x(i), cy: yOf(p.y), r: n > 40 ? 1.7 : 2.6, class: 'ch-dot' }));
-  });
   const last = tIdx.length ? tIdx[tIdx.length - 1] : undefined;
   if (last !== undefined) {
     svg.append(s('circle', { cx: x(last), cy: yOf(points[last].t), r: 5, class: 'ch-halo' }));
     svg.append(s('circle', { cx: x(last), cy: yOf(points[last].t), r: 4.5, class: 'ch-last' }));
   }
-  const anchorSet = new Set(anchors);
   const items = points.map((p, i) => {
-    if (p.y == null && !anchorSet.has(i)) return null;
-    const v = p.t !== null && p.t !== undefined ? p.t : p.y;
-    if (v === null || v === undefined) return null;
-    const raw = p.y !== null && p.y !== undefined && p.t !== null && p.t !== undefined && Math.abs(p.y - p.t) >= 0.05 ? t('chart.weighin', { v: fmt(p.y, decimals), unit }) : null;
-    return { x: x(i), y: yOf(v), lines: [`${p.label} · ${fmt(v, decimals)} ${unit}`.trim(), raw] };
+    const v = p.t ?? p.y;
+    if (v == null) return null;
+    const trend = p.t == null ? null : t('chart.trend') + ' ' + fmt(p.t, decimals) + ' ' + unit;
+    const raw = p.y == null ? null : t('chart.weighin', { v: fmt(p.y, decimals), unit });
+    return { x: x(i), y: yOf(v), weighInY: p.y == null ? null : yOf(p.y),
+      lines: [p.label, trend, raw].filter(Boolean) };
   }).filter(Boolean);
   const wrap = interactive(svg, items, { t: pad.t, b: pad.t + ih });
   if (inRange) wrap.dataset.goal = '1';

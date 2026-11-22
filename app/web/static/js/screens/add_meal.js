@@ -55,6 +55,13 @@ export default async function render(root, ctx) {
   const camera = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, onchange: () => addFiles(camera) });
   const gallery = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, onchange: () => addFiles(gallery) });
   const textTa = h('textarea', { rows: 3, placeholder: t('add.ph_text'), oninput: sync });
+  textTa.addEventListener('input', () => {
+    if (!document.body.classList.contains('kb-open')) return;
+    requestAnimationFrame(() => {
+      if (document.activeElement === textTa && textTa.selectionStart === textTa.value.length)
+        textTa.scrollTop = textTa.scrollHeight;
+    });
+  });
   const textField = h('label', { id: 'meal-description', class: 'field compose-keep' }, h('span', { class: 'field-label' }, t('add.or_describe')),
     h('div', { class: 'mic-wrap' }, textTa, voiceButton(textTa)));
   const clearDraft = draft('meal-text', textTa);

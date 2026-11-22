@@ -200,3 +200,15 @@ test('a panned viewport reserves the Telegram header above the steps field', () 
   s.keyboard(400);
   assert.deepEqual(s.scrolls, [['by', 0, -56]]);
 });
+
+test('a docked meal description does not scroll the page during iOS keyboard panning', () => {
+  const s = setup({ telegram: true, toolbar: true });
+  const el = s.field('TEXTAREA', { top: 10, bottom: 102, height: 92 });
+  el.closest = selector => selector === '#meal-description' ? s.screen : null;
+  s.focus(el);
+  s.vv.offsetTop = 90;
+  s.keyboard(400);
+  s.dispatch('scroll'); s.flush();
+  assert.equal(s.root.style.values['--kb-h'], '310px');
+  assert.deepEqual(s.scrolls, []);
+});

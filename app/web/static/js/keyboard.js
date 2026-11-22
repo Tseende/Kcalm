@@ -47,6 +47,9 @@ export function initKeyboard() {
     timer = setTimeout(() => {
       if (document.activeElement !== el || !el.isConnected) return;
       const view = viewport();
+      // The meal description docks above the keyboard via CSS. Scrolling the
+      // document here would move the page underneath the fixed editor.
+      if (open && el.closest('#meal-description')) { tapAnchor = null; return; }
       const sheet = el.closest('.sheet');
       let top = view.top + 12;
       let bottom = view.bottom - 12;
