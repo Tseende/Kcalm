@@ -77,7 +77,6 @@ export default {
   "add.find_product": "Find a product",
   "add.find_product_sub": "Search the database or enter manually",
   "add.frequent": "Frequent",
-  "add.describe_short": "Describe",
   "add.catalog": "Meal catalog",
   "add.catalog_search": "Find food, meals or drinks",
   "add.catalog_products": "Products",

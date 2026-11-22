@@ -58,7 +58,6 @@ export default async function render(root, ctx) {
   const textField = h('label', { id: 'meal-description', class: 'field compose-keep' }, h('span', { class: 'field-label' }, t('add.or_describe')),
     h('div', { class: 'mic-wrap' }, textTa, voiceButton(textTa)));
   const clearDraft = draft('meal-text', textTa);
-  let describing = !!textTa.value.trim();
   const dishList = h('div', { class: 'stack' });
   const capture = h('div', { class: 'capture' });
   // Продукты из базы или введённые вручную: отдельный список позиций приёма (см. food_picker.js).
@@ -429,7 +428,6 @@ export default async function render(root, ctx) {
       clearDraft();
     } else if (!filled.length && !textTa.value && groups[0].note.trim()) {
       textTa.value = groups[0].note.trim();
-      describing = true;
       groups[0].note = '';
     }
     dishList.replaceChildren(...filled.map((g, gi) => groupCard(g, gi)));
@@ -447,8 +445,8 @@ export default async function render(root, ctx) {
     capture.className = 'capture' + (has ? ' compact' : ' cap-menu');
     if (!has) {
       target = groups[0];
-      const opt = (ic, label, fn, attrs = {}) => h('button', {
-        class: 'cap-mini', type: 'button', onclick: fn, ...attrs,
+      const opt = (ic, label, fn) => h('button', {
+        class: 'cap-mini', type: 'button', onclick: fn,
       }, icon(ic, 17), h('span', { class: 'cap-mini-l' }, label));
       capture.replaceChildren(
         h('button', { class: 'cap-main', type: 'button', onclick: () => pick(camera, groups[0]) },
@@ -456,13 +454,7 @@ export default async function render(root, ctx) {
           h('span', { class: 'grow' }, h('span', { class: 'cap-label' }, t('add.shoot')), h('span', { class: 'cap-sub' }, t('add.cap_sub', { n: MAX })))),
         h('div', { class: 'cap-minis' },
           opt('image', t('add.gallery_short'), () => pick(gallery, groups[0])),
-          opt('barcode', t('add.scan_short'), () => scanIng(null)),
-          opt('pencil', t('add.describe_short'), (event) => {
-            describing = !describing;
-            textField.hidden = !describing;
-            event.currentTarget.setAttribute('aria-expanded', String(describing));
-            if (describing) textTa.focus();
-          }, { 'aria-expanded': String(describing), 'aria-controls': 'meal-description' })));
+          opt('barcode', t('add.scan_short'), () => scanIng(null))));
     } else {
       const more = (ic, label, fn) => h('button', { class: 'btn btn-secondary', type: 'button', onclick: fn }, icon(ic, 20), label);
       capture.replaceChildren(
@@ -476,7 +468,7 @@ export default async function render(root, ctx) {
             pick(camera, g);
           })));
     }
-    textField.hidden = has || !describing;
+    textField.hidden = has;
   }
 
   function valid() { return allPhotos().length > 0 || textTa.value.trim().length > 0 || prods.length > 0; }

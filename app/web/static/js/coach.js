@@ -46,7 +46,7 @@ export const TIPS = [
 
   { id: 'addmeal.photo', route: 'addmeal', target: '.capture.cap-menu',
     title: t('coach.addmeal.photo.t'), text: t('coach.addmeal.photo.x') },
-  { id: 'addmeal.text', route: 'addmeal', target: '[aria-controls="meal-description"]',
+  { id: 'addmeal.text', route: 'addmeal', target: '#meal-description textarea',
     title: t('coach.addmeal.text.t'), text: t('coach.addmeal.text.x') },
   { id: 'addmeal.quick', route: 'addmeal', target: '.meal-catalog-search',
     title: t('coach.addmeal.quick.t'), text: t('coach.addmeal.quick.x') },

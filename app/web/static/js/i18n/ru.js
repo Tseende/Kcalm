@@ -77,7 +77,6 @@ export default {
   "add.find_product": "Найти продукт",
   "add.find_product_sub": "В базе или ввести вручную",
   "add.frequent": "Частые",
-  "add.describe_short": "Описать",
   "add.catalog": "Каталог приёма пищи",
   "add.catalog_search": "Найти продукт, блюдо или напиток",
   "add.catalog_products": "Продукты",
