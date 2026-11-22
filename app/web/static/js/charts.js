@@ -150,6 +150,27 @@ function topRound(x, y, w, hgt, r) {
   return `M${x.toFixed(1)} ${(y + hgt).toFixed(1)}V${(y + rr).toFixed(1)}Q${x.toFixed(1)} ${y.toFixed(1)} ${(x + rr).toFixed(1)} ${y.toFixed(1)}H${(x + w - rr).toFixed(1)}Q${(x + w).toFixed(1)} ${y.toFixed(1)} ${(x + w).toFixed(1)} ${(y + rr).toFixed(1)}V${(y + hgt).toFixed(1)}Z`;
 }
 
+// Монотонная кубическая интерполяция: в пиках касательная горизонтальна,
+// на склонах ограничена более пологим из соседних отрезков.
+function trendPath(coords) {
+  const slopes = coords.slice(1).map((p, i) => (p.y - coords[i].y) / (p.x - coords[i].x));
+  const tangents = coords.map((_, i) => {
+    if (i === 0) return slopes[0];
+    if (i === coords.length - 1) return slopes[i - 1];
+    const left = slopes[i - 1], right = slopes[i];
+    return left * right > 0 ? Math.sign(left) * Math.min(Math.abs(left), Math.abs(right)) : 0;
+  });
+  const xy = (x, y) => `${x.toFixed(2)} ${y.toFixed(2)}`;
+  let d = 'M' + xy(coords[0].x, coords[0].y);
+  for (let i = 1; i < coords.length; i++) {
+    const a = coords[i - 1], b = coords[i];
+    const dx = (b.x - a.x) / 3;
+    d += 'C' + xy(a.x + dx, a.y + dx * tangents[i - 1]) + ' '
+      + xy(b.x - dx, b.y - dx * tangents[i]) + ' ' + xy(b.x, b.y);
+  }
+  return d;
+}
+
 const axisCount = () => 4;
 
 /**
@@ -188,7 +209,7 @@ export function lineChart({ points, height = 190, decimals = 1, color = 'var(--c
   const tIdx = points.map((p, i) => i).filter((i) => points[i].t !== null && points[i].t !== undefined);
   if (tIdx.length > 1) {
     const base = pad.t + ih;
-    const line = tIdx.map((i, k) => `${k ? 'L' : 'M'}${x(i).toFixed(1)} ${yOf(points[i].t).toFixed(1)}`).join('');
+    const line = trendPath(tIdx.map(i => ({ x: x(i), y: yOf(points[i].t) })));
     svg.append(s('path', { d: `${line}L${x(tIdx[tIdx.length - 1]).toFixed(1)} ${base}L${x(tIdx[0]).toFixed(1)} ${base}Z`, fill: `url(#${gid})`, class: 'ch-area' + (animate ? ' ch-fade' : '') }));
     svg.append(s('path', { d: line, class: 'ch-trend' + (animate ? ' ch-draw' : ''), pathLength: animate ? 1 : null }));
   }
