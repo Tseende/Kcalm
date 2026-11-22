@@ -144,3 +144,24 @@ test('removing focused field clears keyboard state on the next viewport event', 
   assert.equal(s.body.classList.contains('kb-open'), false);
   assert.equal(s.root.style.values['--kb-h'], '0px');
 });
+
+test('a smaller idle Telegram viewport does not open a phantom keyboard on focus', () => {
+  const s = setup({ telegram: true });
+  s.tg.viewportHeight = 600;
+  s.dispatch('viewportChanged');
+  s.focus(s.field());
+  assert.equal(s.body.classList.contains('kb-open'), false);
+  s.tg.viewportHeight = 350;
+  s.dispatch('viewportChanged');
+  assert.equal(s.body.classList.contains('kb-open'), true);
+});
+
+test('copying a read-only field leaves the page and keyboard toolbar alone', () => {
+  const s = setup();
+  const link = s.field('INPUT', { top: 600, bottom: 650, height: 50 });
+  link.readOnly = true;
+  s.focus(link);
+  s.keyboard(400);
+  assert.equal(s.body.classList.contains('kb-focus'), false);
+  assert.deepEqual(s.scrolls, []);
+});

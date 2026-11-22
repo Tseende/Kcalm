@@ -82,7 +82,13 @@ export default async function render(root, ctx) {
     chips.replaceChildren(mk(null, t('prod.all', { n: all.length })), ...ORDER.filter((g) => groups.has(g)).map((g) => mk(g, `${groupLabel(g)} ${groups.get(g)}`)), mk(DRINKS, t('add.drinks')));
     // Лента пересобирается при выборе: возвращаем прокрутку и держим выбранную вкладку на виду.
     chips.scrollLeft = keepX;
-    chips.querySelector('.chip.active')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+    const selected = chips.querySelector('.chip.active');
+    if (selected) {
+      const chip = selected.getBoundingClientRect();
+      const strip = chips.getBoundingClientRect();
+      if (chip.left < strip.left) chips.scrollLeft += chip.left - strip.left;
+      else if (chip.right > strip.right) chips.scrollLeft += chip.right - strip.right;
+    }
     if (cat === DRINKS) return;
     const shown = cat ? all.filter((p) => p.group === cat) : all;
     const rows = h('div', { class: 'list tiles prod-list' });

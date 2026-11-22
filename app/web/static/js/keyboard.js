@@ -3,7 +3,7 @@ import { mainButton } from './ui.js';
 import { tg, inTelegram } from './api.js';
 
 const TEXTUAL = new Set(['text', 'number', 'search', 'tel', 'email', 'url', 'password', 'time', 'date', '']);
-const isField = (el) => !!el && ((el.tagName === 'TEXTAREA') || (el.tagName === 'INPUT' && TEXTUAL.has((el.getAttribute('type') || '').toLowerCase())) || el.isContentEditable);
+const isField = (el) => !!el && !el.readOnly && !el.disabled && ((el.tagName === 'TEXTAREA') || (el.tagName === 'INPUT' && TEXTUAL.has((el.getAttribute('type') || '').toLowerCase())) || el.isContentEditable);
 
 // Scroll the containing dialog/list first. Scrolling window cannot reveal a field
 // inside a sheet while body is locked, and makes the underlying page jump instead.
@@ -26,7 +26,7 @@ export function initKeyboard() {
   const vv = window.visualViewport;
   let focused = false;
   let open = false;
-  let baseH = window.innerHeight;
+  let idle = viewport();
   let timer = 0;
 
   function viewport() {
@@ -76,8 +76,8 @@ export function initKeyboard() {
     // When Android resizes innerHeight, lift can be zero; the baseline still
     // detects its keyboard. On iOS VisualViewport or Telegram provides the inset.
     const zoomed = vv && vv.scale > 1.05;
-    const next = focused && !zoomed && (baseH - view.height > 120 || view.lift > 80);
-    if (!focused && !open) baseH = Math.max(baseH, window.innerHeight);
+    const next = focused && !zoomed && (idle.height - view.height > 120 || view.lift - idle.lift > 80);
+    if (!focused && !open) idle = view;
     root.style.setProperty('--kb-h', (next ? Math.round(view.lift) : 0) + 'px');
     root.style.setProperty('--kb-visible-h', Math.round(view.height) + 'px');
     if (next !== open) {
@@ -114,7 +114,7 @@ export function initKeyboard() {
   window.addEventListener('resize', resized);
   window.addEventListener('orientationchange', () => {
     // Do not use the keyboard-reduced height as the new full-height baseline.
-    baseH = Math.max(window.innerHeight, inTelegram ? Number(tg?.viewportStableHeight) || 0 : 0);
+    if (!focused) idle = viewport();
     setTimeout(resized, 300);
   });
   if (inTelegram && tg?.onEvent) {

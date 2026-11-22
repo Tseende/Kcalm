@@ -453,7 +453,7 @@ body.kb-open.has-tabbar, body.kb-open.has-main { padding-bottom: calc(var(--kb-h
 .kbbar[hidden] { display: none; }
 body.kb-open.has-main, body.kb-open.has-kbbar { padding-bottom: calc(var(--kb-h) + 92px); }
 body.kb-open .sheet-wrap { padding-bottom: var(--kb-h); }
-body.kb-open .sheet { max-height: max(80px, calc(var(--kb-visible-h) - 16px)); }
+body.kb-open .sheet { max-height: min(calc(var(--kb-visible-h) - 16px), calc(100% - var(--safe-t) - 8px)); }
 body.sheet-open { overflow: hidden; }
 /* поля не должны уезжать под липкую шапку и нижние панели при прокрутке к ним */
 input, textarea, select { scroll-margin-top: calc(var(--safe-t) + 70px); scroll-margin-bottom: 90px; }

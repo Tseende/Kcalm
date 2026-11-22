@@ -336,9 +336,8 @@ export default async function render(root, ctx) {
       const inp = codeInput({ placeholder: t('lbl.ph_code'), 'aria-label': t('pf.barcode') });
       const go = () => { const v = inp.value; s.close(); applyCode(v); };
       inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
-      const s = sheet({ title: t('add.code_title'), content: h('div', { class: 'stack' }, inp,
+      const s = sheet({ title: t('add.code_title'), initialFocus: inp, content: h('div', { class: 'stack' }, inp,
         h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: go }, t('lbl.find'))) });
-      setTimeout(() => inp.focus(), 250);
     }
     const shot = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, onchange: async () => {
       const f = shot.files[0];
@@ -419,7 +418,7 @@ export default async function render(root, ctx) {
 
   function refine() {
     const ta = h('textarea', { rows: 3, placeholder: t('meal.ph_refine'), 'aria-label': t('meal.a_refine') });
-    const s = sheet({ title: t('meal.refine_title'), content: h('div', { class: 'stack' },
+    const s = sheet({ title: t('meal.refine_title'), initialFocus: ta, content: h('div', { class: 'stack' },
       h('div', { class: 'muted small' }, t('meal.refine_hint')), ta,
       h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: async () => {
         const text = ta.value.trim();
@@ -428,7 +427,6 @@ export default async function render(root, ctx) {
         const stop = busyOverlay(t('meal.recalc'), t('add.recognizing_sub'));
         try { const m = await api.post('/meals/' + meal.id + '/refine', { comment: text }, { timeout: 120000 }); haptic('success'); onMeal(m, true); } catch (e) { toast(e.message, 'error'); } finally { stop(); }
       } }, t('meal.recalc_btn'))) });
-    setTimeout(() => ta.focus(), 250);
   }
 
   async function removeMeal() {

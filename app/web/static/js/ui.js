@@ -495,7 +495,7 @@ export function dataChanged() { window.dispatchEvent(new Event('app:data')); }
 const openSheets = new Set();
 export function closeAllSheets() { [...openSheets].forEach((s) => s.close()); }
 
-export function sheet({ title, content, onClose } = {}) {
+export function sheet({ title, content, onClose, initialFocus } = {}) {
   const wrap = h('div', { class: 'sheet-wrap' });
   const panel = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title || t('sheet.default'), tabindex: '-1' },
     h('div', { class: 'grabber' }),
@@ -530,7 +530,7 @@ export function sheet({ title, content, onClose } = {}) {
     y0 = e.touches[0].clientY; t0 = Date.now();
   }, { passive: true });
   panel.addEventListener('touchmove', (e) => {
-    if (e.touches.length !== 1) return;
+    if (e.touches.length !== 1 || document.body.classList.contains('kb-focus')) return;
     const d = e.touches[0].clientY - y0;
     if (!drag && d > 8 && panel.scrollTop <= 0) { drag = true; panel.style.transition = 'none'; }
     if (!drag) return;
@@ -557,6 +557,9 @@ export function sheet({ title, content, onClose } = {}) {
   requestAnimationFrame(() => wrap.classList.add('open'));
   setTimeout(() => wrap.classList.add('open'), 60);
   try { panel.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
+  if (initialFocus) setTimeout(() => {
+    if (!closed && document.activeElement === panel) initialFocus.focus({ preventScroll: true });
+  }, 250);
   return api_;
 }
 

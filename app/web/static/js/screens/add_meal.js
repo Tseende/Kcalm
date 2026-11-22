@@ -267,9 +267,8 @@ export default async function render(root, ctx) {
     const inp = codeInput({ placeholder: t('lbl.ph_code'), 'aria-label': t('pf.barcode') });
     const go = () => { const v = inp.value; sh.close(); ingByCode(g, v); };
     inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
-    const sh = sheet({ title: t('add.code_title'), content: h('div', { class: 'stack' }, inp,
+    const sh = sheet({ title: t('add.code_title'), initialFocus: inp, content: h('div', { class: 'stack' }, inp,
       h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: go }, t('lbl.find'))) });
-    setTimeout(() => inp.focus(), 250);
   }
   let codeFor = null;   // для кого читаем штрихкод: блюдо (состав) или null (быстрая запись продукта)
   const codeShot = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, onchange: async () => {

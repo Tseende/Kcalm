@@ -187,7 +187,7 @@ const candidates = (route) => TIPS.filter((t) => t.route === route && !isSeen(t.
 
 function blocked() {
   const b = document.body;
-  return !b || b.dataset.route === 'onb' || b.classList.contains('sheet-open') || b.classList.contains('kb-open')
+  return !b || b.dataset.route === 'onb' || b.classList.contains('sheet-open') || b.classList.contains('kb-focus')
     || document.hidden || !!document.querySelector('.busy, .scan, .icon-page') || !!active;
 }
 
@@ -289,7 +289,7 @@ function tapThrough() {
   const tok = a.stepToken;
   setTimeout(() => {
     if (active !== a || a.stepToken !== tok) return;
-    if (location.hash !== hashAt || document.body.classList.contains('sheet-open') || document.body.classList.contains('kb-open') || !isVisible(a.el)) close();
+    if (location.hash !== hashAt || document.body.classList.contains('sheet-open') || document.body.classList.contains('kb-focus') || !isVisible(a.el)) close();
     else advance();
   }, 320);
 }
@@ -306,7 +306,7 @@ function watch() {
   const a = active;
   if (!a) return;
   const b = document.body;
-  if (b.classList.contains('sheet-open') || b.classList.contains('kb-open') || document.hidden || b.dataset.route === 'onb') { close(); return; }
+  if (b.classList.contains('sheet-open') || b.classList.contains('kb-focus') || document.hidden || b.dataset.route === 'onb') { close(); return; }
   if (!isVisible(a.el)) {
     const el = find(a.tip);
     if (el) { a.el = el; } else { dropStep(); return; }
@@ -411,6 +411,7 @@ async function showStep(i, first) {
   b.style.left = '0px'; b.style.top = '0px';
   await bring(el, tip, b.offsetHeight);
   if (active !== a || a.stepToken !== tok) return;
+  if (document.body.classList.contains('kb-focus')) { close(); return; }
   if (!isVisible(el)) { el = find(tip); if (!el) { dropStep(); return; } a.el = el; }
 
   b.style.visibility = '';

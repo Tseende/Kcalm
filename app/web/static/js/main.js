@@ -144,7 +144,7 @@ async function render() {
     if (restoreY > 0) {                             // экран уже нарисован; если ещё докручивается высота, пробуем ещё несколько раз
       let tries = 0;
       const step = () => {
-        if (my !== rid) return;
+        if (my !== rid || document.body.classList.contains('kb-focus')) return;
         window.scrollTo(0, restoreY);
         if (Math.abs(window.scrollY - restoreY) > 2 && tries++ < 20) setTimeout(step, 30);
       };

@@ -146,7 +146,7 @@ export function customDrinkSheet({ cta } = {}) {
       });
     };
     const sh = sheet({
-      title: t('drink.custom_title'),
+      title: t('drink.custom_title'), initialFocus: nameI,
       onClose: () => { if (!done) resolve(null); },
       content: h('div', { class: 'stack' },
         group([frow(t('common.name'), nameI), frow(t('drink.vol_ml'), ml)]),
@@ -156,7 +156,6 @@ export function customDrinkSheet({ cta } = {}) {
         h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: go }, cta || t('common.add'))),
     });
     paint();
-    setTimeout(() => nameI.focus(), 250);
   });
 }
 

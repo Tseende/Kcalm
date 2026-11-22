@@ -189,7 +189,7 @@ export function manualSheet({ cta, name = '', saveOption = true } = {}) {
       resolve({ name: n, brand: null, grams: g, per100, per, raw, save: !!(saveOption && saveBox.checked) });
     };
     const sh = sheet({
-      title: t('fp.manual_title'),
+      title: t('fp.manual_title'), initialFocus: name ? grams : nameI,
       onClose: () => { if (!done) resolve(null); },
       content: h('div', { class: 'stack' },
         group([frow(t('common.name'), h('span', { class: 'mic-row' }, nameI, nameMic)), frow(t('add.grams'), grams)]),
@@ -199,7 +199,6 @@ export function manualSheet({ cta, name = '', saveOption = true } = {}) {
         saveOption ? h('label', { class: 'check-row' }, saveBox, h('span', null, t('fp.save_mine'))) : null,
         h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: go }, cta || t('fp.add'))),
     });
-    setTimeout(() => (name ? grams : nameI).focus(), 250);
   });
 }
 
@@ -228,11 +227,10 @@ export function editEntryGrams(e) {
     };
     grams.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); go(); } });
     const sh = sheet({
-      title: e.name,
+      title: e.name, initialFocus: grams,
       onClose: () => { if (!done) resolve(null); },
       content: h('div', { class: 'stack' }, group([frow(t('add.ate_g'), grams)]), total,
         h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: go }, t('common.save'))),
     });
-    setTimeout(() => grams.focus(), 250);
   });
 }
