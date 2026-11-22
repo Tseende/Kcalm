@@ -405,6 +405,7 @@ export default {
   "forms.act_saved": "Activity saved",
   // grp
   "grp.snacks": "Snacks",
+  "grp.beer": "Beer",
   "grp.dairy": "Dairy & eggs",
   "grp.meat": "Meat & sausages",
   "grp.fish": "Fish & seafood",
@@ -412,6 +413,7 @@ export default {
   "grp.bakery": "Bread & baking",
   "grp.veg": "Vegetables & mushrooms",
   "grp.fruit": "Fruit & berries",
+  "grp.dried_fruit": "Dried fruit",
   "grp.dishes": "Meals & fast food",
   "grp.sauces": "Sauces & preserves",
   "grp.sweets": "Sweets",

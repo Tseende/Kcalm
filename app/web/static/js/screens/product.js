@@ -21,14 +21,14 @@ export function productForm(p = {}) {
   let iconVal = FOOD_ICONS.includes(p.icon) ? p.icon : null;
   const iconPrev = h('button', { type: 'button', class: 'icon-prev', 'aria-haspopup': 'dialog', onclick: openIconPage });
   function paintIcon() {
-    iconPrev.replaceChildren(foodPic(name.value, 72, iconVal) || h('span', { class: 'pic', style: { width: '72px', height: '72px' } }, icon('package', 32)),
+    iconPrev.replaceChildren(foodPic(name.value, 72, iconVal, brand.value) || h('span', { class: 'pic', style: { width: '72px', height: '72px' } }, icon('package', 32)),
       h('span', { class: 'icon-prev-lbl' }, t('pf.change_icon')));
   }
   // Выбор иконки открывается отдельной страницей поверх формы: введённые поля не теряются.
   let closeIconPage = null;
   function openIconPage() {
     let openGroup = null;
-    const g0 = foodGroupOf(name.value, iconVal);
+    const g0 = foodGroupOf(name.value, iconVal, brand.value);
     if (g0 !== 'Другое') openGroup = g0;
     const body = h('div', { class: 'screen icon-page-body', role: 'radiogroup', 'aria-label': t('pf.icon') });
     const close = () => { page.remove(); document.removeEventListener('keydown', onKey); closeIconPage = null; };
@@ -60,6 +60,7 @@ export function productForm(p = {}) {
     document.body.append(page);
   }
   name.addEventListener('input', () => { if (!iconVal) paintIcon(); });
+  brand.addEventListener('input', () => { if (!iconVal) paintIcon(); });
   paintIcon();
   const el = h('div', { class: 'stack' },
     iconPrev,

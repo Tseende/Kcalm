@@ -16,9 +16,9 @@ const ATLAS_INDEX = new Map(TILES.flatMap(({ asset, rows, keys }) => {
 const DRINKS = '\u0000drinks';   // служебный ключ чипа «Напитки» (каталог напитков, не свои продукты)
 
 function cataloguePic(product, useAtlas, observer) {
-  const key = useAtlas ? foodPicKey(product.name, product.icon) : null;
+  const key = useAtlas ? foodPicKey(product.name, product.icon, product.brand) : null;
   const cell = ATLAS_INDEX.get(key);
-  if (!cell) return foodPic(product.name, 48, product.icon);
+  if (!cell) return foodPic(product.name, 48, product.icon, product.brand);
   const { i, rows, url } = cell;
   const x = (i % COLUMNS) * 100 / (COLUMNS - 1);
   const y = Math.floor(i / COLUMNS) * 100 / Math.max(1, rows - 1);
@@ -142,7 +142,7 @@ export default async function render(root, ctx) {
     try {
       const { products } = await api.get('/products', { q });
       if (!ctx.alive() || cat === DRINKS || q !== search.value.trim()) return;
-      all = products.map((p) => ({ ...p, group: foodGroupOf(p.name, p.icon) }));
+      all = products.map((p) => ({ ...p, group: foodGroupOf(p.name, p.icon, p.brand) }));
       if (!products.length) {
         paint();
         list.replaceChildren(q ? emptyState('search', t('common.not_found'), t('common.try_other'))

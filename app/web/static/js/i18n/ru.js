@@ -405,6 +405,7 @@ export default {
   "forms.act_saved": "Активность записана",
   // grp
   "grp.snacks": "Снеки",
+  "grp.beer": "Пиво",
   "grp.dairy": "Молочное и яйца",
   "grp.meat": "Мясо и колбасы",
   "grp.fish": "Рыба и морепродукты",
@@ -412,6 +413,7 @@ export default {
   "grp.bakery": "Хлеб и выпечка",
   "grp.veg": "Овощи и грибы",
   "grp.fruit": "Фрукты и ягоды",
+  "grp.dried_fruit": "Сухофрукты",
   "grp.dishes": "Блюда и фастфуд",
   "grp.sauces": "Соусы и заготовки",
   "grp.sweets": "Сладкое",
