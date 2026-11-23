@@ -109,6 +109,61 @@ async def test_post_onboarding_success_creates_user(client, db):
     assert r.status == 409 and (await r.json())["error"] == "already_onboarded"
 
 
+@pytest.mark.parametrize("existing", [False, True])
+async def test_skip_then_complete_keeps_diary(client, db, existing):
+    headers = auth(1002)
+    if existing:
+        repo.create_user(db, 1002)
+    skip = {"tz": "Europe/Warsaw"}
+    for _ in range(2):
+        assert (await client.post("/api/onboarding/skip", json=skip, headers=headers)).status == 200
+    user = repo.get_user_by_tg(db, 1002)
+    uid = user["id"]
+    assert user["birth_date"] is None and user["start_weight_kg"] is None
+    assert repo.current_target(db, uid) is None and repo.due_reminders(db, uid, "morning") is None
+    me = await (await client.get("/api/me", headers=headers)).json()
+    assert not me["onboarded"] and me["onboarding_skipped"] and me["user"]["tz"] == skip["tz"]
+    assert (await client.post("/api/water", json={"ml": 300}, headers=headers)).status == 201
+    meal = {"name": "Йогурт", "grams": 100, "kcal": 80, "protein": 5, "fat": 4, "carbs": 6}
+    assert (await client.post("/api/meals/product", json=meal, headers=headers)).status == 201
+    day = await (await client.get("/api/day", headers=headers)).json()
+    assert day["totals"]["kcal"] == 80 and day["totals"]["protein"] == 5
+    assert day["water_ml"] == 300 and day["remaining_kcal"] is None
+    assert all(day["targets"][key] is None for key in ("kcal", "protein", "fat", "carbs"))
+    assert day["activity_hint"] is None
+    # Вес, записанный в дневник сегодня, сохраняется и после ввода стартового веса в анкете.
+    today = svc.local_today(FEMALE["tz"]).isoformat()
+    repo.save_body_measurement(db, uid, today, {"weight_kg": 81.2}, "manual", 1.0)
+    for path in ("/api/analysis", "/api/profile"):
+        resp = await client.get(path, headers=headers)
+        assert resp.status == 409 and (await resp.json())["error"] == "profile_required"
+    assert (await client.post("/api/onboarding", json=FEMALE, headers=headers)).status == 200
+    assert (await client.post("/api/onboarding/skip", json=skip, headers=headers)).status == 200
+    user = repo.get_user_by_tg(db, 1002)
+    assert user["id"] == uid and user["onboarded"] and not user["onboarding_skipped"]
+    assert repo.weight_series(db, uid, today, today)[0]["weight_kg"] == 81.2
+    assert user["tz"] == FEMALE["tz"]
+    day = await (await client.get("/api/day", headers=headers)).json()
+    assert day["water_ml"] == 300 and day["totals"]["kcal"] == 80
+    assert day["remaining_kcal"] == day["targets"]["kcal"] - 80 > 0
+
+
+async def test_skip_with_empty_answers(client, db):
+    assert (await client.post("/api/onboarding/skip", json={})).status == 401
+    assert repo.get_user_by_tg(db, 1002) is None
+    assert (await client.post("/api/onboarding/skip", json={}, headers=auth(1002))).status == 200
+    assert repo.get_user_by_tg(db, 1002)["birth_date"] is None
+
+
+@pytest.mark.parametrize("sex", ["male", "female"])
+def test_activity_changes_kcal_and_carbs_at_fixed_goal(db, sex):
+    targets = [svc.complete(db, 90 + level, {**FEMALE, "sex": sex, "activity": level})["targets"]
+               for level in range(1, 5)]
+    for low, high in zip(targets, targets[1:]):
+        assert low["kcal"] < high["kcal"] and low["carbs"] < high["carbs"]
+        assert low["protein"] == high["protein"] and low["fat"] == high["fat"]
+
+
 async def test_post_onboarding_validation(client, db):
     bad_bodies = [
         {**FEMALE, "sex": "x"}, {**FEMALE, "height_cm": 50}, {**FEMALE, "weight_kg": 20},
@@ -177,6 +232,6 @@ async def test_start_with_webapp_url_offers_app_and_chat_button(smoke_db, monkey
     sends = [m for m in seen if type(m).__name__ == "SendMessage"]
     assert sends, "приветствие не отправлено"
     kb = sends[0].reply_markup.inline_keyboard
-    assert kb[0][0].web_app.url == "https://example.com/app/" and "Настроить" in kb[0][0].text
+    assert kb[0][0].web_app.url == "https://example.com/app/" and kb[0][0].text == "Открыть дневник"
     assert kb[1][0].callback_data == "onb:chat"
     assert repo.get_user_by_tg(smoke_db, 1) is None          # профиль не создан, вопросов в чате нет

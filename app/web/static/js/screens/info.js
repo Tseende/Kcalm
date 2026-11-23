@@ -1,6 +1,6 @@
 // Menu sub-pages: data (export, delete), help + about
 import { api, downloadCsv, isMock, inTelegram, tg } from '../api.js';
-import { h, icon, tile, toast, nav, pageHead, sheet, haptic } from '../ui.js';
+import { h, icon, tile, toast, nav, pageHead, sheet, checkList, haptic } from '../ui.js';
 import { reset as resetCoach } from '../coach.js';
 import { t } from '../i18n.js';
 
@@ -24,12 +24,22 @@ async function exportKind(kind) {
 }
 
 function exportPage(view) {
-  const kinds = [['meals', 'tools-kitchen-2', 'orange', t('today.meals')], ['body', 'scale', 'purple', t('info.body')], ['water', 'droplet', 'teal', t('water.title')], ['sleep', 'bed', 'indigo', t('add.sleep')], ['activity', 'run', 'green', t('add.activity')]];
+  function chooseExport() {
+    const options = [['meals', t('today.meals')], ['body', t('info.body')], ['water', t('water.title')],
+      ['sleep', t('add.sleep')], ['activity', t('add.activity')]];
+    let selected = 'meals';
+    const picker = checkList(options, selected, value => { selected = value; }, t('info.export_kind'));
+    const save = h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: () => {
+      dialog.close();
+      exportKind(selected);
+    } }, t('info.save_csv'));
+    const dialog = sheet({ title: t('info.save_records'), content: h('div', { class: 'stack' }, picker,
+      h('div', { class: 'footnote' }, inTelegram ? t('info.share_tg') : t('info.share_web')), save) });
+  }
   view.append(pageHead(t('menu.data'), { parent: '/menu' }),
-    h('div', { class: 'section-label' }, t('info.export_csv')),
-    h('div', { class: 'list tiles' }, kinds.map(([k, ic, col, t]) => h('button', { class: 'row', type: 'button', onclick: () => exportKind(k) },
-      tile(ic, col), h('span', { class: 'grow row-title' }, t), icon('download', 20)))),
-    h('div', { class: 'footnote' }, inTelegram ? t('info.share_tg') : t('info.share_web')),
+    h('div', { class: 'list tiles' }, h('button', { class: 'row', type: 'button', onclick: chooseExport },
+      tile('file-export', 'blue'), h('span', { class: 'grow' }, h('span', { class: 'row-title' }, t('info.save_records')),
+        h('span', { class: 'row-sub' }, t('info.export_hint'))), icon('next', 18))),
     h('div', { class: 'section-label' }, t('info.delete')),
     h('div', { class: 'list tiles' }, h('button', { class: 'row', type: 'button', onclick: confirmDelete },
       tile('trash', 'red'), h('span', { class: 'grow' }, h('span', { class: 'row-title danger' }, t('info.delete_row')), h('span', { class: 'row-sub' }, t('info.delete_sub'))))),

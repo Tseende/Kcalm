@@ -1,6 +1,6 @@
 // Screen 5: Menu
 import { api, tg } from '../api.js';
-import { h, icon, tile, nav, fmtN, skeletonBlocks, sheet, haptic, errorState, staggerIn, getThemePref, setThemePref, THEMES } from '../ui.js';
+import { h, icon, tile, nav, fmtN, skeletonBlocks, sheet, checkList, toggle, sectionTitle, vibrationEnabled, setVibrationEnabled, errorState, staggerIn, getThemePref, setThemePref, THEMES } from '../ui.js';
 import { t, langPref, setLang } from '../i18n.js';
 
 // Фото из Telegram (если пользователь его разрешил), иначе первая буква имени
@@ -18,34 +18,21 @@ function avatarEl(name) {
 
 const THEME_OPTIONS = [[null, t('menu.theme_sys')], ...THEMES.map((theme) => [theme, t('menu.theme_' + theme)])];
 const LANGS = [['auto', t('lang.auto')], ['ru', 'Русский'], ['en', 'English']];   // названия языков не переводим
-function themeRow() {
-  const label = () => THEME_OPTIONS.find((x) => x[0] === getThemePref())[1];
-  const val = h('span', { class: 'row-value' }, label());
+function preferenceRow(title, glyph, color, options, getValue, setValue) {
+  const currentLabel = () => options.find(([value]) => value === getValue())[1];
+  const val = h('span', { class: 'row-value' }, currentLabel());
   const open = () => {
-    const current = getThemePref();
-    const rows = THEME_OPTIONS.map(([value, text]) => h('button', {
-      class: 'row', type: 'button', role: 'radio', 'aria-checked': String(value === current),
-      onclick: () => {
-        setThemePref(value);
-        haptic('selection');
-        val.textContent = label();
-        s.close();
-      },
-    },
-      value === 'cosmic' ? h('span', { class: 'theme-swatch', 'aria-hidden': 'true' }) : null,
-      h('span', { class: 'grow' }, h('span', { class: 'row-title' }, text)),
-      value === current ? h('span', { class: 'row-check' }, icon('check', 20)) : null));
-    const langRows = LANGS.map(([v, text]) => h('button', { class: 'row', type: 'button', role: 'radio', 'aria-checked': String(v === langPref()), onclick: () => {
-      if (v === langPref()) return;
-      haptic('selection'); setLang(v);                  // сохраняет выбор и перезагружает приложение
-    } }, h('span', { class: 'grow' }, h('span', { class: 'row-title' }, text)), v === langPref() ? h('span', { class: 'row-check' }, icon('check', 20)) : null));
-    const s = sheet({ title: t('menu.appearance'), content: h('div', { class: 'stack' },
-      h('div', { class: 'list', role: 'radiogroup', 'aria-label': t('menu.theme') }, rows),
-      h('div', { class: 'section-label' }, t('lang.title')),
-      h('div', { class: 'list', role: 'radiogroup', 'aria-label': t('lang.title') }, langRows)) });
+    const choices = options.map(([value, text]) => [value, value === 'cosmic'
+      ? h('span', {}, h('span', { class: 'theme-swatch', 'aria-hidden': 'true' }), ' ', text) : text]);
+    const content = checkList(choices, getValue(), value => {
+      dialog.close();
+      if (value !== getValue()) setValue(value);
+      val.textContent = currentLabel();
+    }, title);
+    const dialog = sheet({ title, content });
   };
-  return h('button', { class: 'row appearance-row', type: 'button', onclick: open }, tile('moon', 'indigo'),
-    h('span', { class: 'grow' }, h('span', { class: 'row-title' }, t('menu.appearance'))), val, icon('next', 18));
+  return h('button', { class: 'row appearance-row', type: 'button', onclick: open }, tile(glyph, color),
+    h('span', { class: 'grow' }, h('span', { class: 'row-title' }, title)), val, icon('next', 18));
 }
 
 // Карточка профиля: аватар, имя и прогресс к цели «старт → сейчас → цель».
@@ -105,18 +92,28 @@ export default async function render(root, ctx) {
     const name = me && me.user && me.user.first_name;
     const kids = [
       name ? profileCard(me, name) : null,
+      sectionTitle(t('menu.personal')),
       h('div', { class: 'list tiles' },
         item('target', 'red', t('menu.profile'), t('menu.profile_sub'), '/menu/profile'),
-        item('bell', 'purple', t('menu.reminders'), t('menu.reminders_sub'), '/menu/reminders')),
+        item('bell', 'purple', t('menu.reminders'), t('menu.reminders_sub'), '/menu/reminders'),
+        item('user-plus', 'purple', t('ref.title'), t('ref.subtitle'), '/menu/referral')),
+      sectionTitle(t('menu.kitchen')),
       h('div', { class: 'list tiles' },
-        item('star', 'yellow', t('menu.favorites'), t('menu.favorites_sub'), '/menu/favorites'),
-        item('package', 'orange', t('menu.products'), t('menu.products_sub'), '/menu/products'),
-        item('soup', 'teal', t('menu.dishes'), t('menu.dishes_sub'), '/menu/dishes')),
+        item('tools-kitchen-2', 'yellow', t('menu.favorites'), t('menu.favorites_sub'), '/menu/favorites'),
+        item('basket', 'orange', t('menu.products'), t('menu.products_sub'), '/menu/products'),
+        item('bowl', 'teal', t('menu.dishes'), t('menu.dishes_sub'), '/menu/dishes')),
+      sectionTitle(t('menu.interface')),
       h('div', { class: 'list tiles' },
-        item('star', 'purple', t('ref.title'), t('ref.subtitle'), '/menu/referral'),
-        themeRow(),
+        preferenceRow(t('menu.language'), 'language', 'blue', LANGS, langPref, setLang),
+        preferenceRow(t('menu.theme'), 'sun-moon', 'indigo', THEME_OPTIONS, getThemePref, setThemePref),
+        h('div', { class: 'row' }, tile('device-mobile-vibration', 'teal'),
+          h('span', { class: 'grow' }, t('menu.vibration')),
+          toggle(vibrationEnabled(), setVibrationEnabled, t('menu.vibration')))),
+      sectionTitle(t('menu.data_help')),
+      h('div', { class: 'list tiles' },
         item('file-export', 'green', t('menu.data'), t('menu.data_sub'), '/menu/export'),
-        item('help-circle', 'blue', t('menu.help'), t('menu.help_sub'), '/menu/help'))].filter(Boolean);
+        item('help-circle', 'blue', t('menu.help'), t('menu.help_sub'), '/menu/help')),
+    ].filter(Boolean);
     body.replaceChildren(...kids);
     staggerIn(body, kids);
   }

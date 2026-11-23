@@ -278,9 +278,18 @@ export function rich(text) {
 }
 
 // ------------------------------------------------------------ Telegram bits
+let vibration = true;
+try { vibration = localStorage.getItem('vibration') !== 'off'; } catch { /* storage unavailable */ }
+export const vibrationEnabled = () => vibration;
+export function setVibrationEnabled(enabled) {
+  vibration = enabled;
+  try { localStorage.setItem('vibration', enabled ? 'on' : 'off'); } catch { /* session preference */ }
+  if (enabled) haptic('selection');
+}
+
 export function haptic(type = 'success') {
   try {
-    if (!tg || !tg.HapticFeedback) return;
+    if (!vibration || !tg || !tg.HapticFeedback) return;
     if (type === 'selection') tg.HapticFeedback.selectionChanged();
     else if (['success', 'error', 'warning'].includes(type)) tg.HapticFeedback.notificationOccurred(type);
     else tg.HapticFeedback.impactOccurred(type);
@@ -610,6 +619,11 @@ export function sessionExpiredButton() {
 }
 
 export function errorState(root, err, retry) {
+  if (err?.code === 'profile_required') {
+    root.replaceChildren(emptyState('target', t('onb.norm_title'), t('onb.norm_hint'),
+      h('button', { class: 'btn btn-primary', type: 'button', onclick: () => nav.go('/menu/setup') }, t('onb.setup'))));
+    return;
+  }
   if (err) console.error(err);
   if (err && err.expired) {
     root.replaceChildren(emptyState('lock', t('state.expired'), err.message, sessionExpiredButton()));

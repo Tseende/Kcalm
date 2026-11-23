@@ -1,7 +1,7 @@
 // Онбординг первого запуска: интро, 11 вопросов (по одному на экран), расчёт и результат.
 // Состояние живёт в sessionStorage: закрыли и открыли — продолжаем с того же шага.
 import { api } from '../api.js';
-import { h, icon, haptic, toast, toggle, mainButton, backButton, todayISO, addDays, longDate, fmtN, numFmt } from '../ui.js';
+import { h, icon, nav, haptic, toast, toggle, mainButton, backButton, todayISO, addDays, longDate, fmtN, numFmt } from '../ui.js';
 import { onbImg, cards, drum, ruler, REDUCED } from '../onb/controls.js';
 import { intro } from '../onb/intro.js';
 import { calcView, resultView } from '../onb/result.js';
@@ -25,6 +25,10 @@ function loadState() {
   return null;
 }
 
+function deviceTimezone() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) { return undefined; }
+}
+
 /** Есть ли в маршруте вопросы про цель и темп. Недобор ИМТ или цель вплотную к весу: держим вес. */
 function willLose(a) {
   if (a.goal === 'maintain') return false;
@@ -46,9 +50,9 @@ export function stepsFor(a) {
  * root — контейнер экрана, me — ответ /me (имя), onDone() — вызвать, когда человек нажал «Начать».
  * Возвращает функцию очистки.
  */
-export default function onboarding(root, { me, onDone }) {
+export function onboarding(root, { me, onDone }) {
   const name = (me && me.user && me.user.first_name) || '';
-  const S = loadState() || { step: 'intro', a: {} };
+  const S = loadState() || { step: me?.onboarding_skipped ? 'goal' : 'intro', a: {} };
   const a = S.a;
   a.reminders = a.reminders || { morning: true, evening: true, water: true, weigh: true, weekly: true };
   const save = () => { try { sessionStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* ignore */ } };
@@ -56,7 +60,7 @@ export default function onboarding(root, { me, onDone }) {
 
   const prog = h('i');
   const back = h('button', { class: 'onb-back', type: 'button', 'aria-label': t('common.back'), onclick: () => goBack() }, icon('back', 24));
-  const skip = h('button', { class: 'onb-skip', type: 'button', onclick: () => { haptic('light'); show('goal', 'fwd'); } }, t('onb.skip'));
+  const skip = h('button', { class: 'onb-skip', type: 'button', onclick: skipSetup }, t(me?.onboarding_skipped ? 'onb.to_diary' : 'onb.skip'));
   const stage = h('div', { class: 'onb-stage' });
   const wrap = h('div', { class: 'onb' }, h('div', { class: 'onb-top' }, back, h('div', { class: 'onb-prog', role: 'progressbar', 'aria-label': t('onb.progress') }, prog), skip), stage);
   root.replaceChildren(wrap);
@@ -66,6 +70,29 @@ export default function onboarding(root, { me, onDone }) {
   let advanceTimer = 0;
 
   // ------------------------------------------------------------ навигация
+  async function skipSetup() {
+    if (skip.disabled || !alive) return;
+    if (a.year_set && nowYear - a.birth_year < 18) { show('stop'); return; }
+    clearTimeout(advanceTimer);
+    haptic('light');
+    skip.disabled = true;
+    wrap.inert = true;
+    mainButton.hide();
+    backButton.hide();
+    try {
+      if (!me?.onboarding_skipped) {
+        await api.post('/onboarding/skip', { tz: deviceTimezone() });
+      }
+      if (alive) finish(true);
+    } catch (e) {
+      if (!alive) return;
+      skip.disabled = false;
+      wrap.inert = false;
+      toast(e.message || t('onb.save_fail'), 'error');
+      show(S.step);
+    }
+  }
+
   function neighbours(step) {
     const order = stepsFor(a);
     const i = order.indexOf(step === 'stop' ? 'year' : step);
@@ -107,7 +134,7 @@ export default function onboarding(root, { me, onDone }) {
     prog.style.transform = `scaleX(${Math.max(0.04, frac)})`;
     const intro0 = step === 'intro';
     back.hidden = intro0 || step === 'calc' || step === 'result';
-    skip.hidden = !intro0;
+    skip.hidden = step === 'stop' || step === 'calc' || step === 'result';
     if (intro0 || step === 'calc' || step === 'result') backButton.hide(); else backButton.show(goBack);
     if (view.main) mainButton.show(view.main.text, view.main.fn, { disabled: !!view.main.disabled }); else mainButton.hide();
     window.scrollTo(0, 0);
@@ -145,7 +172,8 @@ export default function onboarding(root, { me, onDone }) {
       onIndex: (i) => { if (cur && cur.step === 'intro') mainButton.setText(i === it.count - 1 ? t('onb.go') : t('onb.next')); },
     });
     const next = () => { if (it.index() >= it.count - 1) show('goal', 'fwd'); else it.goTo(it.index() + 1); };
-    return { el: h('div', { class: 'onb-step-intro', style: { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0' } }, it.el), main: { text: t('onb.next'), fn: next }, cleanup: it.cleanup };
+    const setup = h('button', { class: 'btn-link', type: 'button', onclick: () => show('goal') }, t('onb.setup'));
+    return { el: h('div', { class: 'onb-step-intro', style: { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0' } }, it.el, setup), main: { text: t('onb.next'), fn: next }, cleanup: it.cleanup };
   }
 
   function buildGoal() {
@@ -298,7 +326,7 @@ export default function onboarding(root, { me, onDone }) {
   // ------------------------------------------------------------ отправка и результат
   function payload() {
     const lose = willLose(a);
-    const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined; } catch (e) { return undefined; } })();
+    const tz = deviceTimezone();
     const body = {
       sex: a.sex, birth_year: a.birth_year, height_cm: a.height_cm, weight_kg: a.weight_kg,
       goal_weight_kg: lose ? a.goal_weight_kg : a.weight_kg, rate_kg_week: lose ? (a.rate || 0.5) : 0,
@@ -346,13 +374,16 @@ export default function onboarding(root, { me, onDone }) {
     S.step = 'result';
     window.scrollTo(0, 0);
     setTimeout(() => rv.play(), REDUCED ? 0 : 250);
-    mainButton.show(t('onb.start'), finish);
+    mainButton.show(t('onb.start'), () => finish());
   }
 
-  function finish() {
-    try { sessionStorage.removeItem(KEY); localStorage.setItem('onb_hint_pending', '1'); } catch (e) { /* ignore */ }
+  function finish(skipped = false) {
+    try {
+      sessionStorage.removeItem(KEY);
+      if (!skipped) localStorage.setItem('onb_hint_pending', '1');
+    } catch (e) { /* ignore */ }
     mainButton.hide();
-    onDone();
+    onDone(skipped);
   }
 
   show(S.step === 'stop' ? 'year' : S.step, 'fwd');
@@ -363,6 +394,14 @@ export default function onboarding(root, { me, onDone }) {
     mainButton.hide();
     backButton.hide();
   };
+}
+
+export default async function render(root, ctx) {
+  const me = await api.me(true);
+  if (!ctx.alive()) return;
+  if (me.onboarded) { nav.replace('/menu/profile'); return; }
+  document.body.dataset.route = 'onb';
+  return onboarding(root, { me, onDone: (skipped) => { if (!skipped) api._me = null; nav.replace('/today'); } });
 }
 
 /** Подсказка над «+» переехала в тур на «Сегодня» (js/coach.js, шаг today.plus, флаги onb_hint_* те же). Заглушка для совместимости. */

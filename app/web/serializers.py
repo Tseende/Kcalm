@@ -86,6 +86,9 @@ def product_json(product) -> dict:
 
 
 def targets_json(db: sqlite3.Connection, user: sqlite3.Row) -> dict:
+    if user["onboarding_skipped"]:
+        return {"kcal": None, "protein": None, "fat": None, "carbs": None,
+                "water_ml": watersvc.goal_for(db, user)}
     tgt = repo.current_target(db, user["id"])
     return {"kcal": int(tgt["kcal_target"]) if tgt else 0,
             "protein": _int(tgt["protein_g"] or 0) if tgt else 0,

@@ -45,6 +45,18 @@ class OnboardingError(ValueError):
         self.code = code
 
 
+def skip(db: sqlite3.Connection, tg_id: int, tz: str) -> None:
+    """Открыть дневник без персональных норм. Повторный запрос не меняет профиль."""
+    with db:
+        db.execute(
+            """INSERT INTO users (tg_id, tz, target_rate_kg_week, onboarding_skipped)
+               VALUES (?, ?, 0, 1)
+               ON CONFLICT(tg_id) DO UPDATE SET onboarding_skipped=1, tz=excluded.tz,
+                   target_rate_kg_week=0 WHERE onboarded=0 AND onboarding_skipped=0""",
+            (tg_id, tz),
+        )
+
+
 def complete(db: sqlite3.Connection, tg_id: int, data: dict, *, log_weight: bool = True) -> dict:
     """Сохранить профиль, посчитать норму, поставить напоминания, записать стартовый вес.
 
@@ -98,10 +110,12 @@ def complete(db: sqlite3.Connection, tg_id: int, data: dict, *, log_weight: bool
         db, uid,
         sex=sex, birth_date=f"{int(data['birth_year'])}-01-01", height_cm=height,
         start_weight_kg=weight, tz=tz, eating_cutoff=cutoff, activity_pa=pa,
-        goal_weight_kg=goal, target_rate_kg_week=-rate, care_mode=int(care), onboarded=1,
+        goal_weight_kg=goal, target_rate_kg_week=-rate, care_mode=int(care), onboarded=1, onboarding_skipped=0,
     )
     # стартовый вес — первая запись журнала веса (без неё график и тренд пусты до первого взвешивания)
-    if log_weight:
+    has_diary_weight = user is not None and user["onboarding_skipped"] and repo.weight_series(
+        db, uid, today.isoformat(), today.isoformat())
+    if log_weight and not has_diary_weight:
         repo.save_body_measurement(db, uid, today.isoformat(), {"weight_kg": weight}, "manual", 1.0)
 
     t = compute_target(sex=sex, age=age, weight_kg=weight, height_cm=height, pal=pal,
@@ -122,6 +136,9 @@ def complete(db: sqlite3.Connection, tg_id: int, data: dict, *, log_weight: bool
 
     if referralsvc.on_onboarded(db, tg_id, uid):         # пришёл по приглашению: заморозка серии в подарок
         notes.append(referralsvc.BONUS_NOTE)
+        days = repo.referral_of_invitee_tg(db, tg_id)["friend_bonus_days"]
+        if days:
+            notes.append(f"Начислены бонусные дни будущей подписки: +{days}.")
 
     fresh = repo.get_user_by_tg(db, tg_id)
     goal_date = None

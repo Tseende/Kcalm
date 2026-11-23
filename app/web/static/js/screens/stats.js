@@ -153,7 +153,7 @@ export default async function render(root, ctx) {
     }
 
     // ---- 2. Дни в норме: календарь
-    if (s.days_logged) {
+    if (s.days_logged && target) {
       const streak = streakOf(days, target);
       kids.push(h('section', { class: 'card st-heat' },
         h('div', { class: 'st-heat-head' },

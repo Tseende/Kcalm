@@ -47,8 +47,7 @@ function timePill(value, onChange, label, { disabled = false, fixed = false } = 
 export default async function render(root, ctx) {
   const view = h('div', { class: 'screen' });
   const box = h('div', { class: 'stack' }, skeletonCards(3, 64));
-  const plus = h('button', { class: 'icon-btn accent', type: 'button', 'aria-label': t('rem.add'), onclick: () => openTemplates() }, icon('plus'));
-  view.append(pageHead(t('rem.title'), { parent: '/menu', right: plus }), box);
+  view.append(pageHead(t('rem.title'), { parent: '/menu' }), box);
   root.append(view);
   let state;
   try { state = await api.get('/reminders'); } catch (e) { if (ctx.alive()) errorState(box, e, () => { root.replaceChildren(); render(root, ctx); }); return; }

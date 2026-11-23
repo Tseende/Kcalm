@@ -85,7 +85,12 @@ class AccessMiddleware(BaseMiddleware):
         user = getattr(event, "from_user", None)
         if user is None:
             return await handler(event, data)
-        if not get_config().is_allowed(user.id):
+        config = get_config()
+        if config.allow_public_bot and user.id not in config.allowed_ids and data.get("db") is not None:
+            code = _start_code(event)
+            if code:
+                referral.redeem(data["db"], user.id, code, user.first_name, config)
+        if not config.is_allowed(user.id):
             admitted = await _admitted(event, user, data)
             if admitted is None:
                 return

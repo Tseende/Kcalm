@@ -219,14 +219,14 @@ function getDay(date) {
   const t = dayTotals(date);
   const b = body.get(date) || {};
   return {
-    date, targets: TARGETS,
+    date, targets: onbSkipped ? { kcal: null, protein: null, fat: null, carbs: null, water_ml: TARGETS.water_ml } : TARGETS,
     totals: { kcal: Math.round(t.kcal), protein: r1(t.protein), fat: r1(t.fat), carbs: r1(t.carbs) },
-    remaining_kcal: TARGETS.kcal - Math.round(t.kcal),
+    remaining_kcal: onbSkipped ? null : TARGETS.kcal - Math.round(t.kcal),
     water_ml: waterOf(date), meals: ms,
     sleep: b.sleep_min ? { duration_min: b.sleep_min, score: b.score } : null,
     activity: b.steps ? { steps: b.steps, active_kcal: b.active_kcal } : null,
     steps_goal: 8000,
-    activity_hint: date === todayISO() && prof.activity < 3 ? { avg_steps: 11200, days: 16, current: prof.activity, suggested: 3 } : null,
+    activity_hint: !onbSkipped && date === todayISO() && prof.activity < 3 ? { avg_steps: 11200, days: 16, current: prof.activity, suggested: 3 } : null,
     weight: b.weight ?? null,
     weight_last: b.weight != null ? { kg: b.weight, date } : { kg: 82.4, date: iso(addDays(date, -3)) },
   };
@@ -243,7 +243,7 @@ function getStats(range) {
     const b = body.get(d) || {};
     days.push({
       date: d, kcal: ms.length ? Math.round(t.kcal) : null, protein: ms.length ? r1(t.protein) : null, fat: ms.length ? r1(t.fat) : null, carbs: ms.length ? r1(t.carbs) : null,
-      target_kcal: TARGETS.kcal, water_ml: waterOf(d) || null, weight: b.weight ?? null, weight_trend: b.trend ?? null, sleep_min: b.sleep_min ?? null, steps: b.steps ?? null,
+      target_kcal: onbSkipped ? null : TARGETS.kcal, water_ml: waterOf(d) || null, weight: b.weight ?? null, weight_trend: b.trend ?? null, sleep_min: b.sleep_min ?? null, steps: b.steps ?? null,
     });
   }
   const avg = (key) => { const v = days.map((x) => x[key]).filter((x) => x !== null); return v.length ? v.reduce((a, c) => a + c, 0) / v.length : null; };
@@ -264,14 +264,14 @@ function getStats(range) {
     summary: {
       avg_kcal: avg('kcal') === null ? null : Math.round(avg('kcal')), avg_protein: avg('protein') === null ? null : r1(avg('protein')),
       days_logged: logged.length,
-      days_on_target: logged.filter((d) => d.kcal <= TARGETS.kcal * 1.05 && d.kcal >= TARGETS.kcal * 0.8).length,
+      days_on_target: onbSkipped ? 0 : logged.filter((d) => d.kcal <= TARGETS.kcal * 1.05 && d.kcal >= TARGETS.kcal * 0.8).length,
       weight_change: trends.length > 1 ? r1(trends[trends.length - 1] - trends[0]) : null,
       avg_sleep_min: avg('sleep_min') === null ? null : Math.round(avg('sleep_min')),
       avg_steps: avg('steps') === null ? null : Math.round(avg('steps')),
       avg_water: avg('water_ml') === null ? null : Math.round(avg('water_ml')),
     },
-    prev_summary: { avg_kcal: 1810, avg_protein: 84, days_logged: Math.max(1, logged.length - 1), days_on_target: Math.max(0, logged.length - 3), weight_change: -0.4, avg_sleep_min: 395, avg_steps: 6100, avg_water: 1500 },
-    goals: { protein_g: TARGETS.protein, water_ml: TARGETS.water_ml, steps: 8000, sleep_min: 420 },
+    prev_summary: { avg_kcal: 1810, avg_protein: 84, days_logged: Math.max(1, logged.length - 1), days_on_target: onbSkipped ? 0 : Math.max(0, logged.length - 3), weight_change: -0.4, avg_sleep_min: 395, avg_steps: 6100, avg_water: 1500 },
+    goals: { protein_g: onbSkipped ? null : TARGETS.protein, water_ml: TARGETS.water_ml, steps: 8000, sleep_min: 420 },
   };
 }
 
@@ -405,6 +405,8 @@ function weekGoalMock() {
 // ?onb=1: приложение открывается как у нового человека (онбординг); после POST /onboarding — обычные данные.
 let onbPending = /[?&]onb=1\b/.test(location.search);
 
+let onbSkipped = onbPending && sessionStorage.getItem('mock_onb_skipped') === '1';
+
 function mockOnboarding(b) {
   const age = new Date().getFullYear() - b.birth_year;
   if (age < 18) { const e = new Error(L('Бот считает дефицит калорий и рассчитан на взрослых (18+).', "The bot works with a calorie deficit and is built for adults (18+).")); e.name = 'ApiError'; e.status = 400; e.code = 'underage'; throw e; }
@@ -419,16 +421,23 @@ function mockOnboarding(b) {
   Object.assign(TARGETS, { kcal, protein, fat, carbs });
   Object.assign(prof, { sex: b.sex, birth_year: b.birth_year, height_cm: b.height_cm, goal_weight_kg: b.goal_weight_kg, activity: b.activity, rate_kg_week: rate });
   onbPending = false;
+  onbSkipped = false;
+  sessionStorage.removeItem('mock_onb_skipped');
   return { profile: mockProfile(), targets: { kcal, protein, fat, carbs, water_ml: Math.round(b.weight_kg * 30 / 50) * 50 }, notes: [], goal_date: goalDate };
 }
 
 const routes = [
-  ['GET', /^\/referral$/, () => ({ link: 'https://t.me/example_bot?start=r_demo2345', invites_left: 2, freezes: 1, streak: 4, rewards_cap_left: 9, invited: [{name: L('Аня', 'Anna'), status: 'activated'}] })],
-  ['GET', /^\/me$/, () => onbPending ? { onboarded: false, user: { first_name: L('Аня', "Anna") } } : ({
+  ['GET', /^\/referral$/, () => ({ link: 'https://t.me/example_bot?start=r_demo2345', invites_left: 2, freezes: 1, streak: 4, rewards_cap_left: 9, welcome: {status: 'onboarded', days: 1, target: 3, deadline: new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10)}, invited: [{name: L('Аня', 'Anna'), status: 'rewarded'}] })],
+  ['GET', /^\/me$/, () => onbPending ? { onboarded: false, onboarding_skipped: onbSkipped, user: { first_name: L('Аня', "Anna") } } : ({
     onboarded: true,
     user: { tg_id: 1, first_name: L('Жан', "Jean"), sex: 'm', height_cm: 178, goal_weight_kg: 76, tz: 'Europe/Moscow', eating_cutoff: '21:00' },
     targets: TARGETS, weight: { latest: 82.4, trend: body.get(todayISO()).trend, start: 88.0 },
   })],
+  ['POST', /^\/onboarding\/skip$/, () => {
+    onbSkipped = true;
+    sessionStorage.setItem('mock_onb_skipped', '1');
+    return { ok: true };
+  }],
   ['POST', /^\/onboarding$/, (m, q, b) => mockOnboarding(b)],
   ['GET', /^\/profile$/, () => ({ profile: mockProfile(), targets: TARGETS, first_name: L('Жан', "Jean") })],
   ['PATCH', /^\/profile$/, (m, q, b) => {
@@ -697,6 +706,10 @@ const routes = [
 
 export async function mockRequest(method, path, query, body) {
   await sleep(120 + Math.random() * 160);
+  if (onbSkipped && ['/profile', '/targets', '/analysis', '/week-goal'].includes(path)) {
+    const { ApiError } = await import('./api.js');
+    throw new ApiError(409, 'profile_required', '');
+  }
   for (const [mt, re, fn, status] of routes) {
     if (mt !== method) continue;
     const m = path.match(re);

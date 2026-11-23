@@ -137,7 +137,7 @@ async def dispatch_due_reminders(db: sqlite3.Connection, bot,
         except Exception:  # noqa: BLE001 — при сбое проверки работаем как раньше
             log.warning("предпроверка напоминаний не удалась", exc_info=True)
 
-    users = db.execute("SELECT * FROM users WHERE onboarded=1").fetchall()
+    users = db.execute("SELECT * FROM users WHERE onboarded=1 OR onboarding_skipped=1").fetchall()
     pending = iter(users)
 
     async def worker():
@@ -161,7 +161,7 @@ def _has_due_work(db, now_utc: datetime) -> bool:
         custom: dict[int, list] = {}
         for r in conn.execute("SELECT * FROM user_reminders WHERE enabled=1").fetchall():
             custom.setdefault(r["user_id"], []).append(r)
-        for user in conn.execute("SELECT * FROM users WHERE onboarded=1").fetchall():
+        for user in conn.execute("SELECT * FROM users WHERE onboarded=1 OR onboarding_skipped=1").fetchall():
             try:
                 now = now_utc.astimezone(ZoneInfo(user["tz"] or "Europe/Minsk"))
             except Exception:  # noqa: BLE001 — как и в _dispatch_user: плохой tz пропускаем

@@ -54,7 +54,7 @@ export default async function render(root, ctx) {
     }
   }
 
-  function draw(day, { dir = 0, fresh = false } = {}) {
+  function targetCard(day) {
     const tgt = day.targets;
     const eaten = day.totals.kcal;
     const partial = day.totals.unresolved_items || 0;
@@ -110,6 +110,17 @@ export default async function render(root, ctx) {
     }
     const tip = tipText ? h('div', { class: 'day-tip' }, icon('sparkles', 15), h('span', null, tipText)) : null;
     kcalCard.append(macroRow, ...(tip ? [tip] : []));
+    return kcalCard;
+  }
+
+  function draw(day, { dir = 0, fresh = false } = {}) {
+    const tgt = day.targets;
+    const kcalCard = tgt.kcal ? targetCard(day) : h('section', { class: 'card stack-sm' },
+      h('div', { class: 'muted small' }, t('nutrition.counted')),
+      h('b', { class: 'target-kcal' }, fmtKcal(day.totals.kcal) + ' ' + t('unit.kcal')),
+      h('div', null, macroLine(day.totals)),
+      day.totals.unresolved_items ? h('div', { class: 'muted small' }, t('nutrition.incomplete', { n: day.totals.unresolved_items })) : null,
+      h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => nav.go('/menu/setup') }, t('onb.setup')));
 
     // water
     let waterMl = day.water_ml;
@@ -198,7 +209,7 @@ export default async function render(root, ctx) {
 
     const isToday = curDate === todayISO();
     const often = isToday ? oftenRow() : null;
-    const kids = [kcalCard, waterCard, miniRow, ...(isToday ? [activityHint(day.activity_hint)].filter(Boolean) : []), ...(isToday ? [weekGoalBlock(ctx, { compact: true })] : []),
+    const kids = [kcalCard, waterCard, miniRow, ...(isToday ? [activityHint(day.activity_hint)].filter(Boolean) : []), ...(isToday && tgt.kcal ? [weekGoalBlock(ctx, { compact: true })] : []),
       sectionTitle(t('today.meals'), h('button', { class: 'btn-link section-add', type: 'button', onclick: addMeal }, icon('plus', 14), t('common.add'))), mealsList,
       ...(isToday ? [sectionTitle(t('today.repeat')), often, ...(often._ph ? [often._ph] : [])] : [])];
     body.replaceChildren(...kids);

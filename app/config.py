@@ -23,6 +23,8 @@ class Config(BaseSettings):
     telegram_bot_token: str = ""
     allowed_tg_ids: str = ""          # "123456,789" — пусто = whitelist выключен (dev)
     allow_public_bot: bool = False
+    referral_friend_days: int = Field(0, ge=0)
+    referral_inviter_days: int = Field(0, ge=0)
     openrouter_api_key: str = ""
     model_vision: str = "deepseek/deepseek-v4.1-flash-1017"
     model_vision_escalation: str = "deepseek/deepseek-v4.1-flash"

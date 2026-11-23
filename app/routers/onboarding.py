@@ -47,7 +47,7 @@ def _question(index: int) -> tuple[str, str, str | None]:
 CHAT_FLOW_CB = "onb:chat"
 WELCOME_TEXT = (
     "Привет! Я помогу вести дневник питания и не срываться вечером.\n"
-    "Настройка займёт минуту: пара касаний, без клавиатуры."
+    "Можно сразу открыть дневник, а профиль для расчёта БЖУ заполнить позже."
 )
 
 
@@ -190,8 +190,10 @@ async def start(msg: Message, state: FSMContext, db: sqlite3.Connection) -> None
     if url:
         # новому человеку сначала предлагаем настройку в приложении; чат остаётся запасным путём
         await state.clear()
-        await msg.answer(WELCOME_TEXT + (f"\n\n{invited}" if invited else ""), reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="✨ Настроить за минуту", web_app=WebAppInfo(url=url))],
+        greeting = ("Дневник открыт. Заполнить профиль можно в приложении."
+                    if user and user["onboarding_skipped"] else WELCOME_TEXT)
+        await msg.answer(greeting + (f"\n\n{invited}" if invited else ""), reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Открыть дневник", web_app=WebAppInfo(url=url))],
             [InlineKeyboardButton(text="Ответить в чате", callback_data=CHAT_FLOW_CB)],
         ]))
         return

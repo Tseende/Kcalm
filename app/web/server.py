@@ -179,7 +179,9 @@ def _unauthorized() -> ApiError:
 
 
 # Только эти запросы доступны до онбординга: статус профиля и сама настройка.
-OPEN_BEFORE_ONBOARDING = {("GET", "/api/me"), ("POST", "/api/onboarding")}
+OPEN_BEFORE_ONBOARDING = {("GET", "/api/me"), ("POST", "/api/onboarding"),
+                          ("POST", "/api/onboarding/skip")}
+PROFILE_REQUIRED = {"/api/profile", "/api/targets", "/api/analysis", "/api/week-goal"}
 
 
 @web.middleware
@@ -200,7 +202,11 @@ async def auth_middleware(request: web.Request, handler):
             raise _unauthorized() from None
         tg_id = data["user"]["id"]
         first_name = str(data["user"].get("first_name") or "")
-        if not whitelisted(config, tg_id):
+        if config.allow_public_bot and tg_id not in config.allowed_ids:
+            code = referral.parse_payload(data.get("start_param"))
+            if code:
+                referral.redeem(db, tg_id, code, first_name, config)
+        elif not whitelisted(config, tg_id):
             # не из списка: пускаем, если доступ выдан по приглашению раньше или start_param=r_<код> даёт его сейчас
             admit_by_invite(db, config, tg_id, first_name, data.get("start_param"))
     elif dev_allowed(request.remote, request.headers, config):
@@ -208,7 +214,9 @@ async def auth_middleware(request: web.Request, handler):
     else:
         raise _unauthorized()
     user = repo.get_user_by_tg(db, tg_id)
-    if (user is None or not user["onboarded"]) and (request.method, request.path) not in OPEN_BEFORE_ONBOARDING:
+    if user is not None and user["onboarding_skipped"] and request.path in PROFILE_REQUIRED:
+        raise ApiError(409, "profile_required", "Для персональных норм заполните профиль.")
+    if not (user and (user["onboarded"] or user["onboarding_skipped"])) and (request.method, request.path) not in OPEN_BEFORE_ONBOARDING:
         raise ApiError(409, "not_onboarded", "Сначала пройдите настройку в чате с ботом.")
     request[REQUEST_USER] = user
     request[REQUEST_TG_ID] = tg_id
@@ -444,7 +452,12 @@ async def healthz(request: web.Request) -> web.Response:
 async def api_me(request: web.Request) -> web.Response:
     user = request[REQUEST_USER]
     if user is None or not user["onboarded"]:
-        return ok({"onboarded": False, "user": {"first_name": request[REQUEST_FIRST_NAME]}})
+        result = {"onboarded": False, "user": {"first_name": request[REQUEST_FIRST_NAME]}}
+        if user is not None and user["onboarding_skipped"]:
+            result["onboarding_skipped"] = True
+            result["user"]["tz"] = user["tz"]
+            result["weight"] = q.weight_summary(request.app[DB], user, now_local(user).date().isoformat())
+        return ok(result)
     db, user, _ = ctx(request)
     today = now_local(user).date().isoformat()
     return ok({
@@ -599,14 +612,25 @@ async def api_user_reminder_delete(request: web.Request) -> web.Response:
 ONBOARDING_REMINDERS = ("morning", "midday", "evening", "weekly", "water", "weigh")
 
 
+@routes.post("/api/onboarding/skip")
+async def api_onboarding_skip(request: web.Request) -> web.Response:
+    data = await read_json(request)
+    try:
+        tz = validate_timezone(str(data.get("tz") or onboardingsvc.DEFAULT_TZ))
+    except ValueError as exc:
+        raise bad(str(exc), "bad_tz") from None
+    onboardingsvc.skip(request.app[DB], request[REQUEST_TG_ID], tz)
+    return ok({"ok": True})
+
+
 @routes.post("/api/onboarding")
 async def api_onboarding(request: web.Request) -> web.Response:
     """Первичная настройка из Mini App: профиль, норма, напоминания. Логика общая с чатом."""
     db, config = request.app[DB], request.app[CONFIG]
-    user = request[REQUEST_USER]
+    data = await read_json(request)
+    user = repo.get_user_by_tg(db, request[REQUEST_TG_ID])
     if user is not None and user["onboarded"]:
         raise ApiError(409, "already_onboarded", "Профиль уже настроен.")
-    data = await read_json(request)
     if data.get("sex") not in ("male", "female"):
         raise bad("Пол: male или female.", "bad_field")
     tz = onboardingsvc.DEFAULT_TZ
@@ -693,7 +717,7 @@ async def api_day(request: web.Request) -> web.Response:
     totals = q.day_totals(db, uid, key)
     return ok({
         "date": key, "targets": targets, "totals": totals,
-        "remaining_kcal": None if totals["unresolved_items"] else targets["kcal"] - totals["kcal"],
+        "remaining_kcal": None if totals["unresolved_items"] or not targets["kcal"] else targets["kcal"] - totals["kcal"],
         "water_ml": repo.day_water_ml(db, uid, key),
         "meals": [meal_json(db, m) for m in repo.day_meals(db, uid, key)],
         "sleep": q.day_sleep(db, uid, key),
@@ -701,7 +725,7 @@ async def api_day(request: web.Request) -> web.Response:
         "steps_goal": q.STEPS_GOAL,
         # подсказка поправить уровень активности в профиле: только для сегодняшнего дня
         "activity_hint": (q.activity_hint(db, uid, day, profilesvc.activity_level(user["activity_pa"]))
-                          if day == now_local(user).date() else None),
+                          if user["onboarded"] and day == now_local(user).date() else None),
         "weight": q.day_weight(db, uid, key),
         "weight_last": q.last_weight(db, uid, key),
     })

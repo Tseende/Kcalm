@@ -1932,7 +1932,8 @@ def has_access_grant(conn: sqlite3.Connection, tg_id: int) -> bool:
     return conn.execute("SELECT 1 FROM access_grants WHERE tg_id = ?", (tg_id,)).fetchone() is not None
 
 
-def redeem_referral(conn: sqlite3.Connection, inviter_id: int, tg_id: int, name: str | None) -> bool:
+def redeem_referral(conn: sqlite3.Connection, inviter_id: int, tg_id: int, name: str | None,
+                    friend_days: int = 0, inviter_days: int = 0) -> bool:
     """Одной транзакцией: приглашение −1, доступ, запись referral. False — приглашений нет или человек уже учтён."""
     try:
         if conn.execute("SELECT 1 FROM referrals WHERE invitee_tg_id = ?", (tg_id,)).fetchone():
@@ -1943,8 +1944,9 @@ def redeem_referral(conn: sqlite3.Connection, inviter_id: int, tg_id: int, name:
             conn.rollback()
             return False
         conn.execute("INSERT OR IGNORE INTO access_grants (tg_id, inviter_user_id) VALUES (?, ?)", (tg_id, inviter_id))
-        conn.execute("INSERT INTO referrals (inviter_user_id, invitee_tg_id, invitee_name) VALUES (?,?,?)",
-                     (inviter_id, tg_id, (name or "").strip()[:64] or None))
+        conn.execute("INSERT INTO referrals (inviter_user_id, invitee_tg_id, invitee_name, "
+                     "friend_bonus_days, inviter_bonus_days) VALUES (?,?,?,?,?)",
+                     (inviter_id, tg_id, (name or "").strip()[:64] or None, friend_days, inviter_days))
         conn.commit()
         return True
     except Exception:
@@ -1961,7 +1963,8 @@ def referral_of_invitee_user(conn: sqlite3.Connection, user_id: int) -> sqlite3.
 
 
 def list_referrals(conn: sqlite3.Connection, inviter_id: int) -> list[sqlite3.Row]:
-    return conn.execute("SELECT * FROM referrals WHERE inviter_user_id = ? ORDER BY id", (inviter_id,)).fetchall()
+    return conn.execute("SELECT r.*, u.tz AS friend_tz FROM referrals r LEFT JOIN users u ON u.id = r.invitee_user_id "
+                        "WHERE r.inviter_user_id = ? ORDER BY r.id", (inviter_id,)).fetchall()
 
 
 def rewarded_referrals(conn: sqlite3.Connection, inviter_id: int) -> int:
@@ -2003,6 +2006,17 @@ def add_reward(conn: sqlite3.Connection, user_id: int, kind: str, amount: int, r
     conn.execute(f"UPDATE users SET {column} = MAX(0, {column} + ?) WHERE id = ?", (amount, user_id))
     conn.execute("INSERT INTO reward_log (user_id, kind, amount, reason, referral_id) VALUES (?,?,?,?,?)",
                  (user_id, kind, amount, reason, referral_id))
+
+
+def credit_subscription_days(conn: sqlite3.Connection, user_id: int, days: int, reason: str, referral_id: int) -> None:
+    if days:
+        conn.execute("INSERT INTO reward_log(user_id, kind, amount, reason, referral_id) "
+                     "VALUES (?, 'subscription_days', ?, ?, ?)", (user_id, days, reason, referral_id))
+
+
+def subscription_day_balance(conn: sqlite3.Connection, user_id: int) -> int:
+    return conn.execute("SELECT COALESCE(SUM(amount), 0) FROM reward_log "
+                        "WHERE user_id = ? AND kind = 'subscription_days'", (user_id,)).fetchone()[0]
 
 
 def mark_referral_rewarded(conn: sqlite3.Connection, referral_id: int, now: str) -> None:

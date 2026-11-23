@@ -57,3 +57,27 @@ async def test_bot_start_admits_once(db, cfg):
     assert await _admitted(message, user, {'db': db})
     assert await _admitted(message, user, {'db': db})
     assert repo.get_user_by_id(db, uid)['invites_left'] == 2
+
+
+async def test_public_invitation_in_app_and_bot(db, make_client, tmp_path):
+    from app.middleware import AccessMiddleware
+    from tests.test_web_api import make_config
+    config = make_config(tmp_path, allow_public_bot=True, allowed_tg_ids="")
+    client = await make_client(config)
+    uid = add_user(db, 1001)
+    code = referral.ensure_code(db, repo.get_user_by_id(db, uid))
+    for _ in range(2):
+        assert (await client.get('/api/me', headers=signed(5001, code))).status == 200
+    assert (await client.get('/api/me', headers=signed(5003, 'badcode'))).status == 200
+    user = User(id=5002, is_bot=False, first_name='Друг')
+    message = Message(message_id=1, date=int(time.time()), chat=Chat(id=5002, type='private'),
+                      from_user=user, text='/start r_' + code)
+
+    async def handler(event, data):
+        return True
+
+    middleware = AccessMiddleware()
+    for _ in range(2):
+        assert await middleware(handler, message, {'db': db})
+    assert repo.get_user_by_id(db, uid)['invites_left'] == 1
+    assert len(repo.list_referrals(db, uid)) == 2

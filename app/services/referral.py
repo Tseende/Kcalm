@@ -34,7 +34,7 @@ CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"      # a-z0-9 без похо�
 START_PREFIX = "r_"
 _PAYLOAD_RE = re.compile(r"^r_([a-z0-9]{4,32})$", re.IGNORECASE)
 
-SHARE_TEXT = "Я веду дневник питания с этим ботом: мягко и без сложных подсчётов. Заходи по моей ссылке."
+SHARE_TEXT = "Приглашаю в дневник питания! После настройки ты получишь заморозку серии. Она поможет сохранить серию, если пропустишь день."
 INVALID_TEXT = "Эта ссылка-приглашение не работает. Попроси друга прислать новую."
 EXHAUSTED_TEXT = "Приглашения по этой ссылке закончились. Попроси друга прислать новую."
 WELCOME_LINE = ("🎁 Тебя пригласил друг, доступ открыт. После настройки тебя ждёт в подарок заморозка серии: "
@@ -132,8 +132,11 @@ def link_for(username: str, code: str) -> str:
     return f"https://t.me/{username}?start={START_PREFIX}{code}"
 
 
-def share_url(link: str) -> str:
-    return f"https://t.me/share/url?url={quote(link, safe='')}&text={quote(SHARE_TEXT, safe='')}"
+def share_url(link: str, friend_days: int = 0) -> str:
+    text = SHARE_TEXT
+    if friend_days:
+        text += f" Бонусных дней будущей подписки за настройку: {friend_days}."
+    return f"https://t.me/share/url?url={quote(link, safe='')}&text={quote(text, safe='')}"
 
 
 async def bot_username(bot) -> str:
@@ -157,15 +160,16 @@ def has_access(db: sqlite3.Connection, tg_id: int, cfg=None) -> bool:
 def redeem(db: sqlite3.Connection, tg_id: int, code: str, first_name: str | None = None, cfg=None) -> str:
     """Обработать переход по ссылке. Статусы:
     granted — доступ выдан, приглашение списано; invalid — кода нет; exhausted — приглашения кончились;
-    ignored — человек уже допущен, уже зарегистрирован, уже учтён или это его собственный код (молча)."""
-    if has_access(db, tg_id, cfg) or repo.get_user_by_tg(db, tg_id) or repo.referral_of_invitee_tg(db, tg_id):
+    ignored — человек из списка доступа, с ранее выданным доступом, уже зарегистрирован, уже учтён или это его собственный код (молча)."""
+    cfg = cfg or get_config()
+    if tg_id in cfg.allowed_ids or repo.has_access_grant(db, tg_id) or repo.get_user_by_tg(db, tg_id) or repo.referral_of_invitee_tg(db, tg_id):
         return "ignored"
     inviter = repo.user_by_ref_code(db, code.strip().lower())
     if inviter is None or not inviter["onboarded"]:
         return "invalid"
     if inviter["tg_id"] == tg_id:
         return "ignored"
-    if not repo.redeem_referral(db, inviter["id"], tg_id, first_name):
+    if not repo.redeem_referral(db, inviter["id"], tg_id, first_name, cfg.referral_friend_days, cfg.referral_inviter_days):
         return "ignored" if repo.referral_of_invitee_tg(db, tg_id) else "exhausted"
     return "granted"
 
@@ -178,6 +182,8 @@ def welcome_line(db: sqlite3.Connection, tg_id: int) -> str | None:
     ref = repo.referral_of_invitee_tg(db, tg_id)
     if ref is None or ref["onboarded_at"]:
         return None
+    if ref["friend_bonus_days"]:
+        return WELCOME_LINE + f" Бонусных дней подписки после настройки: {ref['friend_bonus_days']}."
     return WELCOME_LINE
 
 
@@ -195,6 +201,7 @@ def on_onboarded(db: sqlite3.Connection, tg_id: int, user_id: int) -> bool:
     try:
         if not repo.mark_referral_onboarded(db, ref["id"], user_id, ref["inviter_user_id"], _utcnow()):
             return False
+        repo.credit_subscription_days(db, user_id, ref["friend_bonus_days"], "invited_welcome", ref["id"])
         repo.add_reward(db, user_id, "freeze", 1, "invited_welcome", ref["id"])
         db.commit()
     except Exception:
@@ -241,6 +248,7 @@ def check_activation(db: sqlite3.Connection, user_id: int) -> None:
         if inviter is not None and repo.rewarded_referrals(db, inviter["id"]) < REWARD_CAP:
             repo.add_reward(db, inviter["id"], "freeze", 1, "friend_activated", ref["id"])
             repo.add_reward(db, inviter["id"], "invite", 1, "friend_activated", ref["id"])
+            repo.credit_subscription_days(db, inviter["id"], ref["inviter_bonus_days"], "friend_activated", ref["id"])
             repo.mark_referral_rewarded(db, ref["id"], _utcnow())
             rewarded = True
         db.commit()
@@ -251,6 +259,8 @@ def check_activation(db: sqlite3.Connection, user_id: int) -> None:
         fresh = repo.get_user_by_id(db, inviter["id"])
         head = f"🎉 У приглашённого тобой друга{_friend_label(ref)} уже сложилась привычка: записи в три разных дня за первую неделю."
         if rewarded:
+            if ref["inviter_bonus_days"]:
+                head += f" Начислены бонусные дни подписки: +{ref['inviter_bonus_days']}."
             _tell(inviter["tg_id"], f"{head} Тебе +1 заморозка серии и +1 приглашение. "
                                     f"Заморозок: {fresh['streak_freezes']}, приглашений: {fresh['invites_left']}.")
         else:
@@ -291,21 +301,44 @@ def on_meal_saved(db: sqlite3.Connection, user_id: int, local_date: str) -> None
 
 # ------------------------------------------------------------------ сводка для экрана
 
-def status_of(ref) -> str:
-    return "activated" if ref["activated_at"] else "onboarded" if ref["onboarded_at"] else "joined"
+def status_of(ref, tz, now) -> str:
+    if ref["activated_at"]:
+        return "rewarded" if ref["rewarded_at"] else "activated"
+    if not ref["onboarded_at"]:
+        return "joined"
+    first = _local_date_of(ref["onboarded_at"], tz)
+    if (_local_date_of(now, tz) - first).days >= ACTIVE_WINDOW_DAYS:
+        return "expired"
+    return "onboarded"
 
 
 def summary(db: sqlite3.Connection, user, username: str) -> dict:
     from app.services import motivation
-    code = ensure_code(db, user)
+    code = ensure_code(db, user) if user["onboarded"] else None
     fresh = repo.get_user_by_id(db, user["id"])
     today = local_today(fresh["tz"])
+    now = _utcnow()
+    own = repo.referral_of_invitee_user(db, fresh["id"])
+    welcome = None
+    if own and own["onboarded_at"]:
+        status = status_of(own, fresh["tz"], now)
+        welcome = {"status": status}
+        if status == "onboarded":
+            first = _local_date_of(own["onboarded_at"], fresh["tz"])
+            end = first + timedelta(days=ACTIVE_WINDOW_DAYS - 1)
+            welcome.update(days=repo.meal_days_between(db, fresh["id"], first.isoformat(),
+                                                      _local_date_of(now, fresh["tz"]).isoformat()),
+                           deadline=end.isoformat(), target=ACTIVE_MEAL_DAYS)
     return {
-        "link": link_for(username, code) if username else None,
+        "subscription_days": {"balance": repo.subscription_day_balance(db, fresh["id"]),
+                              "friend": get_config().referral_friend_days,
+                              "inviter": get_config().referral_inviter_days},
+        "welcome": welcome,
+        "link": link_for(username, code) if username and code else None,
         "invites_left": fresh["invites_left"],
         "freezes": fresh["streak_freezes"],
         "streak": motivation.logging_streak(db, fresh["id"], today),
-        "invited": [{"name": r["invitee_name"] or "", "status": status_of(r)}
+        "invited": [{"name": r["invitee_name"] or "", "status": status_of(r, r["friend_tz"] or "UTC", now)}
                     for r in repo.list_referrals(db, fresh["id"])],
         "rewards_cap_left": max(0, REWARD_CAP - repo.rewarded_referrals(db, fresh["id"])),
     }

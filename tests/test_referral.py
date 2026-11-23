@@ -82,7 +82,8 @@ def test_no_activation_after_first_week(db, inviter, monkeypatch):
     assert repo.rewarded_referrals(db, inviter['id']) == 0
 
 
-def test_reward_cap(db, inviter, monkeypatch):
+def test_reward_cap(db, inviter, cfg, monkeypatch):
+    monkeypatch.setattr(cfg, "referral_inviter_days", 7)
     monkeypatch.setattr(referral, '_utcnow', lambda: '2026-11-10 12:00:00')
     for i in range(11):
         uid = join(db, inviter, 3000 + i)
@@ -91,6 +92,7 @@ def test_reward_cap(db, inviter, monkeypatch):
         monkeypatch.setattr(referral, '_utcnow', lambda: '2026-11-12 12:00:00')
         referral.check_activation(db, uid)
         monkeypatch.setattr(referral, '_utcnow', lambda: '2026-11-10 12:00:00')
+    assert repo.subscription_day_balance(db, inviter['id']) == 70
     assert repo.rewarded_referrals(db, inviter['id']) == 10
     assert repo.get_user_by_id(db, inviter['id'])['streak_freezes'] == 10
 
@@ -140,3 +142,38 @@ def test_meal_save_listener_activates_and_notifies(db, inviter, monkeypatch):
         referral.uninstall()
     assert repo.rewarded_referrals(db, inviter['id']) == 1
     assert {tg_id for tg_id, _ in messages} == {1001, 2001}
+
+
+def test_personal_progress_and_expiration(db, inviter, monkeypatch):
+    monkeypatch.setattr(referral, '_utcnow', lambda: '2026-11-01 12:00:00')
+    uid = join(db, inviter)
+    friend = repo.get_user_by_id(db, uid)
+    meal(db, uid, '2026-11-01')
+    meal(db, uid, '2026-11-01')
+    own = referral.summary(db, friend, 'bot')['welcome']
+    assert own == {'status': 'onboarded', 'days': 1, 'target': 3, 'deadline': '2026-11-07'}
+    monkeypatch.setattr(referral, '_utcnow', lambda: '2026-11-08 12:00:00')
+    assert referral.summary(db, friend, 'bot')['welcome'] == {'status': 'expired'}
+    assert referral.summary(db, inviter, 'bot')['invited'] == [{'name': 'Друг', 'status': 'expired'}]
+
+
+def test_subscription_days_keep_accepted_terms_and_credit_once(db, cfg, inviter, monkeypatch):
+    monkeypatch.setattr(cfg, 'referral_friend_days', 3)
+    monkeypatch.setattr(cfg, 'referral_inviter_days', 7)
+    monkeypatch.setattr(referral, '_utcnow', lambda: '2026-11-10 12:00:00')
+    code = referral.ensure_code(db, inviter)
+    assert referral.redeem(db, 2001, code) == 'granted'
+    monkeypatch.setattr(cfg, 'referral_friend_days', 0)
+    monkeypatch.setattr(cfg, 'referral_inviter_days', 0)
+    uid = add_user(db, 2001)
+    assert referral.on_onboarded(db, 2001, uid)
+    assert not referral.on_onboarded(db, 2001, uid)
+    assert repo.subscription_day_balance(db, uid) == 3
+    for day in ['2026-11-10', '2026-11-11', '2026-11-12']:
+        meal(db, uid, day)
+    monkeypatch.setattr(referral, '_utcnow', lambda: '2026-11-12 12:00:00')
+    referral.check_activation(db, uid)
+    referral.check_activation(db, uid)
+    assert referral.summary(db, inviter, 'bot')['subscription_days'] == {'balance': 7, 'friend': 0, 'inviter': 0}
+    later = join(db, inviter, 2002)
+    assert repo.subscription_day_balance(db, later) == 0

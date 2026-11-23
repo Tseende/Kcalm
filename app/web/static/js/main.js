@@ -21,6 +21,7 @@ const routes = [
   R('/menu/product/(new|\\d+)', () => import('./screens/product.js'), { keys: ['id'], parent: '/menu/products' }),
   R('/menu/dishes', () => import('./screens/dishes.js'), { parent: '/menu' }),
   R('/menu/dish/(new|\\d+)', () => import('./screens/dish.js'), { keys: ['id'], parent: '/menu/dishes' }),
+  R('/menu/setup', () => import('./screens/onboarding.js'), { parent: '/menu/profile' }),
   R('/menu/profile', () => import('./screens/profile.js'), { parent: '/menu' }),
   R('/menu/referral', () => import('./screens/referral.js'), { parent: '/menu' }),
   R('/menu/reminders', () => import('./screens/reminders.js'), { parent: '/menu' }),
@@ -151,7 +152,9 @@ async function render() {
       setTimeout(step, 0);
     }
     // одноразовые подсказки по экрану (js/coach.js); сбой подсказок не должен ломать экран
-    import('./coach.js').then((m) => { if (my === rid) m.maybeShow({ path, tab: r.tab, params }); }).catch(() => {});
+    if (!api._me?.onboarding_skipped) {
+      import('./coach.js').then((m) => { if (my === rid) m.maybeShow({ path, tab: r.tab, params }); }).catch(() => {});
+    }
   } catch (e) {
     console.error(e);
     if (my === rid) errorState(view, e, render);
@@ -250,7 +253,7 @@ async function boot() {
   if (isMock()) mockBadge();
   await fsWait;                                     // полноэкранный режим уже применён: первая отрисовка без сдвига шапки
   $('#boot')?.remove();
-  if (me && me.onboarded === false) return startOnboarding(me);
+  if (me && me.onboarded === false && !me.onboarding_skipped) return startOnboarding(me);
   startApp();
 }
 
@@ -261,7 +264,7 @@ async function startOnboarding(me) {
   try {
     const mod = await import('./screens/onboarding.js');
     let stop = null;
-    stop = mod.default(view, {
+    stop = mod.onboarding(view, {
       me,
       onDone: async () => {
         if (stop) stop();

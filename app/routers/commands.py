@@ -74,17 +74,27 @@ async def cmd_invite(msg: Message, db: sqlite3.Connection) -> None:
         await msg.answer("Не получилось собрать ссылку, попробуй чуть позже.")
         return
     left = info["invites_left"]
-    lines = [f"Твоя ссылка-приглашение:\n{esc(link)}", "",
-             f"Приглашений осталось: {left}", f"Заморозок серии: {info['freezes']}", "",
-             "Друг получит доступ и заморозку серии в подарок. Когда он освоится за первую неделю "
-             "и запишет еду в три разных дня, ты получишь заморозку и ещё одно приглашение. "
-             "Заморозка закрывает один пропущенный день, и серия не прерывается."]
-    if left <= 0:
-        lines.insert(4, "Приглашения закончились, новые появятся, когда друзья освоятся.")
+    lines = [f"Приглашений осталось: {left}", f"Заморозок серии: {info['freezes']}", "",
+             "🎁 Другу — заморозка серии сразу после настройки дневника. Она защитит серию при пропуске одного дня."]
+    days = info["subscription_days"]
+    if days["friend"]:
+        lines.append(f"Бонусных дней будущей подписки другу за настройку: {days['friend']}.")
+    if info["rewards_cap_left"]:
+        lines.append("🎟 Тебе — заморозка и ещё одно приглашение, когда друг запишет еду в три разных дня "
+                     "за первую неделю, включая день настройки.")
+        if days["inviter"]:
+            lines.append(f"Бонусных дней подписки тебе за эти три дня: {days['inviter']}.")
+        lines.append(f"Осталось наград за друзей: {info['rewards_cap_left']}.")
+    else:
+        lines.append("Ты уже получил награды за 10 друзей.")
+    if days["balance"]:
+        lines.append(f"Накоплено дней подписки: {days['balance']}.")
+    if left > 0:
+        lines.extend(["", esc(link)])
     kb = None
     if left > 0:
         kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
-            text="Поделиться", url=referral.share_url(link))]])
+            text="Поделиться", url=referral.share_url(link, days["friend"]))]])
     await msg.answer("\n".join(lines), reply_markup=kb,
                      link_preview_options=LinkPreviewOptions(is_disabled=True))
 
