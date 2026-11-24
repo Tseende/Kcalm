@@ -20,7 +20,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from app.domain import analytics, intents, mealtime, matching, water
 from app.domain import dishes as dishdom
 from app.domain import products as proddom
-from app import rich
+from app import rich, topics
 from app.storage import photos
 from app.routers.menu import main_kb
 from app.routers import agent
@@ -43,13 +43,13 @@ log = logging.getLogger(__name__)
 
 
 def _meal_kb(meal_id: int, extra: list | None = None) -> InlineKeyboardMarkup:
-    """extra — быстрые ответы на вопрос бота (строки кнопок), идут над основными кнопками."""
-    return InlineKeyboardMarkup(inline_keyboard=(extra or []) + [[
-        InlineKeyboardButton(text="✅ Верно", callback_data=f"meal_ok:{meal_id}"),
+    """Подтверждение и уточнение — первые действия для любого способа ввода еды."""
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"meal_ok:{meal_id}"),
+        InlineKeyboardButton(text="✏️ Уточнить", callback_data=f"meal_refine:{meal_id}"),
+    ]] + (extra or []) + [[
         InlineKeyboardButton(text="✏️ Изменить", callback_data=f"meal_edit:{meal_id}"),
         InlineKeyboardButton(text="↩️ Отменить", callback_data=f"meal_undo:{meal_id}"),
-    ], [
-        InlineKeyboardButton(text="💬 Уточнить", callback_data=f"meal_refine:{meal_id}"),
         InlineKeyboardButton(text="🕐 Другое время", callback_data=f"meal_time:{meal_id}"),
     ], [
         InlineKeyboardButton(text="🍽 Посуда", callback_data=f"meal_dishes:{meal_id}"),
@@ -148,7 +148,7 @@ async def on_text(msg: Message, db: sqlite3.Connection, user_row=None) -> None:
     uid = user["id"]
     text = (msg.text or "").strip()
 
-    if not get_config().chat_logs_food:
+    if not topics.logging_enabled(msg):
         # чат только для разговора: «съел тост» не запись, а повод продолжить диалог
         if await products_router.handle_draft_text(msg, db, user, text):
             return
@@ -180,11 +180,12 @@ async def on_text(msg: Message, db: sqlite3.Connection, user_row=None) -> None:
         await agent.run_intent(msg, db, dish_intent)
         return
 
-    if await _try_refine(msg, db, user, text):
+    new_log = topics.current.get() and topics.explicit_log(text)
+    if not new_log and await _try_refine(msg, db, user, text):
         return
 
     # подпись после фото: фото уже записано, текст в окне combo_window_sec правит ту же запись
-    session = repo.fresh_photo_session(db, uid)
+    session = None if new_log else repo.fresh_photo_session(db, uid)
     if session:
         if await _apply_late_caption(msg, db, user, session, text):
             return
@@ -286,10 +287,10 @@ async def on_voice(msg: Message, db: sqlite3.Connection, bot=None) -> None:
             ogg, filename=getattr(media, "file_name", None) or "voice.ogg",
             model=get_config().model_asr, user_id=uid, db=db,
         )
-        if not get_config().chat_logs_food:
+        if not topics.logging_enabled(msg, text):
             await _discuss_voice(msg, db, user, text, status)
             return
-        if await _try_refine(msg, db, user, text, voice=True):
+        if not (topics.current.get() and topics.explicit_log(text)) and await _try_refine(msg, db, user, text, voice=True):
             await status.delete()
             return
         await _process_meal(msg, db, user, text=text, photo_path=None, source="voice",
@@ -421,7 +422,7 @@ async def _ingest_image(msg: Message, db: sqlite3.Connection, file_id: str,
                                                status)
         return
 
-    if not get_config().chat_logs_food:
+    if not topics.logging_enabled(msg, photo=True):
         status = await msg.answer("📷 смотрю…")
         await _screenshot_or_hint(msg, db, user, image, status)
         return
@@ -549,7 +550,7 @@ async def _process_album(group: str, album: _Album, images: list[_Image], captio
     elif caption and proddom.caption_says_label(caption):
         status = await msg.answer("🥫 читаю этикетку…")
         await products_router.from_label_photo(msg, db, user, base64.b64encode(images[0].data).decode(), status)
-    elif not get_config().chat_logs_food:
+    elif not topics.logging_enabled(msg, photo=True):
         for image in images:
             status = await msg.answer("📷 смотрю…")
             await _screenshot_or_hint(msg, db, user, image, status)
@@ -898,6 +899,7 @@ async def _process_meal(msg: Message, db: sqlite3.Connection, user, text: str,
     uid = user["id"]
     if source == "voice" and await craving_router.maybe_handle(msg, db, user, text, status):
         return
+    text = topics.log_text(text)
     water_ml, rest = water.extract_water(text)
     if water_ml:
         water_id, reply = watersvc.log_water(db, user, water_ml, source, text)
@@ -1102,10 +1104,13 @@ async def cmd_retry(msg: Message, db: sqlite3.Connection) -> None:
     if user is None:
         await msg.answer("Сначала настрой профиль: /start")
         return
-    row = db.execute(
-        """SELECT * FROM pending_inputs WHERE user_id=? AND kind != 'screenshot_confirm'
-           ORDER BY id LIMIT 1""", (user["id"],)
-    ).fetchone()
+    from app.chat_context import pending_thread
+    sql = "SELECT * FROM pending_inputs WHERE user_id=? AND kind IN ('text','photo','screenshot','voice')"
+    params = [user["id"]]
+    if pending_thread.get() is not None:
+        sql += " AND message_thread_id=?"
+        params.append(pending_thread.get())
+    row = db.execute(sql + " ORDER BY id LIMIT 1", params).fetchone()
     if not row:
         await msg.answer("Нет сохранённых неудавшихся вводов для повтора.")
         return
@@ -1144,7 +1149,7 @@ async def cmd_retry(msg: Message, db: sqlite3.Connection) -> None:
             repo.save_pending_input(db, user["id"], "voice", payload)
             await msg.answer("Повтор пока не удался; голосовое осталось в очереди.")
             return
-        if not get_config().chat_logs_food:
+        if not topics.logging_enabled(msg, text):
             await _discuss_voice(msg, db, user, text, await msg.answer("💭 думаю…"))
             return
         await _process_meal(msg, db, user, text, None, "voice", transcript=text)

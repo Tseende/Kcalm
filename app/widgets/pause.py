@@ -1,6 +1,8 @@
 """Виджет «Пауза» при тяге к еде: по одному на эпизод, после первого ответа бота."""
 from __future__ import annotations
 
+from app import topics
+
 import asyncio
 import logging
 from datetime import datetime, timezone
@@ -51,6 +53,7 @@ async def _send_later(rt, user_id: int, event_id: int) -> None:
         log.warning("widgets: пауза не отправилась", exc_info=True)
 
 
+@topics.destination("support")
 async def send(rt, user_id: int, event_id: int) -> str:
     db = rt.db
     user = repo.get_user_by_id(db, user_id)
@@ -92,6 +95,7 @@ async def _set_state(rt, row, state: str) -> None:
         log.info("widgets: не удалось обновить паузу", exc_info=True)
 
 
+@topics.destination("support")
 async def _say_still(rt, user, event) -> None:
     """Мягкий отклик в чате на «всё ещё хочется»: ответ модели или запасной текст."""
     try:
@@ -101,6 +105,7 @@ async def _say_still(rt, user, event) -> None:
         log.warning("widgets: отклик на «всё ещё хочется» не отправился", exc_info=True)
 
 
+@topics.destination("support")
 async def _say_talk(rt, user, event) -> None:
     try:
         repo.add_craving_message(rt.db, event["id"], "assistant", TALK_TEXT)

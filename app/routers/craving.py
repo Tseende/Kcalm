@@ -18,6 +18,7 @@ from app.services import craving as svc
 from app.services import plan as plansvc
 from app.services import food as foodsvc
 from app.storage import repo
+from app import topics
 
 router = Router(name="craving")
 log = logging.getLogger(__name__)
@@ -28,14 +29,25 @@ def _user(db: sqlite3.Connection, tg_id: int):
     return user if user and user["onboarded"] else None
 
 
+@topics.destination("support")
 async def _send(msg: Message, text: str, kb: InlineKeyboardMarkup | None,
                 status: Message | None = None) -> None:
+    ctx = topics.current.get()
+    if status is not None and ctx:
+        target = ctx.service.stored(msg.chat.id).get("support")
+        if target is not None and status.message_thread_id != target:
+            try:
+                await status.delete()
+            except Exception:  # noqa: BLE001 — статус мог уже исчезнуть
+                pass
+            status = None
     if status is not None:
         await status.edit_text(text[:4000], reply_markup=kb)
     else:
         await msg.answer(text[:4000], reply_markup=kb)
 
 
+@topics.destination("support")
 async def _typing(msg: Message) -> None:
     try:
         await msg.bot.send_chat_action(msg.chat.id, "typing")
@@ -53,16 +65,22 @@ async def maybe_handle(msg: Message, db: sqlite3.Connection, user, text: str,
     """Если сообщение относится к тяге к еде, обработать и вернуть True.
     Вызывается для текста и для расшифрованных голосовых."""
     uid = user["id"]
-    if await _handle_lesson_text(msg, db, user, text):
+    ctx = topics.current.get()
+    if ctx and (topics.explicit_log(text) or topics.awaiting_log()):
+        return False
+    if (not ctx or topics.in_support()) and await _handle_lesson_text(msg, db, user, text):
         return True
     now_local = foodsvc.local_now(user["tz"])
     local_time = now_local.strftime("%H:%M")
 
+    detected = dom.detect_craving(text, local_time, user["eating_cutoff"])
     event = repo.open_craving(db, uid, dom.EPISODE_WINDOW_MIN)
+    if ctx and not topics.in_support() and not detected:
+        event = None  # разговор в Поддержке не перехватывает записи в Дневнике
     if event:
         # явная запись еды и воды внутри эпизода идёт обычным путём (разговор о ней узнает),
         # а еду, упомянутую между делом, модель вытащит из реплики сама
-        if dom.looks_like_food_log(text) or water.extract_water(text)[0]:
+        if not topics.in_support() and (dom.looks_like_food_log(text) or water.extract_water(text)[0]):
             return False
         if intents.detect(text) is not None:
             return False                     # «что по статистике», «отмени последнее» и т. п.
@@ -71,15 +89,16 @@ async def maybe_handle(msg: Message, db: sqlite3.Connection, user, text: str,
         await _send(msg, reply, _after_reply_kb(db, user, event["id"]), status)
         return True
 
-    if dom.detect_craving(text, local_time, user["eating_cutoff"]):
+    if detected or (topics.in_support() and intents.detect(text) is None):
         await _typing(msg)
-        _, reply, kb = await svc.open_episode(db, user, text)
+        _, reply, kb = await svc.open_episode(db, user, text, mode="craving" if detected else "talk")
         await _send(msg, reply, kb, status)
         return True
     return False
 
 
 @router.message(Command("craving"))
+@topics.destination("support")
 async def cmd_craving(msg: Message, command: CommandObject, db: sqlite3.Connection) -> None:
     user = _user(db, msg.from_user.id)
     if not user:
@@ -100,6 +119,7 @@ async def cmd_craving(msg: Message, command: CommandObject, db: sqlite3.Connecti
 
 
 @router.message(Command("talk"))
+@topics.destination("support")
 async def cmd_talk(msg: Message, command: CommandObject, db: sqlite3.Connection) -> None:
     """Просто поговорить — о еде, срывах, настроении — в любое время, не только ночью."""
     user = _user(db, msg.from_user.id)
@@ -138,6 +158,7 @@ def _event_for(cb: CallbackQuery, db: sqlite3.Connection):
 
 
 @router.callback_query(F.data.startswith("cr:cat:"))
+@topics.destination("support")
 async def cb_category(cb: CallbackQuery, db: sqlite3.Connection) -> None:
     user, event = _event_for(cb, db)
     category = cb.data.split(":")[3]
@@ -151,6 +172,7 @@ async def cb_category(cb: CallbackQuery, db: sqlite3.Connection) -> None:
 
 
 @router.callback_query(F.data.startswith("cr:wait:"))
+@topics.destination("support")
 async def cb_wait(cb: CallbackQuery, db: sqlite3.Connection) -> None:
     user, event = _event_for(cb, db)
     if not event or event["outcome"] != "open":
@@ -164,6 +186,7 @@ async def cb_wait(cb: CallbackQuery, db: sqlite3.Connection) -> None:
 
 
 @router.callback_query(F.data.startswith("cr:out:"))
+@topics.destination("support")
 async def cb_outcome(cb: CallbackQuery, db: sqlite3.Connection) -> None:
     user, event = _event_for(cb, db)
     outcome = cb.data.split(":")[3]
@@ -185,6 +208,7 @@ def _any_event(cb: CallbackQuery, db: sqlite3.Connection):
 
 
 @router.callback_query(F.data.startswith("cr:deb:"))
+@topics.destination("support")
 async def cb_debrief(cb: CallbackQuery, db: sqlite3.Connection) -> None:
     user, event = _any_event(cb, db)
     if not event:
@@ -202,6 +226,7 @@ async def cb_debrief(cb: CallbackQuery, db: sqlite3.Connection) -> None:
 
 
 @router.callback_query(F.data.startswith("cr:dcat:"))
+@topics.destination("support")
 async def cb_debrief_category(cb: CallbackQuery, db: sqlite3.Connection) -> None:
     user, event = _any_event(cb, db)
     category = cb.data.split(":")[3]
@@ -216,6 +241,7 @@ async def cb_debrief_category(cb: CallbackQuery, db: sqlite3.Connection) -> None
 
 
 @router.callback_query(F.data.startswith("cr:less:"))
+@topics.destination("support")
 async def cb_lesson(cb: CallbackQuery, db: sqlite3.Connection) -> None:
     user, event = _any_event(cb, db)
     choice = cb.data.split(":")[3]
@@ -245,6 +271,7 @@ async def _save_lesson(message: Message, db: sqlite3.Connection, user, event, le
 
 
 @router.callback_query(F.data.startswith("cr:rule:"))
+@topics.destination("support")
 async def cb_rule_from_lesson(cb: CallbackQuery, db: sqlite3.Connection) -> None:
     user, event = _any_event(cb, db)
     if not event:

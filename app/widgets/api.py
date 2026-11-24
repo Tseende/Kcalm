@@ -16,6 +16,7 @@ class SendWidget(TelegramMethod[Message]):
     __api_method__ = "sendWidget"
 
     chat_id: int | str
+    message_thread_id: int | None = None
     html: str
     width: int | None = None
     height: int | None = None

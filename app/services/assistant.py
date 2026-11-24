@@ -13,6 +13,8 @@ import time
 from datetime import date, timedelta
 
 from app.config import get_config
+from app.chat_context import pending_thread
+from app import topics
 from app.domain import craving as craving_dom
 from app.domain import safety as safety_dom
 from app.domain.matching import normalize
@@ -55,6 +57,11 @@ DISCUSSION_HELP_TEXT = (
 
 def help_text() -> str:
     """Справка по режиму чата: разговор или (chat_logs_food) прежняя запись из чата."""
+    if topics.current.get():
+        return ("📒 Дневник — еда, вода, вес, сон, шаги и итоги. Можно прислать фото, голос или текст.\n"
+                "💬 Поддержка — разговоры о самочувствии, привычках и тяге к еде. "
+                "Для записи из Поддержки начни с «запиши».\n"
+                "Приложение и настройки: /app. Поговорить: /talk.")
     return HELP_TEXT if get_config().chat_logs_food else DISCUSSION_HELP_TEXT
 
 
@@ -64,7 +71,7 @@ DISCUSSION_GREETING = "Привет! Я на связи. Спроси про д�
 
 def greeting(user) -> str:
     """Приветствие в нужном роде: пол известен из профиля, «съел(а)» не нужно."""
-    if not get_config().chat_logs_food:
+    if topics.in_support() or (not topics.current.get() and not get_config().chat_logs_food):
         return DISCUSSION_GREETING
     verb = "съела" if user["sex"] == "female" else "съел"
     return GREETING.replace("съел,", verb + ",")
@@ -197,12 +204,13 @@ _NUM_RE = re.compile(r"\d+(?:[.,]\d+)?")
 
 # Бот не передаёт историю чата, поэтому «почему» без контекста не понять. Держим последние реплики
 # в памяти процесса (на перезапуске теряются, это только контекст диалога).
-_RECENT: dict[int, list[tuple[float, dict]]] = {}
+_RECENT: dict[int | tuple[int, int], list[tuple[float, dict]]] = {}
 RECENT_TTL_S = 30 * 60
 RECENT_KEEP = 6
 
 
 def _recent(user_id: int) -> list[dict]:
+    user_id = (user_id, pending_thread.get()) if pending_thread.get() is not None else user_id
     now = time.monotonic()
     items = [(t, m) for t, m in _RECENT.get(user_id, []) if now - t < RECENT_TTL_S]
     _RECENT[user_id] = items
@@ -210,6 +218,7 @@ def _recent(user_id: int) -> list[dict]:
 
 
 def _remember(user_id: int, question: str, reply: str) -> None:
+    user_id = (user_id, pending_thread.get()) if pending_thread.get() is not None else user_id
     items = _RECENT.setdefault(user_id, [])
     now = time.monotonic()
     items += [(now, {"role": "user", "text": question}), (now, {"role": "assistant", "text": reply})]

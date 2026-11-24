@@ -56,7 +56,9 @@ async def test_quick_rows_options_and_fat_buttons(client, db):
     rows = intake._quick_rows(db, uid, 9, u)
     assert len(rows) == 2 and rows[0][0].callback_data == "meal_fat:9:0"
     kb = intake._meal_kb(9, rows)
-    assert kb.inline_keyboard[0][0].callback_data == "meal_fat:9:0"
+    assert [(b.text, b.callback_data) for b in kb.inline_keyboard[0]] == [
+        ("✅ Подтвердить", "meal_ok:9"), ("✏️ Уточнить", "meal_refine:9")]
+    assert kb.inline_keyboard[1][0].callback_data == "meal_fat:9:0"
     assert kb.inline_keyboard[-1][0].callback_data == "meal_dishes:9"
 
 

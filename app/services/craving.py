@@ -323,12 +323,19 @@ def _today_facts(db: sqlite3.Connection, user, now_hhmm: str) -> dict:
     return insights.llm_facts(insights.day_facts(db, user, day), now_hhmm)
 
 
+def _dialog_logging_allowed(db: sqlite3.Connection, user) -> bool:
+    # В режиме тем запись обрабатывает intake по явной просьбе, а не догадка модели.
+    return not (get_config().chat_topics_enabled and db.execute(
+        "SELECT 1 FROM chat_topics WHERE chat_id=? LIMIT 1", (user["tg_id"],)).fetchone())
+
+
 def _context(db: sqlite3.Connection, user, event: sqlite3.Row, stage: str = "dialog") -> dict:
     facts = build_facts(db, user)
     rules = [f"если {r['if_text']} — то {r['then_text']}"
              for r in repo.rules_for_category(db, user["id"], event["category"], limit=3)]
     return {
         "stage": stage,
+        "food_logging_allowed": _dialog_logging_allowed(db, user),
         "mode": event["mode"] if "mode" in event.keys() else "craving",
         "sex": user["sex"] or "unknown",
         "time_now": facts.local_time,
@@ -437,7 +444,7 @@ async def _apply_turn(db: sqlite3.Connection, user, event_id: int, data: dict,
         repo.update_craving(db, event_id, summary=data["summary"])
     if data.get("category"):
         repo.update_craving(db, event_id, category=data["category"])
-    if data["food_eaten"]:
+    if data["food_eaten"] and _dialog_logging_allowed(db, user):
         logged = await log_food_from_dialog(db, user, event_id, data["food_eaten"])
         if logged:
             extra += "\n\n" + logged

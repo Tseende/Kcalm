@@ -34,6 +34,7 @@ class Config(BaseSettings):
     model_text_reasoning: bool = False   # «думающий» режим текстовой модели: медленнее и дороже
     rich_messages: bool = True        # таблицы и абзацы через sendRichMessage (Bot API 10.1+); false = обычный текст
     widgets_enabled: bool = True      # HTML-виджеты Bot API 10.4: карточка дня и пауза при тяге; false = только обычные сообщения
+    chat_topics_enabled: bool = True  # Bot API 10.5: Дневник и Поддержка в личном чате
     model_dialog: str = "openai/gpt-6-luna"   # чат: разговор о тяге и срывах и ответы помощника; пусто — model_text
     model_asr: str = "openai/gpt-4o-mini-transcribe"   # расшифровка голоса: нужна модель с аудио
     model_asr_fallback: str = "openai/whisper-1"   # запасная, если основная упала; равна основной или пусто — без запасной

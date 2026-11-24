@@ -6,6 +6,8 @@ repo.day_changed, оттуда сюда приходит touch(); обновле
 """
 from __future__ import annotations
 
+from app import topics
+
 import asyncio
 import logging
 
@@ -123,6 +125,7 @@ def _has_records(db, user_id: int, local_date: str) -> bool:
     return bool(repo.day_meals(db, user_id, local_date)) or repo.day_water_ml(db, user_id, local_date) > 0
 
 
+@topics.destination("diary")
 async def flush(user_id: int, create: bool = True) -> str:
     """Привести карточку сегодняшнего дня в актуальное состояние. Возвращает, что сделано:
     'edited', 'sent' или 'skipped'."""

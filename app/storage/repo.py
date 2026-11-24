@@ -6,6 +6,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from app.db import write_transaction
+from app.chat_context import pending_thread
 from app.domain.nutrition import MealCalculation
 
 
@@ -1346,8 +1347,8 @@ def log_llm_call(conn: sqlite3.Connection, user_id: int | None, purpose: str,
 def save_pending_input(conn: sqlite3.Connection, user_id: int, kind: str,
                        payload: dict) -> int:
     cur = conn.execute(
-        "INSERT INTO pending_inputs (user_id, kind, payload_json) VALUES (?,?,?)",
-        (user_id, kind, json.dumps(payload, ensure_ascii=False)),
+        "INSERT INTO pending_inputs (user_id, kind, payload_json, message_thread_id) VALUES (?,?,?,?)",
+        (user_id, kind, json.dumps(payload, ensure_ascii=False), pending_thread.get() or 0),
     )
     conn.commit()
     return cur.lastrowid
@@ -1358,6 +1359,9 @@ def latest_pending_input(conn: sqlite3.Connection, user_id: int, kind: str,
     """Последний ожидающий ввод; с max_age_min старые («протухшие») не считаются."""
     sql = "SELECT * FROM pending_inputs WHERE user_id=? AND kind=?"
     params: list = [user_id, kind]
+    if pending_thread.get() is not None:
+        sql += " AND message_thread_id=?"
+        params.append(pending_thread.get())
     if max_age_min is not None:
         sql += " AND created_at >= datetime('now', ?)"
         params.append(f"-{int(max_age_min)} minutes")
@@ -1365,7 +1369,12 @@ def latest_pending_input(conn: sqlite3.Connection, user_id: int, kind: str,
 
 
 def clear_pending_inputs(conn: sqlite3.Connection, user_id: int, kind: str) -> None:
-    conn.execute("DELETE FROM pending_inputs WHERE user_id=? AND kind=?", (user_id, kind))
+    sql = "DELETE FROM pending_inputs WHERE user_id=? AND kind=?"
+    params = [user_id, kind]
+    if pending_thread.get() is not None:
+        sql += " AND message_thread_id=?"
+        params.append(pending_thread.get())
+    conn.execute(sql, params)
     conn.commit()
 
 
@@ -1399,22 +1408,22 @@ def put_photo_session(conn: sqlite3.Connection, user_id: int, context: dict,
     conn.execute("DELETE FROM photo_sessions WHERE user_id=? AND expires_at < ?",
                  (user_id, utcnow_iso()))
     cur = conn.execute(
-        """INSERT INTO photo_sessions (user_id, status, context_json, expires_at, meal_id)
-           VALUES (?, 'awaiting_caption', ?, datetime('now', ?), ?)""",
+        """INSERT INTO photo_sessions (user_id, status, context_json, expires_at, meal_id, message_thread_id)
+           VALUES (?, 'awaiting_caption', ?, datetime('now', ?), ?, ?)""",
         (user_id, json.dumps(context, ensure_ascii=False), f"+{expires_min * 60} seconds",
-         meal_id),
+         meal_id, pending_thread.get() or 0),
     )
     conn.commit()
     return cur.lastrowid
 
 
 def fresh_photo_session(conn: sqlite3.Connection, user_id: int) -> sqlite3.Row | None:
-    row = conn.execute(
-        """SELECT * FROM photo_sessions WHERE user_id=? AND status='awaiting_caption'
-           AND expires_at >= ? ORDER BY id DESC LIMIT 1""",
-        (user_id, utcnow_iso()),
-    ).fetchone()
-    return row
+    sql = "SELECT * FROM photo_sessions WHERE user_id=? AND status='awaiting_caption' AND expires_at >= ?"
+    params = [user_id, utcnow_iso()]
+    if pending_thread.get() is not None:
+        sql += " AND message_thread_id=?"
+        params.append(pending_thread.get())
+    return conn.execute(sql + " ORDER BY id DESC LIMIT 1", params).fetchone()
 
 
 def close_photo_session(conn: sqlite3.Connection, session_id: int) -> None:

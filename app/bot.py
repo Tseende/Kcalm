@@ -9,8 +9,10 @@ from aiogram.types import BotCommand, ErrorEvent
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.strategy import FSMStrategy
 
 from app import rich
+from app.topics import Topics, TopicMiddleware, TopicRequestMiddleware
 from app.config import get_config
 from app.adapters import off
 from app.db import connect_from_config, migrate
@@ -76,11 +78,14 @@ def create_dispatcher(db) -> Dispatcher:
     for router in ROUTERS:
         router._parent_router = None
 
-    dp = WidgetDispatcher(storage=MemoryStorage())
+    dp = WidgetDispatcher(storage=MemoryStorage(), fsm_strategy=FSMStrategy.USER_IN_TOPIC)
     dp["db"] = db
+    dp["topics"] = Topics(db)
     # outer: один раз на апдейт, а не на каждый роутер, куда сообщение «проваливается»
     dp.message.outer_middleware(AccessMiddleware())
     dp.callback_query.outer_middleware(AccessMiddleware())
+    dp.message.outer_middleware(TopicMiddleware(dp["topics"]))
+    dp.callback_query.outer_middleware(TopicMiddleware(dp["topics"]))
     dp.include_routers(*ROUTERS)
     dp.errors.register(on_error)
     return dp
@@ -110,8 +115,11 @@ async def main() -> None:
 
     bot = Bot(cfg.telegram_bot_token,
               default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-    bot.session.middleware(rich.RichMiddleware())
     dp = create_dispatcher(db)
+    # Порядок: выбрать тему до преобразования sendMessage в sendRichMessage.
+    bot.session.middleware(TopicRequestMiddleware(dp["topics"]))
+    bot.session.middleware(rich.RichMiddleware())
+    await dp["topics"].setup(bot)
     widgets_runtime.setup(bot, db, cfg)       # карточка дня и пауза; выключатель WIDGETS_ENABLED
     referral.install(referral.bot_notifier(bot, asyncio.get_running_loop()))   # награды и заморозки серии
 

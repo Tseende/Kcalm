@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+from app import topics
+
 import asyncio
 import html
 import logging
@@ -275,6 +277,7 @@ async def _dispatch_rules(db: sqlite3.Connection, bot, user, now: datetime) -> N
             repo.release_rule(db, rule, today)
 
 
+@topics.destination("support")
 async def dispatch_craving_followups(db: sqlite3.Connection, bot) -> None:
     """Через несколько минут после реплики бота спросить, как дела; старые открытые эпизоды закрыть."""
     from app.services import craving
@@ -315,6 +318,7 @@ async def _send_with_flood_wait(send, *args, **kwargs) -> None:
         await send(*args, **kwargs)
 
 
+@topics.destination("diary")
 async def _send_notification(bot, tg_id: int, text: str, kind: str,
                              screen: str | None = None, button: str = "📱 Открыть приложение") -> None:
     options = {}
