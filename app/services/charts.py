@@ -190,7 +190,7 @@ def day_chart(f: dict) -> bytes:
 
 @_plot_locked
 def week_chart(days: list[dict], care: bool) -> bytes:
-    """Панели по дням на плашках поверх иллюстрации: калории (с коридором цели), вода, шаги."""
+    """Чистые панели по дням: калории (с коридором цели), вода и шаги."""
     labels = [WEEKDAYS[date.fromisoformat(d["date"]).weekday()] for d in days]
     panels = []
     if not care:
@@ -205,14 +205,15 @@ def week_chart(days: list[dict], care: bool) -> bytes:
                 sum(water) / len(water) if water else None),
                ("Шаги", [d["steps"] or 0 for d in days], insights.STEPS_GOAL, None,
                 sum(steps) / len(steps) if steps else None)]
-    width, card_h, gap, head = 7.4, 2.45, 0.2, 2.1
+    width, card_h, gap, head = 7.4, 2.45, 0.2, 0.7
     height = head + len(panels) * (card_h + gap) + 0.1
     fig = plt.figure(figsize=(width, height))
     bg = fig.add_axes([0, 0, 1, 1])
     bg.set_xlim(0, width)
     bg.set_ylim(0, height)
     bg.axis("off")
-    _backdrop(bg, "charts.jpg", width, height, art_h=4.0, fade=(0.0, 1.0))
+    bg.text(0.3, height - 0.32, "Неделя в цифрах", fontsize=15, fontweight="bold",
+            va="center", color=INK)
     axes = []
     for i in range(len(panels)):
         y0 = height - head - (i + 1) * card_h - i * gap

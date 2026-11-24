@@ -89,14 +89,10 @@ def day_doc(db: sqlite3.Connection, user, day: str, coach: dict | None = None,
 
 def week_doc(db: sqlite3.Connection, user, today: date, detail_lines: list[str],
              chart: bytes | None = None) -> Doc:
-    """Неделя: график, таблицы, выводы и советы; технические подробности свёрнуты."""
+    """Неделя: главный шаг сразу, таблицы, наблюдения и график — раскрываемыми разделами."""
     wf = insights.week_facts(db, user, today)
     days = wf["days"]
     doc = Doc().text(f"📅 <b>Неделя</b> · {days[0]['date'][5:]} — {days[-1]['date'][5:]}")
-    doc.image(chart)
-    doc.heading("📈 В среднем за неделю")
-    doc.table(["Показатель", "Факт", "Цель", ""],
-              insights.week_scorecard(days, wf["care"]), align="lrrc")
     good, tips = insights.week_tips(wf)
     if tips:
         doc.quote(f"<b>🎯 Главный шаг:</b> {tips[0].html}")
@@ -104,14 +100,17 @@ def week_doc(db: sqlite3.Connection, user, today: date, detail_lines: list[str],
         doc.quote("<b>🎯 Главный шаг:</b> Продолжай вести дневник в приложении — "
                   "так будет проще замечать, что помогает тебе чувствовать себя лучше.")
     if good:
-        doc.heading("✅ Что хорошо")
-        doc.bullets([esc(g[:1].upper() + g[1:]) for g in good[:2]])
+        doc.details("✅ Что получилось", [esc(g[:1].upper() + g[1:]) for g in good[:2]])
     if len(tips) > 1:
-        doc.heading("💡 Наблюдения и советы")
-        doc.bullets([t.html for t in tips[1:3]])
+        doc.details("💡 Наблюдения и советы", [t.html for t in tips[1:3]])
+    doc.details("📈 Средние показатели", Doc().table(
+        ["Показатель", "Факт", "Цель", ""],
+        insights.week_scorecard(days, wf["care"]), align="lrrc"))
     by_day = Doc().table(["День", "ккал", "Белок", "Вода", "Шаги", "Сон"],
                          insights.week_table_rows(days), align="lrrrrr")
-    doc.expandable("📋 Показать по дням", by_day)
+    doc.details("📋 Показать по дням", by_day)
+    if chart:
+        doc.details("📊 Графики за неделю", Doc().image(chart))
     # детали прежнего отчёта (вес, безопасность, пересчёт цели, срывы) свёрнуты в один блок
     extra = [ln for ln in detail_lines[1:] if not ln.startswith(("Еда:", "Шаги:", "Вода:", "Сон:"))]
     doc.details("🔎 Подробности", extra)

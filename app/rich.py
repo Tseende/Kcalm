@@ -91,6 +91,7 @@ class Raw:
     """Готовый блок: rich-вариант и запасной обычный текст."""
     html: str
     fallback: str
+    media: list[Image] = field(default_factory=list)
 
 
 @dataclass
@@ -139,8 +140,24 @@ class Doc:
         self.parts.append(Raw(f"<blockquote>{text}</blockquote>", text))
         return self
 
-    def details(self, summary: str, items: list[str]) -> "Doc":
+    def details(self, summary: str, items: list[str] | "Doc") -> "Doc":
         """Сворачиваемый блок: подробности не мешают, пока их не откроют."""
+        if isinstance(items, Doc):
+            if not items.parts:
+                return self
+            title = htmllib.escape(summary, quote=False)
+            html = items.rich()
+            offset = len(self.images())
+            # Вложенный документ имеет собственные img1, img2…; сначала заменяем все
+            # ссылки за один проход, чтобы новые ключи не заменились повторно.
+            keys = {im.key: f"img{offset + i}" for i, im in enumerate(items.images(), 1)}
+            html = re.sub(r'tg://photo\?id=([^"\s]+)',
+                          lambda m: "tg://photo?id=" + keys.get(m[1], m[1]), html)
+            media = [Image(keys[im.key], im.data) for im in items.images()]
+            self.parts.append(Raw(
+                f"<details><summary>{title}</summary>{html}</details>",
+                f"<b>{title}</b>\n{items.plain()}", media))
+            return self
         if items:
             self.parts.append(Raw(
                 f"<details><summary>{summary}</summary><ul>{_li(items)}</ul></details>",
@@ -172,7 +189,8 @@ class Doc:
         return self
 
     def images(self) -> list[Image]:
-        return [p for p in self.parts if isinstance(p, Image)]
+        return [im for p in self.parts
+                for im in ([p] if isinstance(p, Image) else p.media if isinstance(p, Raw) else [])]
 
     def rich(self) -> str:
         out = []

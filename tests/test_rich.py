@@ -104,12 +104,27 @@ async def test_week_report_puts_main_advice_before_collapsed_daily_table(db, mon
         SimpleNamespace(html='Один главный совет'), SimpleNamespace(html='Дополнительный совет')]))
     doc = report.week_doc(db, user, date(2026, 11, 24), ['Неделя', 'Вес: есть динамика'])
     html = doc.rich()
-    collapsed = html[html.index('<blockquote expandable>'):]
-    assert html.index('Главный шаг') < html.index('<blockquote expandable>')
+    collapsed = html[html.index('<details>'):]
+    assert html.index('Главный шаг') < html.index('<details>')
     assert 'Один главный совет' in html and html.count('Один главный совет') == 1
     assert 'Показать по дням' in collapsed and '<table' in collapsed and 'Шаги' in collapsed
     assert 'Подробности' in html
+    assert '<details><summary>📈 Средние показатели</summary><table' in html
+    assert '<details><summary>📋 Показать по дням</summary><table' in html
+    assert '<details open' not in html
     assert 'Показать по дням' in doc.plain() and '<blockquote expandable>' not in doc.plain()
+
+
+def test_details_keep_nested_media_unique_and_available_for_fallback():
+    child = Doc().image(b'first').image(b'second')
+    doc = Doc().image(b'cover').details('Графики <&>', child).image(b'last')
+    assert [im.key for im in doc.images()] == ['img1', 'img2', 'img3', 'img4']
+    assert [im.data for im in doc.images()] == [b'cover', b'first', b'second', b'last']
+    html = doc.rich()
+    assert '<details><summary>Графики &lt;&amp;&gt;</summary><figure>' in html
+    assert all(html.count(f'tg://photo?id=img{i}"') == 1 for i in range(1, 5))
+    assert 'Графики &lt;&amp;&gt;' in doc.plain() and 'tg://' not in doc.plain()
+    assert [im.key for im in child.images()] == ['img1', 'img2']
 
 
 async def test_week_report_api_rejection_preserves_daily_data_in_plain_text(db, monkeypatch):
