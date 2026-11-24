@@ -31,8 +31,9 @@ log = logging.getLogger(__name__)
 
 BOT_COMMANDS = [
     BotCommand(command="app", description="Приложение: отчёты и настройки"),
-    BotCommand(command="talk", description="Поговорить, если тянет переесть"),
-    BotCommand(command="often", description="Частые блюда: записать в один клик"),
+    BotCommand(command="today", description="Красивый отчёт за сегодня"),
+    BotCommand(command="week", description="Итоги недели"),
+    BotCommand(command="talk", description="Желание переесть, эмоции и самочувствие"),
     BotCommand(command="undo", description="Отменить последнюю запись"),
 ]
 

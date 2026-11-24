@@ -150,7 +150,7 @@ async def on_text(msg: Message, db: sqlite3.Connection, user_row=None) -> None:
 
     if not topics.logging_enabled(msg):
         # чат только для разговора: «съел тост» не запись, а повод продолжить диалог
-        if await products_router.handle_draft_text(msg, db, user, text):
+        if not topics.current.get() and await products_router.handle_draft_text(msg, db, user, text):
             return
         await agent.discuss(msg, db, user, text)
         return
@@ -360,12 +360,14 @@ def _typing_bg(msg: Message) -> None:
 
 
 @router.message(F.photo)
+@topics.destination("diary")
 async def on_photo(msg: Message, db: sqlite3.Connection) -> None:
     photo = msg.photo[-1]
     await _ingest_image(msg, db, photo.file_id, photo.file_size, photo)
 
 
 @router.message(F.document & F.document.mime_type.startswith("image/"))
+@topics.destination("diary")
 async def on_image_document(msg: Message, db: sqlite3.Connection) -> None:
     """Картинка файлом (без сжатия): в EXIF может быть настоящее время съёмки."""
     doc = msg.document
@@ -379,7 +381,7 @@ async def _ingest_image(msg: Message, db: sqlite3.Connection, file_id: str,
         await msg.answer("Сначала настрой профиль: /start")
         return
     uid = user["id"]
-    add_to = _pending_add_photo(db, uid)
+    add_to = _pending_add_photo(db, uid) if topics.logging_enabled(msg, photo=True) else None
     group = (uid, msg.media_group_id) if msg.media_group_id else None
     album = None
     if group:
@@ -408,6 +410,10 @@ async def _ingest_image(msg: Message, db: sqlite3.Connection, file_id: str,
         current.images.append(image)
         current.caption = current.caption or caption
         current.last_seen = time.monotonic()
+        return
+
+    if topics.current.get() and not topics.logging_enabled(msg, photo=True):
+        await _screenshot_or_hint(msg, db, user, image, await msg.answer("📷 смотрю…"))
         return
 
     if add_to:
@@ -447,7 +453,7 @@ async def _ingest_image(msg: Message, db: sqlite3.Connection, file_id: str,
 
 NOT_A_SCREEN = ("Здесь я не вижу сна, активности или веса, поэтому ничего не записал. Скриншоты "
                 "сна, шагов, тренировок и весов записываю сам, а еду и воду вноси в приложении: "
-                "/app. А здесь можно просто поговорить.")
+                "/app. Если хочется поговорить о самочувствии или желании переесть — /talk.")
 
 
 async def _screenshot_or_hint(msg: Message, db: sqlite3.Connection, user, image: "_Image",
@@ -531,9 +537,14 @@ async def _flush_album(group: tuple[int, str]) -> None:
         _ALBUMS.pop(group, None)
 
 
+@topics.destination("diary")
 async def _process_album(group: str, album: _Album, images: list[_Image], caption: str) -> None:
     msg, db, user = album.msg, album.db, album.user
     uid = user["id"]
+    if topics.current.get() and not topics.logging_enabled(msg, photo=True):
+        for image in images:
+            await _screenshot_or_hint(msg, db, user, image, await msg.answer("📷 смотрю…"))
+        return
     meal_id = repo.telegram_album_meal(db, uid, group)
     add_to = album.add_to
     if meal_id is None and add_to:
@@ -897,6 +908,10 @@ async def _process_meal(msg: Message, db: sqlite3.Connection, user, text: str,
                         photo_path: str | None, source: str,
                         transcript: str | None = None, status: Message | None = None) -> None:
     uid = user["id"]
+    if not topics.logging_enabled(msg, text):
+        from app.routers import menu
+        await menu.send_app(msg, "Еду теперь записываем в приложении. В чате можно поговорить: /talk.")
+        return
     if source == "voice" and await craving_router.maybe_handle(msg, db, user, text, status):
         return
     text = topics.log_text(text)
@@ -1115,6 +1130,10 @@ async def cmd_retry(msg: Message, db: sqlite3.Connection) -> None:
         await msg.answer("Нет сохранённых неудавшихся вводов для повтора.")
         return
     payload = json.loads(row["payload_json"])
+    if topics.current.get() and row["kind"] in {"text", "photo", "voice"}:
+        from app.routers import menu
+        await menu.send_app(msg, "Распознавание еды в чате отключено. Добавь запись в приложении.")
+        return
     if row["kind"] not in {"text", "photo", "screenshot", "voice"}:
         await msg.answer("Неизвестный тип сохранённого ввода; данные оставлены без изменений.")
         return

@@ -66,7 +66,7 @@ async def maybe_handle(msg: Message, db: sqlite3.Connection, user, text: str,
     Вызывается для текста и для расшифрованных голосовых."""
     uid = user["id"]
     ctx = topics.current.get()
-    if ctx and (topics.explicit_log(text) or topics.awaiting_log()):
+    if ctx and topics.logging_enabled(msg, text) and (topics.explicit_log(text) or topics.awaiting_log()):
         return False
     if (not ctx or topics.in_support()) and await _handle_lesson_text(msg, db, user, text):
         return True

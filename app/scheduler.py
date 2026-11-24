@@ -335,6 +335,7 @@ async def _send_notification(bot, tg_id: int, text: str, kind: str,
     await _send_with_flood_wait(bot.send_message, tg_id, text, **options)
 
 
+@topics.destination("diary")
 async def _send_reminder(db: sqlite3.Connection, bot, user, kind: str,
                          now: datetime) -> None:
     uid, tg_id = user["id"], user["tg_id"]
@@ -357,18 +358,22 @@ async def _send_reminder(db: sqlite3.Connection, bot, user, kind: str,
         day = repo.day_totals(db, uid, local_day.isoformat())
         if day["meals"] == 0:
             await _send_notification(bot, tg_id, "🍽 Пока пусто в дневнике. Запиши завтрак/обед — "
-                                     "хотя бы текстом, это 10 секунд.", kind)
+                                     "в приложении можно добавить фото, голос или текст.", kind, "add_meal")
     elif kind == "kitchen_close":
         await _send_notification(
             bot, tg_id,
             f"🍽 Кухня закрывается через 15 минут ({user['eating_cutoff']}). "
             "Если голодно — план Б: кефир/творог/овощи на 150–200 ккал. "
-            "А если вечером потянет переесть, просто напиши мне, поговорим.",
+            "А если вечером потянет переесть, открой «💬 Поговорить» или напиши /talk.",
             kind,
         )
     elif kind == "evening":
-        await _send_notification(bot, tg_id, "🌙 Итог дня готов: что получилось и что поправить завтра.",
-                                 kind, "analysis", "🌙 Открыть итог дня")
+        from app import rich
+        from app.services import report
+        day = local_day.isoformat()
+        chart = await report.day_chart_bytes(db, user, day)
+        doc = report.day_doc(db, user, day, closed=True, title="Итоги дня", chart=chart)
+        await _send_with_flood_wait(rich.send, bot, tg_id, doc, reply_markup=report.actions_kb("today"))
     elif kind == "weigh":
         from app.storage import repo
         if user["care_mode"]:
@@ -387,9 +392,13 @@ async def _send_reminder(db: sqlite3.Connection, bot, user, kind: str,
         if total < goal // 2:
             await _send_notification(
                 bot, tg_id, f"💧 Воды сегодня пока {total} мл из ориентира {goal}. "
-                            "Выпей стакан и напиши «выпил стакан воды».", kind)
+                            "Выпей стакан и отметь воду в приложении.", kind, "today")
     elif kind == "weekly":
-        await _send_notification(bot, tg_id, "📅 Неделя закончилась: итог и цель на новую неделю "
-                                 "готовы в приложении.", kind, "analysis", "📅 Открыть итог недели")
+        from app import rich
+        from app.routers.commands import week_report_doc
+        from app.services import report
+        chart = await report.week_chart_bytes(db, user, local_day)
+        doc = week_report_doc(db, user, local_day, chart=chart)
+        await _send_with_flood_wait(rich.send, bot, tg_id, doc, reply_markup=report.actions_kb("week"))
     else:
         log.warning("неизвестный тип напоминания: %s", kind)

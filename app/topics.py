@@ -11,25 +11,28 @@ import re
 import time
 from collections import defaultdict
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import wraps
 
 from aiogram import BaseMiddleware
 from aiogram.client.session.middlewares.base import BaseRequestMiddleware
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.methods import TelegramMethod
-from aiogram.types import Message
+from aiogram.fsm.context import FSMContext
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from app.chat_context import pending_thread
 from app.config import get_config
 
 log = logging.getLogger(__name__)
-NAMES = {"diary": "📒 Дневник", "support": "💬 Поддержка"}
+NAMES = {"diary": "📒 Дневник", "support": "💬 Поговорить"}
 INTRO = {
-    "diary": "📒 Здесь твой дневник: еда, вода, вес, сон и активность. Присылай фото, голос или текст. "
-             "Карточка дня и напоминания будут здесь. Для разговоров есть тема «💬 Поддержка».",
-    "support": "💬 Здесь можно поговорить о самочувствии, привычках и тяге к еде. "
-               "Если захочешь записать еду прямо здесь, начни с «запиши» — например, «запиши два бутерброда».",
+    "diary": "📒 Здесь будут напоминания, карточка дня и красивые отчёты о твоём прогрессе. "
+             "Еду и воду записывай в приложении: /app. "
+             "Для разговоров о самочувствии и желании переесть открой «💬 Поговорить» или напиши /talk.",
+    "support": "💬 Хочется переесть, тревожно или трудно понять, что чувствуешь? "
+               "Напиши или запиши голосовое: вместе разберём, что происходит, и найдём посильный шаг. "
+               "Без осуждения и запретов. Здесь можно просто поговорить; еду записывай в приложении: /app.",
 }
 _forced: ContextVar[str | None] = ContextVar("topic_destination", default=None)
 
@@ -68,8 +71,7 @@ def awaiting_log() -> bool:
 def logging_enabled(msg: Message, text: str | None = None, *, photo: bool = False) -> bool:
     ctx = current.get()
     if ctx and ctx.chat_id == msg.chat.id:
-        return (ctx.kind == "diary" or photo or awaiting_log()
-                or explicit_log(text if text is not None else msg.text or ""))
+        return False  # в темах чат служит для отчётов и разговора, запись еды — в Mini App
     return get_config().chat_logs_food
 
 
@@ -117,6 +119,7 @@ class Topics:
         self.ready = False
         self._locks = defaultdict(asyncio.Lock)
         self._retry_at: dict[int, float] = {}
+        self._redirected: set[tuple[int, int | None]] = set()
 
     async def setup(self, bot) -> None:
         self.bot = bot
@@ -147,6 +150,20 @@ class Topics:
                 return topics
             for kind, name in NAMES.items():
                 if kind in topics:
+                    row = self.db.execute("SELECT name FROM chat_topics WHERE chat_id=? AND kind=?",
+                                          (chat_id, kind)).fetchone()
+                    if row["name"] != name:
+                        try:
+                            await bot.edit_forum_topic(chat_id, topics[kind], name=name)
+                        except TelegramAPIError as exc:
+                            if "not modified" not in str(exc).lower() and "topic_not_modified" not in str(exc).lower():
+                                self._retry_at[chat_id] = time.monotonic() + 60
+                                log.warning("Не удалось переименовать тему %s", kind, exc_info=True)
+                                continue
+                        self.db.execute("UPDATE chat_topics SET name=? WHERE chat_id=? AND kind=?",
+                                        (name, chat_id, kind))
+                        self.db.commit()
+                        created[kind] = topics[kind]
                     continue
                 try:
                     topic = await bot.create_forum_topic(chat_id, name)
@@ -155,8 +172,8 @@ class Topics:
                     log.warning("Не удалось создать тему %s", kind, exc_info=True)
                     break
                 # Каждая тема сохраняется сразу: сбой второй не создаст дубликат первой.
-                self.db.execute("INSERT INTO chat_topics(chat_id, kind, thread_id) VALUES(?,?,?)",
-                                (chat_id, kind, topic.message_thread_id))
+                self.db.execute("INSERT INTO chat_topics(chat_id, kind, thread_id, name) VALUES(?,?,?,?)",
+                                (chat_id, kind, topic.message_thread_id, name))
                 self.db.commit()
                 topics[kind] = topic.message_thread_id
                 created[kind] = topic.message_thread_id
@@ -173,6 +190,22 @@ class Topics:
             _forced.reset(token)
         return topics
 
+    async def redirect_notice(self, bot, msg: Message, support: int) -> None:
+        key = (msg.chat.id, msg.message_thread_id)
+        if key in self._redirected:
+            return
+        try:
+            me = await bot.me()
+            username = getattr(me, "username", None)
+            kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
+                text="💬 Поговорить", url=f"https://t.me/{username}/{support}")]]) if username else None
+            await bot.send_message(msg.chat.id, "💬 Продолжим в теме «Поговорить» — мой ответ будет там.",
+                                   message_thread_id=msg.message_thread_id, reply_markup=kb,
+                                   disable_notification=True)
+            self._redirected.add(key)
+        except TelegramAPIError:
+            log.info("Не удалось показать переход к разговору", exc_info=True)
+
 
 class TopicMiddleware(BaseMiddleware):
     def __init__(self, service: Topics):
@@ -187,6 +220,20 @@ class TopicMiddleware(BaseMiddleware):
         profile = repo.get_user_by_tg(self.service.db, user.id)
         topics = (await self.service.ensure(data["bot"], msg.chat.id)
                   if profile and profile["onboarded"] else {})
+        # Все свободные реплики и голосовые, а также вопросы по отчётам ведут в один разговор.
+        conversational = isinstance(event, Message) and (
+            bool(msg.text and not msg.text.startswith("/")) or msg.voice is not None or msg.audio is not None)
+        ask_report = not isinstance(event, Message) and (getattr(event, "data", "") or "").startswith("rp:ask:")
+        target = topics.get("support") if conversational or ask_report else None
+        if target is not None:
+            if msg.message_thread_id != target:
+                await self.service.redirect_notice(data["bot"], msg, target)
+            msg = msg.model_copy(update={"message_thread_id": target, "is_topic_message": True}).as_(data["bot"])
+            event = msg if isinstance(event, Message) else event.model_copy(update={"message": msg}).as_(data["bot"])
+            state = data.get("state")
+            if state is not None:
+                state = FSMContext(storage=state.storage, key=replace(state.key, thread_id=target))
+                data["state"], data["raw_state"] = state, await state.get_state()
         token = scope = None
         if topics:
             kind = next((k for k, v in topics.items() if v == msg.message_thread_id), "diary")
@@ -195,6 +242,10 @@ class TopicMiddleware(BaseMiddleware):
         try:
             # Служебные сообщения о темах не являются едой или репликой пользователя.
             if msg.forum_topic_created or msg.forum_topic_closed or msg.forum_topic_reopened or msg.forum_topic_edited:
+                return
+            if (topics and not isinstance(event, Message)
+                    and (getattr(event, "data", "") or "").startswith(("meal_", "bc_"))):
+                await event.answer("Еду теперь записываем и уточняем в приложении: /app", show_alert=True)
                 return
             result = await handler(event, data)
             profile = repo.get_user_by_tg(self.service.db, user.id)

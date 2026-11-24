@@ -13,6 +13,7 @@ from aiogram import F
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo
 
 from app.config import get_config
+from app import topics
 from app.domain.targets import MIN_AGE
 from app.routers import menu
 from app.services import referral
@@ -179,6 +180,10 @@ async def start(msg: Message, state: FSMContext, db: sqlite3.Connection) -> None
     user = repo.get_user_by_tg(db, msg.from_user.id)
     if user and user["onboarded"]:
         await state.clear()
+        if topics.current.get():
+            await msg.answer(topics.INTRO["diary"] + "\n\n" + topics.INTRO["support"],
+                             reply_markup=menu.main_kb())
+            return
         await msg.answer(
             "Профиль уже заполнен. Кидай еду текстом/фото/голосом, скриншоты "
             "Mi Fitness и PICOOC — сделаю остальное.\nОтчёты и настройки в приложении: /app",
@@ -250,9 +255,10 @@ async def onboard_answer(msg: Message, state: FSMContext, db: sqlite3.Connection
             await msg.answer(
                 f"Готово, профиль сохранён. Стартовая цель: <b>≈{kcal} ккал/день</b>.{note}\n\n"
                 "Как пользоваться:\n"
-                "• еда — просто текстом («съел две котлеты и гречку»), фото или голосовым;\n"
+                "• еду и воду добавляй в приложении: /app;\n"
                 "• скриншоты Mi Fitness и PICOOC — кидай как есть, распознаю;\n"
                 "• вечером пришлю итог дня, по воскресеньям — недельный разбор.\n\n"
+                "• если хочется переесть или поговорить о своём состоянии — /talk.\n\n"
                 "• отчёты, графики и настройки — в приложении: /app.\n\n"
                 f"Помни: это не медицинский сервис, оценки приблизительные. {HEALTH_NOTE} {CARE_NOTE}",
                 reply_markup=menu.bottom_kb(),

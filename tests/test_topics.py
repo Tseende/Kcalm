@@ -81,7 +81,7 @@ async def feed(dp, bot, text, thread, **extra):
 
 async def test_creates_two_topics_once_and_persists(db, monkeypatch):
     bot, dp, service, session = await build(db, monkeypatch)
-    assert [m.name for m in session.created] == ['📒 Дневник', '💬 Поддержка']
+    assert [m.name for m in session.created] == ['📒 Дневник', '💬 Поговорить']
     stored = service.stored(1)
     assert set(stored) == {'diary', 'support'}
     await asyncio.gather(*(service.ensure(bot, 1) for _ in range(5)))
@@ -89,30 +89,30 @@ async def test_creates_two_topics_once_and_persists(db, monkeypatch):
     await restarted.setup(bot)
     assert await restarted.ensure(bot, 1) == stored
     assert len(session.created) == 2
-    assert migrate(db) == 39
+    assert migrate(db) == 40
 
 
-async def test_diary_logs_even_with_legacy_logging_disabled(db, monkeypatch):
+async def test_diary_text_is_discussion_in_support_without_logging(db, monkeypatch):
     bot, dp, service, session = await build(db, monkeypatch)
     diary = service.stored(1)['diary']
     await feed(dp, bot, 'выпил 250 мл воды', diary)
-    assert db.execute('SELECT SUM(ml) FROM water_log').fetchone()[0] == 250
-    assert session.sent()[-1].message_thread_id == diary
+    assert db.execute('SELECT COUNT(*) FROM water_log').fetchone()[0] == 0
+    assert session.sent()[-1].message_thread_id == service.stored(1)['support']
     assert topics.current.get() is None and pending_thread.get() is None
 
 
-async def test_support_talks_and_explicit_log_confirms_in_same_topic(db, monkeypatch):
+async def test_support_never_logs_even_explicit_requests(db, monkeypatch):
     bot, dp, service, session = await build(db, monkeypatch)
     support = service.stored(1)['support']
     await feed(dp, bot, 'я съел тост и расстроился', support)
     assert db.execute('SELECT COUNT(*) FROM meals').fetchone()[0] == 0
     assert db.execute('SELECT COUNT(*) FROM craving_events').fetchone()[0] == 1
     await feed(dp, bot, 'запиши 250 мл воды', support)
-    assert db.execute('SELECT SUM(ml) FROM water_log').fetchone()[0] == 250
+    assert db.execute('SELECT COUNT(*) FROM water_log').fetchone()[0] == 0
     assert all(m.message_thread_id == support for m in session.sent())
-    # Открытый эпизод поддержки не перехватывает дневник.
+    # Реплики из Дневника также продолжают разговор, не создавая записи.
     await feed(dp, bot, 'выпил 250 мл воды', service.stored(1)['diary'])
-    assert db.execute('SELECT SUM(ml) FROM water_log').fetchone()[0] == 500
+    assert db.execute('SELECT COUNT(*) FROM water_log').fetchone()[0] == 0
 
 
 async def test_model_cannot_auto_log_food_mentioned_in_support(db, monkeypatch):
@@ -142,7 +142,7 @@ async def test_craving_in_diary_redirects_support(db, monkeypatch):
     assert session.sent()[-1].message_thread_id == service.stored(1)['support']
 
 
-async def test_voice_explicit_log_from_support(db, monkeypatch):
+async def test_voice_explicit_request_stays_discussion(db, monkeypatch):
     bot, dp, service, session = await build(db, monkeypatch)
     from app.llm import client
     async def transcribe(*args, **kwargs):
@@ -150,7 +150,7 @@ async def test_voice_explicit_log_from_support(db, monkeypatch):
     monkeypatch.setattr(client, 'transcribe_ogg', transcribe)
     await feed(dp, bot, None, service.stored(1)['support'],
                voice=Voice(file_id='f', file_unique_id='u', duration=2))
-    assert db.execute('SELECT SUM(ml) FROM water_log').fetchone()[0] == 250
+    assert db.execute('SELECT COUNT(*) FROM water_log').fetchone()[0] == 0
 
 
 async def test_pending_and_photo_caption_scoped_to_topic(db, monkeypatch):
@@ -253,7 +253,7 @@ async def test_partial_creation_retries_without_duplicate_diary(db, monkeypatch)
     assert len(session.created) == 3
 
 
-async def test_food_and_photo_from_support_are_recorded(db, monkeypatch):
+async def test_food_photo_and_text_never_use_food_recognizer(db, monkeypatch):
     bot, dp, service, session = await build(db, monkeypatch)
     from tests.test_photo_flow import _food
     from aiogram.types import PhotoSize
@@ -267,25 +267,25 @@ async def test_food_and_photo_from_support_are_recorded(db, monkeypatch):
     monkeypatch.setattr(foodsvc, 'parse_photo', parse_photo)
     support = service.stored(1)['support']
     await feed(dp, bot, 'запиши банан 100 г', support)
-    assert seen == ['банан 100 г']
-    assert db.execute('SELECT COUNT(*) FROM meals').fetchone()[0] == 1
+    assert seen == []
+    assert db.execute('SELECT COUNT(*) FROM meals').fetchone()[0] == 0
     # Подпись избегает параллельного распознавания этикетки; формат фото — не скриншот.
-    await feed(dp, bot, None, support, caption='банан',
+    await feed(dp, bot, None, support, caption='этикетка банана',
                photo=[PhotoSize(file_id='banana', file_unique_id='banana', width=3000, height=4000)])
-    assert db.execute('SELECT COUNT(*) FROM meals').fetchone()[0] == 2
-    assert session.sent() and all(m.message_thread_id == support for m in session.sent())
+    assert db.execute('SELECT COUNT(*) FROM meals').fetchone()[0] == 0
+    assert session.sent()[-1].message_thread_id == service.stored(1)['diary']
+    assert seen == []
 
 
 async def test_report_question_state_does_not_consume_support(db, monkeypatch):
     bot, dp, service, session = await build(db, monkeypatch)
     from app.routers.reports import Ask
     diary = service.stored(1)['diary']
-    state = dp.fsm.get_context(bot=bot, chat_id=1, user_id=1, thread_id=diary)
+    support = service.stored(1)['support']
+    state = dp.fsm.get_context(bot=bot, chat_id=1, user_id=1, thread_id=support)
     await state.set_state(Ask.question)
     import time
     await state.update_data(kind='today', until=time.time() + 60)
-    await feed(dp, bot, 'я расстроился из-за еды', service.stored(1)['support'])
-    assert await state.get_state() == Ask.question.state
     await feed(dp, bot, 'как прошёл день?', diary)
     assert await state.get_state() is None
 
@@ -297,3 +297,89 @@ async def test_settings_keep_callback_message_and_disable_extra_topics(db, monke
     assert setting.callback_query_mode == 'default'
     assert setting.has_topic_sidebar and setting.has_topics_enabled
     assert setting.allows_users_to_create_topics is False
+
+
+async def test_existing_support_topic_is_renamed_once_without_recreation(db, monkeypatch):
+    bot, dp, service, session = await build(db, monkeypatch)
+    stored = service.stored(1)
+    db.execute("UPDATE chat_topics SET name='💬 Поддержка' WHERE chat_id=1 AND kind='support'")
+    db.commit()
+    await service.ensure(bot, 1)
+    await service.ensure(bot, 1)
+    edits = [m for m in session.requests if m.__api_method__ == 'editForumTopic']
+    assert len(edits) == 1
+    assert edits[0].name == '💬 Поговорить' and edits[0].message_thread_id == stored['support']
+    assert service.stored(1) == stored and len(session.created) == 2
+    assert any('желании переесть' in (getattr(m, 'text', '') or '')
+               or 'Хочется переесть' in (getattr(m, 'text', '') or '') for m in session.sent())
+
+
+async def test_add_command_cannot_recognize_food_in_topics(db, monkeypatch):
+    bot, dp, service, session = await build(db, monkeypatch)
+    async def forbidden(*args, **kwargs):
+        raise AssertionError('Распознавание еды отключено')
+    monkeypatch.setattr(foodsvc, 'parse_text', forbidden)
+    # Даже старый флаг совместимости не включает распознавание в темах.
+    monkeypatch.setattr(config.get_config(), 'chat_logs_food', True)
+    await feed(dp, bot, '/add банан 100 г', service.stored(1)['diary'])
+    assert db.execute('SELECT COUNT(*) FROM meals').fetchone()[0] == 0
+
+
+async def test_report_button_opens_question_state_in_conversation_topic(db, monkeypatch):
+    bot, dp, service, session = await build(db, monkeypatch)
+    from aiogram.types import CallbackQuery, User
+    from app.routers.reports import Ask
+    stored = service.stored(1)
+    cb = CallbackQuery(id='ask', from_user=User(id=1, is_bot=False, first_name='Тест'),
+                       chat_instance='chat', data='rp:ask:today',
+                       message=message('отчёт', message_thread_id=stored['diary']).as_(bot))
+    await dp.feed_update(bot, Update(update_id=900001, callback_query=cb))
+    state = dp.fsm.get_context(bot=bot, chat_id=1, user_id=1, thread_id=stored['support'])
+    assert await state.get_state() == Ask.question.state
+    assert session.sent()[-1].message_thread_id == stored['support']
+    await feed(dp, bot, 'почему мало белка?', stored['diary'])
+    assert await state.get_state() is None
+    assert session.sent()[-1].message_thread_id == stored['support']
+
+
+async def test_old_meal_refinement_button_does_not_arm_food_parser(db, monkeypatch):
+    bot, dp, service, session = await build(db, monkeypatch)
+    from aiogram.types import CallbackQuery, User
+    cb = CallbackQuery(id='old-food', from_user=User(id=1, is_bot=False, first_name='Тест'),
+                       chat_instance='chat', data='meal_refine:1',
+                       message=message('старая еда', message_thread_id=service.stored(1)['diary']).as_(bot))
+    await dp.feed_update(bot, Update(update_id=900002, callback_query=cb))
+    uid = repo.get_user_by_tg(db, 1)['id']
+    assert repo.latest_pending_input(db, uid, 'meal_refine') is None
+    assert any(m.__api_method__ == 'answerCallbackQuery' and 'приложении' in (m.text or '')
+               for m in session.requests)
+
+
+@pytest.mark.parametrize('kind', ['evening', 'weekly'])
+async def test_scheduled_reports_include_tables_in_diary(db, monkeypatch, kind):
+    bot, dp, service, session = await build(db, monkeypatch)
+    from app import scheduler
+    from app.services import report
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    async def no_chart(*args, **kwargs):
+        return None
+    monkeypatch.setattr(report, 'day_chart_bytes', no_chart)
+    monkeypatch.setattr(report, 'week_chart_bytes', no_chart)
+    user = repo.get_user_by_tg(db, 1)
+    await scheduler._send_reminder(db, bot, user, kind, datetime.now(ZoneInfo('Europe/Minsk')))
+    sent = session.sent()[-1]
+    assert sent.__api_method__ == 'sendRichMessage'
+    assert '<table' in sent.rich_message.html
+    assert sent.message_thread_id == service.stored(1)['diary']
+
+
+async def test_report_command_from_conversation_posts_to_diary(db, monkeypatch):
+    bot, dp, service, session = await build(db, monkeypatch)
+    from app.services import report
+    async def no_chart(*args, **kwargs):
+        return None
+    monkeypatch.setattr(report, 'day_chart_bytes', no_chart)
+    await feed(dp, bot, '/today', service.stored(1)['support'])
+    assert session.sent()[-1].__api_method__ == 'sendRichMessage'
+    assert session.sent()[-1].message_thread_id == service.stored(1)['diary']

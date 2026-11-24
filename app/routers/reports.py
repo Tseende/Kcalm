@@ -16,7 +16,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (BufferedInputFile, CallbackQuery, InlineKeyboardButton,
                            InlineKeyboardMarkup, Message)
 
-from app import rich
+from app import rich, topics
 from app.services import assistant, charts, insights, report
 from app.storage import repo
 from app.timeutils import local_today
@@ -81,6 +81,7 @@ async def on_question(msg: Message, state: FSMContext, db: sqlite3.Connection) -
 
 
 @router.callback_query(F.data.startswith("rp:chart:"))
+@topics.destination("diary")
 async def cb_chart(cb: CallbackQuery, db: sqlite3.Connection) -> None:
     kind = cb.data.split(":")[2]
     user = _user(db, cb.from_user.id)

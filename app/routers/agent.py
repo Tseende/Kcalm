@@ -31,7 +31,12 @@ def _args(command: str, arg: str = "") -> CommandObject:
 
 async def run_intent(msg: Message, db: sqlite3.Connection, intent: intents.Intent) -> None:
     name, arg = intent.name, intent.arg
-    if name in APP_INTENTS:                      # отчёты и списки читаются в Mini App
+    from app import topics
+    chat_reports = {"today": commands.cmd_today, "week": commands.cmd_week,
+                    "weight": commands.cmd_weight, "body": commands.cmd_body, "sleep": commands.cmd_sleep}
+    if topics.current.get() and name in chat_reports:
+        await chat_reports[name](msg, db)
+    elif name in APP_INTENTS:                      # остальные списки читаются в Mini App
         await menu.send_app(msg)
     elif name == "undo":
         await commands.cmd_undo(msg, db)

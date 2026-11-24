@@ -11,7 +11,7 @@ from aiogram import Router
 from aiogram.filters import Command, CommandObject
 from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup, LinkPreviewOptions, Message
 
-from app import rich
+from app import rich, topics
 from app.domain import analytics, body, water, weighin
 from app.domain import safety as safetydom
 from app.services import safety as safetysvc
@@ -50,6 +50,7 @@ def _target(db: sqlite3.Connection, uid: int):
 
 
 @router.message(Command("today"))
+@topics.destination("diary")
 async def cmd_today(msg: Message, db: sqlite3.Connection) -> None:
     user = _user(msg, db)
     if not user:
@@ -218,6 +219,7 @@ async def cmd_water(msg: Message, command: CommandObject, db: sqlite3.Connection
 
 
 @router.message(Command("week"))
+@topics.destination("diary")
 async def cmd_week(msg: Message, db: sqlite3.Connection) -> None:
     user = _user(msg, db)
     if not user:
@@ -230,6 +232,7 @@ async def cmd_week(msg: Message, db: sqlite3.Connection) -> None:
 
 
 @router.message(Command("weight"))
+@topics.destination("diary")
 async def cmd_weight(msg: Message, db: sqlite3.Connection) -> None:
     user = _user(msg, db)
     if not user:
@@ -272,6 +275,7 @@ async def cmd_weight(msg: Message, db: sqlite3.Connection) -> None:
 
 
 @router.message(Command("body"))
+@topics.destination("diary")
 async def cmd_body(msg: Message, db: sqlite3.Connection) -> None:
     """Состав тела по последнему замеру Picooc: показатели, динамика, как их читать."""
     user = _user(msg, db)
@@ -301,6 +305,7 @@ async def cmd_body(msg: Message, db: sqlite3.Connection) -> None:
 
 
 @router.message(Command("sleep"))
+@topics.destination("diary")
 async def cmd_sleep(msg: Message, db: sqlite3.Connection) -> None:
     user = _user(msg, db)
     if not user:

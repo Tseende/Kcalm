@@ -325,7 +325,7 @@ def _today_facts(db: sqlite3.Connection, user, now_hhmm: str) -> dict:
 
 def _dialog_logging_allowed(db: sqlite3.Connection, user) -> bool:
     # В режиме тем запись обрабатывает intake по явной просьбе, а не догадка модели.
-    return not (get_config().chat_topics_enabled and db.execute(
+    return get_config().chat_logs_food and not (get_config().chat_topics_enabled and db.execute(
         "SELECT 1 FROM chat_topics WHERE chat_id=? LIMIT 1", (user["tg_id"],)).fetchone())
 
 
