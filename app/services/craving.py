@@ -378,10 +378,12 @@ async def _ask_model(db: sqlite3.Connection, user, event: sqlite3.Row, user_text
                 {"role": "user", "content": json.dumps(
                     {"context": ctx, "user_message": user_text}, ensure_ascii=False)}]
     try:
-        data, _ = await llm.chat_json("craving_dialog", messages,
-                                      model=get_config().model_dialog or None,
-                                      temperature=0.7, user_id=user["id"], db=db,
-                                      max_tokens=700)
+        with llm.guard_stream(lambda text: len(text) <= 900 and not dom.violates_policy(text)
+                              and not check_numbers(text, ctx)):
+            data, _ = await llm.chat_json("craving_dialog", messages,
+                                          model=get_config().model_dialog or None,
+                                          temperature=0.7, user_id=user["id"], db=db,
+                                          max_tokens=700)
     except llm.LLMError:
         log.warning("craving: LLM недоступен, запасной ответ", exc_info=True)
         return None

@@ -1,6 +1,8 @@
 """Intake: фото / голос / текст / скриншоты → конвейер еды или метрик."""
 from __future__ import annotations
 
+from app import streaming
+
 import base64
 import asyncio
 import hashlib
@@ -265,6 +267,7 @@ async def cb_barcode_serving(cb: CallbackQuery, db: sqlite3.Connection) -> None:
 # ------------------------------------------------------------------ голос
 
 @router.message(F.voice | F.audio)
+@streaming.response
 async def on_voice(msg: Message, db: sqlite3.Connection, bot=None) -> None:
     from aiogram import Bot
     bot = bot or msg.bot

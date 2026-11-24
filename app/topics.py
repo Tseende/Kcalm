@@ -13,19 +13,22 @@ from collections import defaultdict
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from functools import wraps
+from pathlib import Path
 
 from aiogram import BaseMiddleware
 from aiogram.client.session.middlewares.base import BaseRequestMiddleware
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.methods import TelegramMethod
 from aiogram.fsm.context import FSMContext
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from app.chat_context import pending_thread
 from app.config import get_config
 
 log = logging.getLogger(__name__)
 NAMES = {"diary": "📒 Дневник", "support": "💬 Поговорить"}
+WELCOME_IMAGES = Path(__file__).resolve().parent / "assets" / "topic_welcome"
+WELCOME_VERSION = 1
 INTRO = {
     "diary": "📒 Здесь будут напоминания, карточка дня и красивые отчёты о твоём прогрессе. "
              "Еду и воду записывай в приложении: /app. "
@@ -120,6 +123,7 @@ class Topics:
         self._locks = defaultdict(asyncio.Lock)
         self._retry_at: dict[int, float] = {}
         self._redirected: set[tuple[int, int | None]] = set()
+        self._welcoming: set[tuple[int, str]] = set()
 
     async def setup(self, bot) -> None:
         self.bot = bot
@@ -150,7 +154,7 @@ class Topics:
                 return topics
             for kind, name in NAMES.items():
                 if kind in topics:
-                    row = self.db.execute("SELECT name FROM chat_topics WHERE chat_id=? AND kind=?",
+                    row = self.db.execute("SELECT name, welcome_version FROM chat_topics WHERE chat_id=? AND kind=?",
                                           (chat_id, kind)).fetchone()
                     if row["name"] != name:
                         try:
@@ -163,6 +167,8 @@ class Topics:
                         self.db.execute("UPDATE chat_topics SET name=? WHERE chat_id=? AND kind=?",
                                         (name, chat_id, kind))
                         self.db.commit()
+                        created[kind] = topics[kind]
+                    if row["welcome_version"] < WELCOME_VERSION:
                         created[kind] = topics[kind]
                     continue
                 try:
@@ -177,18 +183,39 @@ class Topics:
                 self.db.commit()
                 topics[kind] = topic.message_thread_id
                 created[kind] = topic.message_thread_id
+            # Отправка проходит через этот же middleware: резервируем приветствия до выхода
+            # из блокировки, чтобы повторный ensure() не отправил их рекурсивно или параллельно.
+            created = {k: v for k, v in created.items() if (chat_id, k) not in self._welcoming}
+            self._welcoming.update((chat_id, k) for k in created)
         # Уже вне блокировки: отправка сама проходит через middleware.
         token = _forced.set(None)
         try:
             for kind, thread in created.items():
                 try:
-                    await bot.send_message(chat_id, INTRO[kind], message_thread_id=thread,
-                                           disable_notification=True)
+                    await self.send_welcome(bot, chat_id, kind, thread)
+                    self.db.execute("UPDATE chat_topics SET welcome_version=? WHERE chat_id=? AND kind=? AND thread_id=?",
+                                    (WELCOME_VERSION, chat_id, kind, thread))
+                    self.db.commit()
                 except TelegramAPIError:
                     log.info("Не удалось отправить описание темы %s", kind, exc_info=True)
+                    self._retry_at[chat_id] = time.monotonic() + 60
+                finally:
+                    self._welcoming.discard((chat_id, kind))
         finally:
             _forced.reset(token)
+            self._welcoming.difference_update((chat_id, k) for k in created)
         return topics
+
+    async def send_welcome(self, bot, chat_id: int, kind: str, thread: int) -> None:
+        image = WELCOME_IMAGES / f"{kind}.png"
+        if image.is_file():
+            try:
+                await bot.send_photo(chat_id, FSInputFile(image), caption=INTRO[kind],
+                                     message_thread_id=thread, disable_notification=True)
+                return
+            except (TelegramBadRequest, OSError):
+                log.info("Картинка приветствия %s недоступна, отправляю текст", kind, exc_info=True)
+        await bot.send_message(chat_id, INTRO[kind], message_thread_id=thread, disable_notification=True)
 
     async def redirect_notice(self, bot, msg: Message, support: int) -> None:
         key = (msg.chat.id, msg.message_thread_id)

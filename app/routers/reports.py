@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+from app import streaming
+
 import asyncio
 import sqlite3
 import time
@@ -64,6 +66,7 @@ async def cb_ask(cb: CallbackQuery, state: FSMContext, db: sqlite3.Connection) -
 
 
 @router.message(Ask.question, F.text & ~F.text.startswith("/"))
+@streaming.response
 async def on_question(msg: Message, state: FSMContext, db: sqlite3.Connection) -> None:
     data = await state.get_data()
     await state.clear()

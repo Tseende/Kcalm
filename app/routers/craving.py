@@ -1,6 +1,8 @@
 """Ночная поддержка: /craving, автоопределение фраз о тяге, кнопки разбора и итога."""
 from __future__ import annotations
 
+from app import streaming
+
 import json
 import logging
 import sqlite3
@@ -99,6 +101,7 @@ async def maybe_handle(msg: Message, db: sqlite3.Connection, user, text: str,
 
 @router.message(Command("craving"))
 @topics.destination("support")
+@streaming.response
 async def cmd_craving(msg: Message, command: CommandObject, db: sqlite3.Connection) -> None:
     user = _user(db, msg.from_user.id)
     if not user:
@@ -120,6 +123,7 @@ async def cmd_craving(msg: Message, command: CommandObject, db: sqlite3.Connecti
 
 @router.message(Command("talk"))
 @topics.destination("support")
+@streaming.response
 async def cmd_talk(msg: Message, command: CommandObject, db: sqlite3.Connection) -> None:
     """Просто поговорить — о еде, срывах, настроении — в любое время, не только ночью."""
     user = _user(db, msg.from_user.id)
@@ -141,6 +145,7 @@ async def cmd_talk(msg: Message, command: CommandObject, db: sqlite3.Connection)
 
 
 @router.message(F.text & ~F.text.startswith("/"))
+@streaming.response
 async def on_craving_text(msg: Message, db: sqlite3.Connection) -> None:
     user = _user(db, msg.from_user.id)
     if user is None:
@@ -159,6 +164,7 @@ def _event_for(cb: CallbackQuery, db: sqlite3.Connection):
 
 @router.callback_query(F.data.startswith("cr:cat:"))
 @topics.destination("support")
+@streaming.response
 async def cb_category(cb: CallbackQuery, db: sqlite3.Connection) -> None:
     user, event = _event_for(cb, db)
     category = cb.data.split(":")[3]

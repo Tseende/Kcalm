@@ -261,9 +261,11 @@ async def answer(db: sqlite3.Connection, user, question: str, focus: str | None 
             {"role": "user", "content": "Ответ не прошёл проверку: убери все числа, которых нет в data, "
                                         "и всё, что похоже на оценку тела или компенсацию. Ответь короче."}]
         try:
-            data, _ = await llm.chat_json("assistant", messages, temperature=0.4,
-                                          model=get_config().model_dialog or None,
-                                          user_id=user["id"], db=db)
+            with llm.guard_stream(lambda text: len(text) <= 1500 and not craving_dom.violates_policy(text)
+                                  and not check_numbers(text, known)):
+                data, _ = await llm.chat_json("assistant", messages, temperature=0.4,
+                                              model=get_config().model_dialog or None,
+                                              user_id=user["id"], db=db)
         except llm.LLMError:
             log.warning("assistant: LLM недоступен", exc_info=True)
             return esc(FALLBACK)

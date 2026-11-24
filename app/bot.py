@@ -13,6 +13,7 @@ from aiogram.fsm.strategy import FSMStrategy
 
 from app import rich
 from app.topics import Topics, TopicMiddleware, TopicRequestMiddleware
+from app.streaming import DraftRequestMiddleware
 from app.config import get_config
 from app.adapters import off
 from app.db import connect_from_config, migrate
@@ -119,6 +120,7 @@ async def main() -> None:
     dp = create_dispatcher(db)
     # Порядок: выбрать тему до преобразования sendMessage в sendRichMessage.
     bot.session.middleware(TopicRequestMiddleware(dp["topics"]))
+    bot.session.middleware(DraftRequestMiddleware())
     bot.session.middleware(rich.RichMiddleware())
     await dp["topics"].setup(bot)
     widgets_runtime.setup(bot, db, cfg)       # карточка дня и пауза; выключатель WIDGETS_ENABLED

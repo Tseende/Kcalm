@@ -8,7 +8,8 @@ import logging
 import re
 import time
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any, Callable, Awaitable
+from contextlib import contextmanager
 
 import httpx
 
@@ -33,6 +34,95 @@ LIMIT_EXEMPT_PURPOSES = frozenset({"craving_dialog"})
 # Бот выставляет сюда функцию «сообщить человеку про лимит»: llm-слой сам в Telegram не пишет.
 limit_hook: contextvars.ContextVar[Callable[[], None] | None] = contextvars.ContextVar(
     "llm_limit_hook", default=None)
+reply_sink: contextvars.ContextVar[Callable[[str], Awaitable[None]] | None] = contextvars.ContextVar(
+    "llm_reply_sink", default=None)
+_reply_guard: contextvars.ContextVar[Callable[[str], bool] | None] = contextvars.ContextVar(
+    "llm_reply_guard", default=None)
+
+
+@contextmanager
+def guard_stream(check: Callable[[str], bool]):
+    """Те же проверки текста, что и у окончательного ответа, до показа черновика."""
+    token = _reply_guard.set(check)
+    try:
+        yield
+    finally:
+        _reply_guard.reset(token)
+
+
+def reply_prefix(raw: str) -> str:
+    """Из незаконченного JSON извлечь только строку reply, включая JSON escapes."""
+    match = re.search(r'(?<!\\)"reply"\s*:\s*"', raw)
+    if not match:
+        return ""
+    start, end, i = match.end(), match.end(), match.end()
+    while i < len(raw):
+        if raw[i] == '"':
+            break
+        if raw[i] == "\\":
+            n = 6 if i + 1 < len(raw) and raw[i + 1] == "u" else 2
+            if i + n > len(raw):
+                break
+            i += n
+        else:
+            i += 1
+        end = i
+    try:
+        value = json.loads('"' + raw[start:end] + '"')
+        return value.encode("utf-8", errors="ignore").decode("utf-8")
+    except (json.JSONDecodeError, UnicodeError):
+        return ""
+
+
+async def _stream_completion(client, cfg, headers, payload, sink) -> dict:
+    """OpenRouter SSE → обычный объект completion; reasoning и прочие поля не показываются."""
+    async def emit(text: str):
+        try:
+            check = _reply_guard.get()
+            await sink(text if not text or check is None or check(text) else "")
+        except Exception:  # noqa: BLE001 — ошибка UI не прерывает модель
+            log.debug("Не удалось обновить черновик ответа", exc_info=True)
+    await emit("")
+    url = f"{cfg.openrouter_base_url}/chat/completions"
+    content, usage, finish, model, done = "", {}, None, payload["model"], False
+    async with client.stream("POST", url, headers=headers,
+                             json={**payload, "stream": True, "stream_options": {"include_usage": True}},
+                             timeout=_timeout(cfg)) as response:
+        response.raise_for_status()
+        if "text/event-stream" not in response.headers.get("content-type", ""):
+            await response.aread()
+            return response.json()  # провайдер проигнорировал stream
+        async for line in response.aiter_lines():
+            if not line.startswith("data:"):
+                continue
+            data = line[5:].strip()
+            if data == "[DONE]":
+                done = True
+                break
+            if not data:
+                continue
+            chunk = json.loads(data)
+            if chunk.get("error"):
+                raise LLMError("Провайдер прервал поток ответа")
+            model = chunk.get("model") or model
+            if chunk.get("usage"):
+                usage = chunk["usage"]  # usage — итоговый снимок, а не приращение
+            for choice in chunk.get("choices") or []:
+                if choice.get("index", 0) != 0:
+                    continue
+                finish = choice.get("finish_reason") or finish
+                delta = (choice.get("delta") or {}).get("content")
+                if isinstance(delta, str):
+                    content += delta
+                    if len(content) > 100_000:
+                        raise LLMError("Поток ответа слишком большой")
+                    prefix = reply_prefix(content)
+                    if prefix:
+                        await emit(prefix)
+    if not done and finish is None:
+        raise httpx.RemoteProtocolError("Поток оборвался до завершения ответа")
+    return {"choices": [{"message": {"content": content}, "finish_reason": finish}],
+            "usage": usage, "model": model}
 
 MAX_CONCURRENT_REQUESTS = 6   # одновременных исходящих запросов к модели на процесс (память и сеть)
 RETRY_PAUSE_S = 0.7           # пауза перед повтором
@@ -241,10 +331,23 @@ async def chat_json(purpose: str, messages: list[dict], model: str | None = None
         for attempt in (1, 2):                      # 1 retry
             try:
                 async with _get_sem():
-                    resp = await client.post(f"{cfg.openrouter_base_url}/chat/completions",
-                                             headers=headers, json=payload, timeout=_timeout(cfg))
-                resp.raise_for_status()
-                data = resp.json()
+                    sink = reply_sink.get() if purpose in {"craving_dialog", "assistant"} else None
+                    if sink is not None and getattr(sink, "active", True):
+                        try:
+                            data = await _stream_completion(client, cfg, headers, payload, sink)
+                        except httpx.HTTPStatusError as exc:
+                            if exc.response.status_code not in {400, 422}:
+                                raise
+                            # Старый провайдер без SSE: один обычный запрос с теми же настройками.
+                            resp = await client.post(f"{cfg.openrouter_base_url}/chat/completions",
+                                                     headers=headers, json=payload, timeout=_timeout(cfg))
+                            resp.raise_for_status()
+                            data = resp.json()
+                    else:
+                        resp = await client.post(f"{cfg.openrouter_base_url}/chat/completions",
+                                                 headers=headers, json=payload, timeout=_timeout(cfg))
+                        resp.raise_for_status()
+                        data = resp.json()
                 usage = _merge_usage(usage, data.get("usage") or {})
                 choice = data["choices"][0]
                 last_content = choice["message"]["content"] or ""

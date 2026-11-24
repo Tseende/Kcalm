@@ -27,10 +27,16 @@ class Session(FakeSession):
         self.fail_support = False
         self.stale = None
         self.closed = None
+        self.welcome_photos = []
+        self.reject_welcome = False
 
     async def make_request(self, bot, method, timeout=None):
         self.requests.append(method)
         api = method.__api_method__
+        if api == 'sendPhoto' and getattr(method.photo, 'filename', '') in ('diary.png', 'support.png'):
+            self.welcome_photos.append(method)
+            if self.reject_welcome:
+                raise TelegramBadRequest(method, 'PHOTO_INVALID')
         if api == "setMySettings" and self.fail_settings:
             raise TelegramBadRequest(method, "unknown method")
         if api == "createForumTopic":
@@ -56,7 +62,7 @@ class Session(FakeSession):
         return result
 
     def sent(self):
-        return [m for m in self.requests if m.__api_method__ in ('sendMessage', 'sendRichMessage', 'sendWidget')]
+        return [m for m in self.requests if m.__api_method__ in ('sendMessage', 'sendRichMessage', 'sendWidget', 'sendPhoto')]
 
 
 async def build(db, monkeypatch, *, failure=False):
@@ -89,7 +95,7 @@ async def test_creates_two_topics_once_and_persists(db, monkeypatch):
     await restarted.setup(bot)
     assert await restarted.ensure(bot, 1) == stored
     assert len(session.created) == 2
-    assert migrate(db) == 40
+    assert migrate(db) == 41
 
 
 async def test_diary_text_is_discussion_in_support_without_logging(db, monkeypatch):
@@ -310,8 +316,8 @@ async def test_existing_support_topic_is_renamed_once_without_recreation(db, mon
     assert len(edits) == 1
     assert edits[0].name == '💬 Поговорить' and edits[0].message_thread_id == stored['support']
     assert service.stored(1) == stored and len(session.created) == 2
-    assert any('желании переесть' in (getattr(m, 'text', '') or '')
-               or 'Хочется переесть' in (getattr(m, 'text', '') or '') for m in session.sent())
+    assert any('Хочется переесть' in (getattr(m, 'caption', '') or getattr(m, 'text', '') or '')
+               for m in session.sent())
 
 
 async def test_add_command_cannot_recognize_food_in_topics(db, monkeypatch):
@@ -383,3 +389,57 @@ async def test_report_command_from_conversation_posts_to_diary(db, monkeypatch):
     await feed(dp, bot, '/today', service.stored(1)['support'])
     assert session.sent()[-1].__api_method__ == 'sendRichMessage'
     assert session.sent()[-1].message_thread_id == service.stored(1)['diary']
+
+
+async def test_welcome_images_sent_once_in_correct_topics_after_restart(db, monkeypatch):
+    bot, dp, service, session = await build(db, monkeypatch)
+    stored = service.stored(1)
+    assert len(session.welcome_photos) == 2
+    assert {(m.photo.filename, m.message_thread_id) for m in session.welcome_photos} == {
+        ('diary.png', stored['diary']), ('support.png', stored['support'])}
+    assert all(m.caption == topics.INTRO[kind] and m.disable_notification
+               for m in session.welcome_photos for kind in stored if m.message_thread_id == stored[kind])
+    await asyncio.gather(*(service.ensure(bot, 1) for _ in range(5)))
+    restarted = topics.Topics(db)
+    await restarted.setup(bot)
+    await restarted.ensure(bot, 1)
+    assert len(session.welcome_photos) == 2
+    assert not service._welcoming
+
+
+async def test_existing_topics_receive_new_welcome_without_recreation(db, monkeypatch):
+    bot, dp, service, session = await build(db, monkeypatch)
+    stored = service.stored(1)
+    db.execute('UPDATE chat_topics SET welcome_version=0')
+    db.commit()
+    await service.ensure(bot, 1)
+    assert len(session.welcome_photos) == 4
+    assert len(session.created) == 2 and service.stored(1) == stored
+    await service.ensure(bot, 1)
+    assert len(session.welcome_photos) == 4
+
+
+async def test_rejected_welcome_photo_falls_back_to_text_without_repeating(db, monkeypatch):
+    bot, dp, service, session = await build(db, monkeypatch)
+    db.execute('UPDATE chat_topics SET welcome_version=0')
+    db.commit()
+    session.reject_welcome = True
+    await service.ensure(bot, 1)
+    messages = [m for m in session.requests if m.__api_method__ == 'sendMessage']
+    assert {m.text for m in messages} == set(topics.INTRO.values())
+    assert all(m.message_thread_id in service.stored(1).values() for m in messages)
+    assert db.execute('SELECT MIN(welcome_version) FROM chat_topics').fetchone()[0] == topics.WELCOME_VERSION
+    session.requests.clear()
+    await service.ensure(bot, 1)
+    assert not session.requests
+
+
+def test_welcome_image_assets_are_valid_and_captions_fit_telegram():
+    from PIL import Image
+    for kind in topics.NAMES:
+        path = topics.WELCOME_IMAGES / f'{kind}.png'
+        with Image.open(path) as img:
+            assert img.size == (1536, 1024)
+            img.verify()
+        assert path.stat().st_size < 10 * 1024 * 1024
+        assert len(topics.INTRO[kind]) <= 1024

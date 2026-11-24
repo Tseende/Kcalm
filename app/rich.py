@@ -147,6 +147,20 @@ class Doc:
                 f"<b>{summary}</b>\n" + "\n".join(f"• {i}" for i in items)))
         return self
 
+    def expandable(self, summary: str, content: "Doc") -> "Doc":
+        """Bot API 10.5: абзацы, таблицы и списки в раскрываемой цитате.
+
+        В обычном сообщении содержимое остаётся видимым, чтобы данные не терялись.
+        Медиа добавляются к основному документу, а не к текстовому блоку.
+        """
+        if content.images():
+            raise ValueError("Изображения нужно добавлять к основному документу")
+        title = htmllib.escape(summary, quote=False)
+        self.parts.append(Raw(
+            f'<blockquote expandable><p><b>{title}</b></p>{content.rich()}</blockquote>',
+            f"<b>{title}</b>\n{content.plain()}"))
+        return self
+
     def divider(self) -> "Doc":
         self.parts.append(Raw("<hr/>", "──────────"))
         return self
@@ -255,7 +269,9 @@ class RichMiddleware(BaseRequestMiddleware):
     """
 
     async def __call__(self, make_request, bot, method):
-        converted = _to_rich(method)
+        from app.streaming import finalizing
+        # sendMessage завершает и сохраняет draft; его нельзя подменять sendRichMessage.
+        converted = None if finalizing.get() else _to_rich(method)
         if converted is None:
             return await make_request(bot, method)
         try:

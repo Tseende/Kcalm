@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+from app import streaming
+
 import logging
 import sqlite3
 
@@ -69,6 +71,7 @@ async def run_intent(msg: Message, db: sqlite3.Connection, intent: intents.Inten
 LOGGING_INTENTS = {"sleep_log", "steps_log", "workout_log"}
 
 
+@streaming.response
 async def discuss(msg: Message, db: sqlite3.Connection, user, text: str,
                   status: Message | None = None) -> None:
     """Свободная реплика в чате: ничего не записывается, ассистент продолжает разговор.
