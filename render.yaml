@@ -47,7 +47,7 @@ services:
       - key: MODEL_TEXT_PROVIDER
         value: DeepSeek
       - key: MODEL_VISION
-        value: deepseek/deepseek-v4.1-flash-1017
+        value: openai/gpt-6-luna
       - key: MODEL_VISION_ESCALATION
         value: deepseek/deepseek-v4.1-flash
       # - key: VISION_PROMPT       # промт распознавания фото; по умолчанию vision, кандидат на замену: vision_v3

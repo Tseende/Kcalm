@@ -26,7 +26,7 @@ class Config(BaseSettings):
     referral_friend_days: int = Field(0, ge=0)
     referral_inviter_days: int = Field(0, ge=0)
     openrouter_api_key: str = ""
-    model_vision: str = "deepseek/deepseek-v4.1-flash-1017"
+    model_vision: str = "openai/gpt-6-luna"
     model_vision_escalation: str = "deepseek/deepseek-v4.1-flash"
     vision_prompt: str = "vision"     # имя файла app/prompts/<имя>.md для распознавания фото; боевой «vision», кандидат «vision_v3»
     model_text: str = "deepseek/deepseek-v4.1-flash-1017"   # по умолчанию DeepSeek, а не Google: в облаке .env нет
