@@ -23,7 +23,7 @@ def _user(db: sqlite3.Connection, tg_id: int):
 async def cmd_plan(msg: Message, command: CommandObject, db: sqlite3.Connection) -> None:
     user = _user(db, msg.from_user.id)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     args = (command.args or "").strip()
     if args.lower().startswith(("del ", "удалить ")):
@@ -31,7 +31,7 @@ async def cmd_plan(msg: Message, command: CommandObject, db: sqlite3.Connection)
         if number.isdigit() and plansvc.delete_by_number(db, user["id"], int(number)):
             await msg.answer("Удалил.")
         else:
-            await msg.answer("Не нашёл такой номер. Список: /plan")
+            await msg.answer("Не нашёл правило с таким номером.")
         return
     if args:
         await msg.answer(plansvc.add_user_rule(db, user["id"], args))
@@ -55,7 +55,7 @@ async def cb_preset(cb: CallbackQuery, db: sqlite3.Connection) -> None:
 async def cmd_care(msg: Message, command: CommandObject, db: sqlite3.Connection) -> None:
     user = _user(db, msg.from_user.id)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     arg = (command.args or "").strip().lower()
     if arg in ("on", "вкл"):

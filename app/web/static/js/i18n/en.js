@@ -747,7 +747,7 @@ export default {
   "onb.c_gentle": "Gentle, no numbers",
   "onb.c_gentle_s": "If numbers cause stress, or you have experience with disordered eating",
   "onb.care_q": "How should I show numbers?",
-  "onb.care_why": "You can change this later with the /care command.",
+  "onb.care_why": "Choose the way of keeping a diary that feels calmer for you.",
   "onb.rm_morning": "Morning",
   "onb.rm_morning_s": "Your plan for the day",
   "onb.rm_evening": "Daily summary",

@@ -204,7 +204,7 @@ def test_care_mode_effects(db):
     fresh = repo.get_user_by_tg(db, 1)
     assert fresh["care_mode"] == 1 and fresh["target_rate_kg_week"] == -0.25
     assert repo.due_reminders(db, uid, "weigh")["enabled"] == 0 and "Осторожный" in text
-    assert "/weighin on" in safety.set_care(db, fresh, False)
+    assert "в настройках приложения" in safety.set_care(db, fresh, False)
 
 
 @pytest.mark.asyncio

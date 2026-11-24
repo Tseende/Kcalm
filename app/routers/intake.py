@@ -145,7 +145,7 @@ EARLY_INTENTS = ("dish_add", "dishes", "product_add", "products",
 async def on_text(msg: Message, db: sqlite3.Connection, user_row=None) -> None:
     user = user_row or _user_or_ask(msg, db)
     if user is None:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     uid = user["id"]
     text = (msg.text or "").strip()
@@ -273,7 +273,7 @@ async def on_voice(msg: Message, db: sqlite3.Connection, bot=None) -> None:
     bot = bot or msg.bot
     user = _user_or_ask(msg, db)
     if user is None:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     uid = user["id"]
     status = await msg.answer("🎙 распознаю голос…")
@@ -301,7 +301,7 @@ async def on_voice(msg: Message, db: sqlite3.Connection, bot=None) -> None:
     except Exception:                                        # noqa: BLE001
         repo.save_pending_input(db, uid, "voice", {"tg_file_id": media.file_id})
         await status.edit_text(
-            "Не смог распознать голосовое. Сохранил его: повтори позже командой /retry "
+            "Не смог распознать голосовое. Сохранил его: пришли ещё раз позже "
             "или напиши текстом."
         )
 
@@ -381,7 +381,7 @@ async def _ingest_image(msg: Message, db: sqlite3.Connection, file_id: str,
                         file_size: int | None, photo, from_document: bool = False) -> None:
     user = _user_or_ask(msg, db)
     if user is None:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     uid = user["id"]
     add_to = _pending_add_photo(db, uid) if topics.logging_enabled(msg, photo=True) else None
@@ -455,8 +455,8 @@ async def _ingest_image(msg: Message, db: sqlite3.Connection, file_id: str,
 
 
 NOT_A_SCREEN = ("Здесь я не вижу сна, активности или веса, поэтому ничего не записал. Скриншоты "
-                "сна, шагов, тренировок и весов записываю сам, а еду и воду вноси в приложении: "
-                "/app. Если хочется поговорить о самочувствии или желании переесть — /talk.")
+                "сна, шагов, тренировок и весов записываю сам, а еду и воду вноси в приложении. "
+                "Если хочется поговорить о самочувствии или желании переесть — открой тему «Поговорить».")
 
 
 async def _screenshot_or_hint(msg: Message, db: sqlite3.Connection, user, image: "_Image",
@@ -658,7 +658,7 @@ async def _recognize_images(msg: Message, db: sqlite3.Connection, user, images: 
             repo.save_pending_input(db, uid, "photo", {"path": im.photo_path, "caption": caption})
             repo.forget_file(db, uid, im.file_hash)
         await status.edit_text("Не смог распознать фото (LLM недоступен). "
-                               "Сохранил: повтори позже командой /retry или опиши текстом.")
+                               "Сохранил: пришли ещё раз позже или опиши текстом.")
         return
     if len(images) == 1 and u.photo_kind == "label" and not u.items:
         # на фото упаковка с таблицей КБЖУ, а не блюдо: этикетка уже читается, показываем карточку
@@ -913,7 +913,7 @@ async def _process_meal(msg: Message, db: sqlite3.Connection, user, text: str,
     uid = user["id"]
     if not topics.logging_enabled(msg, text):
         from app.routers import menu
-        await menu.send_app(msg, "Еду теперь записываем в приложении. В чате можно поговорить: /talk.")
+        await menu.send_app(msg, "Еду теперь записываем в приложении. В теме «Поговорить» можно обсудить своё состояние и желание переесть.")
         return
     if source == "voice" and await craving_router.maybe_handle(msg, db, user, text, status):
         return
@@ -937,7 +937,7 @@ async def _process_meal(msg: Message, db: sqlite3.Connection, user, text: str,
     except Exception:                                      # noqa: BLE001
         repo.save_pending_input(db, uid, "text", {"text": text})
         await status.edit_text("Не смог разобрать (LLM недоступен). Сохранил ввод: "
-                               "повтори позже командой /retry или напиши ещё раз.")
+                               "пришли ещё раз позже или напиши текстом.")
         return
     if source in ("text", "voice") and await agent.route_llm_intent(msg, db, user, text, u, status):
         return
@@ -1068,7 +1068,7 @@ async def _process_screenshot(msg: Message, db: sqlite3.Connection, user,
         repo.save_pending_input(db, uid, "screenshot", {"path": photo_path})
         repo.forget_file(db, uid, file_hash)
         await status.edit_text("Не смог разобрать скриншот (LLM недоступен). "
-                               "Сохранил: повтори позже командой /retry.")
+                               "Сохранил: пришли ещё раз позже.")
         return True
     kind_s = parsed.get("screen", "unknown")
     raw_id = repo.save_raw_observation(db, uid, kind_s, photo_path, file_hash,
@@ -1120,7 +1120,7 @@ async def cmd_retry(msg: Message, db: sqlite3.Connection) -> None:
     """Повторить один неудавшийся ввод без потери исходного файла или текста."""
     user = _user_or_ask(msg, db)
     if user is None:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     from app.chat_context import pending_thread
     sql = "SELECT * FROM pending_inputs WHERE user_id=? AND kind IN ('text','photo','screenshot','voice')"
@@ -1307,7 +1307,7 @@ async def cmd_often(msg: Message, db: sqlite3.Connection) -> None:
     """Частые блюда одной кнопкой: записать «как обычно» без фото и текста."""
     user = _user_or_ask(msg, db)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     often = repo.frequent_meals(db, user["id"],
                                 today=foodsvc.local_now(user["tz"]).strftime("%Y-%m-%d"))

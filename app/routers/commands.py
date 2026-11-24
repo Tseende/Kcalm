@@ -54,7 +54,7 @@ def _target(db: sqlite3.Connection, uid: int):
 async def cmd_today(msg: Message, db: sqlite3.Connection) -> None:
     user = _user(msg, db)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     today = local_today(user["tz"]).isoformat()
     chart = await report.day_chart_bytes(db, user, today)
@@ -67,7 +67,7 @@ async def cmd_invite(msg: Message, db: sqlite3.Connection) -> None:
     """Ссылка-приглашение, остаток приглашений и заморозок. Команда не в списке BOT_COMMANDS: основной вход в меню приложения."""
     user = _user(msg, db)
     if not user or not user["onboarded"]:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     info = referral.summary(db, user, await referral.bot_username(msg.bot))
     link = info["link"]
@@ -105,7 +105,7 @@ async def cmd_weighin(msg: Message, command: CommandObject, db: sqlite3.Connecti
     """Напоминание о взвешивании натощак: /weighin, /weighin 07:00, /weighin пн ср пт, /weighin off."""
     user = _user(msg, db)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     uid = user["id"]
     reminder = repo.due_reminders(db, uid, "weigh")
@@ -123,24 +123,23 @@ async def cmd_weighin(msg: Message, command: CommandObject, db: sqlite3.Connecti
                 if ":" in token:
                     parsed_time = weighin.normalize_time(token)
                     if parsed_time is None:
-                        await msg.answer("Не понял время. Пример: /weighin 07:00")
+                        await msg.answer("Не понял время. Укажи его в формате ЧЧ:ММ, например 07:00.")
                         return
                     local_time = parsed_time
             days = weighin.parse_days(args)
             if args and days is None and not any(":" in t for t in args.split()) and args.strip():
-                await msg.answer("Не понял. Примеры: /weighin 07:00, /weighin пн ср пт, "
-                                 "/weighin ежедневно, /weighin off")
+                await msg.answer("Не понял расписание. Выбери время и дни в настройках приложения.")
                 return
         repo.set_reminder(db, uid, "weigh", local_time, bool(enabled), days)
         reminder = repo.due_reminders(db, uid, "weigh")
     if not reminder:
-        await msg.answer("Напоминание не настроено. Включить: /weighin on")
+        await msg.answer("Напоминание не настроено. Его можно включить в настройках приложения.")
         return
     state = "включено" if reminder["enabled"] else "выключено"
     await msg.answer(
         f"⚖️ Напоминание о взвешивании {state}: {reminder['local_time']}, "
         f"{weighin.reminder_days_label(reminder['days'])}.\n"
-        "Изменить: /weighin 07:00, /weighin пн ср пт, /weighin off.\n"
+        "Изменить расписание можно в настройках приложения.\n"
         "Как взвешиваться: утром после туалета, до еды и воды, в одно время и в одной одежде. "
         "Замеры не натощак бот в тренд не берёт, пока есть утренние.")
 
@@ -150,7 +149,7 @@ async def cmd_foods(msg: Message, db: sqlite3.Connection) -> None:
     """Личные пресеты: что вы едите чаще всего и какую порцию бот помнит."""
     user = _user(msg, db)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     rows = db.execute(
         """SELECT f.name_ru, uf.default_grams, uf.times_used FROM user_foods uf
@@ -167,14 +166,14 @@ async def cmd_foods(msg: Message, db: sqlite3.Connection) -> None:
               [[r["name_ru"], str(r["times_used"]),
                 f"{r['default_grams']:g} г" if r["default_grams"] else "—"] for r in rows],
               align="lrr")
-    await rich.answer(msg, doc.text("Чтобы сбросить запомненные порции: /foods_reset"))
+    await rich.answer(msg, doc.text("Здесь показаны продукты и порции, которые ты записывал чаще всего."))
 
 
 @router.message(Command("foods_reset"))
 async def cmd_foods_reset(msg: Message, db: sqlite3.Connection) -> None:
     user = _user(msg, db)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     db.execute("UPDATE user_foods SET default_grams=NULL WHERE user_id=?", (user["id"],))
     db.execute("DELETE FROM food_aliases WHERE user_id=?", (user["id"],))
@@ -187,7 +186,7 @@ async def cmd_water(msg: Message, command: CommandObject, db: sqlite3.Connection
     """/water — сколько выпито; /water 300 или /water 2 стакана — добавить; /water undo — отменить последнюю."""
     user = _user(msg, db)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     uid = user["id"]
     arg = (command.args or "").strip()
@@ -196,8 +195,7 @@ async def cmd_water(msg: Message, command: CommandObject, db: sqlite3.Connection
         total = repo.day_water_ml(db, uid, today)
         await msg.answer(
             f"💧 Сегодня {total} / {watersvc.goal_for(db, user)} мл.\n"
-            "Добавить: просто напиши «выпил 2 стакана воды» или запиши голосовое. "
-            "Либо /water 300, /water 0.5 л. Отменить последнюю: /water undo."
+            "Добавить воду или удалить запись можно в приложении."
         )
         return
     if arg.lower() in ("undo", "отмена", "отменить"):
@@ -211,8 +209,8 @@ async def cmd_water(msg: Message, command: CommandObject, db: sqlite3.Connection
         return
     ml = water.parse_amount(arg)
     if ml is None or not water.MIN_ML <= ml <= water.MAX_ML:
-        await msg.answer(f"Не понял объём. Примеры: /water 300, /water 2 стакана, "
-                         f"/water 0.5 л (от {water.MIN_ML} до {water.MAX_ML} мл за раз).")
+        await msg.answer(f"Не понял объём. Например: 300 мл, 2 стакана или 0.5 л "
+                         f"(от {water.MIN_ML} до {water.MAX_ML} мл за раз).")
         return
     water_id, text = watersvc.log_water(db, user, ml, "command", arg)
     await msg.answer(text, reply_markup=watersvc.undo_keyboard(water_id))
@@ -223,7 +221,7 @@ async def cmd_water(msg: Message, command: CommandObject, db: sqlite3.Connection
 async def cmd_week(msg: Message, db: sqlite3.Connection) -> None:
     user = _user(msg, db)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     today = local_today(user["tz"])
     chart = await report.week_chart_bytes(db, user, today)
@@ -236,7 +234,7 @@ async def cmd_week(msg: Message, db: sqlite3.Connection) -> None:
 async def cmd_weight(msg: Message, db: sqlite3.Connection) -> None:
     user = _user(msg, db)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     uid = user["id"]
     today = local_today(user["tz"])
@@ -280,11 +278,11 @@ async def cmd_body(msg: Message, db: sqlite3.Connection) -> None:
     """Состав тела по последнему замеру Picooc: показатели, динамика, как их читать."""
     user = _user(msg, db)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     if user["care_mode"]:
         await msg.answer("В осторожном режиме я не показываю цифры состава тела, чтобы они не "
-                         "тревожили. Если хочешь их увидеть: /care off.")
+                         "тревожили.")
         return
     rows = repo.latest_body_rows(db, user["id"], 2)
     if not rows:
@@ -309,7 +307,7 @@ async def cmd_body(msg: Message, db: sqlite3.Connection) -> None:
 async def cmd_sleep(msg: Message, db: sqlite3.Connection) -> None:
     user = _user(msg, db)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     uid = user["id"]
     today = local_today(user["tz"])
@@ -346,7 +344,7 @@ async def cmd_sleep(msg: Message, db: sqlite3.Connection) -> None:
 async def cmd_undo(msg: Message, db: sqlite3.Connection) -> None:
     user = _user(msg, db)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     meal = repo.get_last_meal(db, user["id"])
     if not meal:
@@ -366,12 +364,13 @@ async def cmd_undo(msg: Message, db: sqlite3.Connection) -> None:
 async def cmd_add(msg: Message, db: sqlite3.Connection, command: CommandObject | None = None) -> None:
     text = (command.args if command else None) or ""
     if not text:
-        await msg.answer("Формат: /add <что съел> [граммы]. Например: /add творог 200")
+        from app.routers import menu
+        await menu.send_app(msg, "Добавь еду в приложении: фото, голосом или текстом.")
         return
     from app.routers.intake import _process_meal
     user = _user(msg, db)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     await _process_meal(msg, db, user, text=text, photo_path=None, source="manual")
 
@@ -380,11 +379,11 @@ async def cmd_add(msg: Message, db: sqlite3.Connection, command: CommandObject |
 async def cmd_target(msg: Message, db: sqlite3.Connection) -> None:
     user = _user(msg, db)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     row = repo.current_target(db, user["id"])
     if not row:
-        await msg.answer("Цель ещё не считалась — заверши онбординг /start.")
+        await msg.answer("Цель ещё не рассчитана — заверши настройку профиля в приложении.")
         return
     await msg.answer(
         f"🎯 Цель: {row['kcal_target']} ккал/день · Б {row['protein_g']:g} / "
@@ -398,7 +397,7 @@ async def cmd_target(msg: Message, db: sqlite3.Connection) -> None:
 async def cmd_settings(msg: Message, db: sqlite3.Connection, command: CommandObject | None = None) -> None:
     user = _user(msg, db)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     arg = (command.args if command else "") or ""
     if arg.startswith("cutoff="):
@@ -423,8 +422,9 @@ async def cmd_settings(msg: Message, db: sqlite3.Connection, command: CommandObj
         return
     rems = db.execute("SELECT kind, local_time, enabled FROM reminders WHERE user_id=?",
                       (user["id"],)).fetchall()
-    lines = [f"cutoff: {user['eating_cutoff']} (менять: /settings cutoff=20:30)",
-             f"tz: {user['tz']} (менять: /settings tz=Europe/Minsk)",
+    lines = [f"Время последнего приёма пищи: {user['eating_cutoff']}",
+             f"Часовой пояс: {user['tz']}",
+             "Изменить можно в настройках приложения.",
              "Напоминания:"]
     for r in rems:
         lines.append(f"• {r['kind']} — {r['local_time']} — {'вкл' if r['enabled'] else 'выкл'}")
@@ -435,7 +435,7 @@ async def cmd_settings(msg: Message, db: sqlite3.Connection, command: CommandObj
 async def cmd_export(msg: Message, db: sqlite3.Connection) -> None:
     user = _user(msg, db)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     uid = user["id"]
     buf = io.StringIO()
@@ -487,7 +487,7 @@ async def cmd_sync_scale(msg: Message, db: sqlite3.Connection) -> None:
     """Ручной синк облака Picooc (неофициальный API). Скриншоты остаются рабочими."""
     user = _user(msg, db)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     from app.adapters.picooc import PicoocError
     from app.services.scale import sync_picooc
@@ -510,7 +510,7 @@ async def cmd_sync_scale(msg: Message, db: sqlite3.Connection) -> None:
     await status.edit_text(
         f"⚖️ Записал {res['saved']} замеров за {res['window_days']} дней.\n"
         f"Последний: {res['newest_date']} — {res['newest_weight']} кг.\n"
-        "Тренд и среднее: /weight"
+        "Тренд и среднее — в разделе «Анализ» приложения."
     )
 
 

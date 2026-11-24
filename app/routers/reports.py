@@ -56,7 +56,7 @@ async def cb_ask(cb: CallbackQuery, state: FSMContext, db: sqlite3.Connection) -
         await cb.answer()
         return
     if not _user(db, cb.from_user.id):
-        await cb.answer("Сначала настрой профиль: /start", show_alert=True)
+        await cb.answer("Сначала заполни профиль в приложении.", show_alert=True)
         return
     await state.set_state(Ask.question)
     await state.update_data(kind=kind, until=time.time() + ASK_TTL_S)

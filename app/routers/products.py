@@ -130,7 +130,7 @@ def list_kb(rows) -> InlineKeyboardMarkup | None:
 async def cmd_products(msg: Message, db: sqlite3.Connection) -> None:
     user = repo.get_user_by_tg(db, msg.from_user.id)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     rows = repo.list_products(db, user["id"])
     await msg.answer(list_text(rows), reply_markup=list_kb(rows))
@@ -147,7 +147,7 @@ async def add_from_text(msg: Message, db: sqlite3.Connection, text: str) -> None
     """«добавь продукт: ...»: полные данные сохраняются сразу, неполные уходят в карточку."""
     user = repo.get_user_by_tg(db, msg.from_user.id)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     draft = await prodsvc.parse_text(db, user, text)
     if draft is None:
@@ -174,7 +174,7 @@ async def _save_and_reply(msg: Message, db: sqlite3.Connection, user, draft: dic
 def _saved_text(row, warnings: list[str]) -> str:
     name = esc(row["name_ru"]) + (f" · {esc(row['brand'])}" if row["brand"] else "")
     lines = [f"💾 Сохранил: <b>{name}</b>, {esc(dom.describe_per100(row))} на 100 г.",
-             "Теперь буду считать по этим числам. Список и удаление: /products."]
+             "Теперь буду считать по этим числам."]
     lines += [f"⚠️ {esc(w)}" for w in warnings]
     return "\n".join(lines)
 
@@ -331,7 +331,7 @@ async def cb_item_save(cb: CallbackQuery, db: sqlite3.Connection) -> None:
     """«💾 В мои продукты» под позицией записи еды."""
     user = _user(cb, db)
     if not user:
-        await cb.answer("Сначала /start", show_alert=True)
+        await cb.answer("Сначала заполни профиль в приложении.", show_alert=True)
         return
     try:
         pid, warnings = prodsvc.product_from_item(db, user, int(cb.data.split(":")[1]))
@@ -347,7 +347,7 @@ async def cb_barcode_save(cb: CallbackQuery, db: sqlite3.Connection) -> None:
     """«💾 Сохранить себе» под продуктом, найденным по штрихкоду."""
     user = _user(cb, db)
     if not user:
-        await cb.answer("Сначала /start", show_alert=True)
+        await cb.answer("Сначала заполни профиль в приложении.", show_alert=True)
         return
     try:
         pid, warnings = prodsvc.product_from_food(db, user, int(cb.data.split(":")[1]))

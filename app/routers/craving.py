@@ -105,7 +105,7 @@ async def maybe_handle(msg: Message, db: sqlite3.Connection, user, text: str,
 async def cmd_craving(msg: Message, command: CommandObject, db: sqlite3.Connection) -> None:
     user = _user(db, msg.from_user.id)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     open_event = repo.open_craving(db, user["id"], dom.EPISODE_WINDOW_MIN)
     text = (command.args or "").strip()
@@ -128,7 +128,7 @@ async def cmd_talk(msg: Message, command: CommandObject, db: sqlite3.Connection)
     """Просто поговорить — о еде, срывах, настроении — в любое время, не только ночью."""
     user = _user(db, msg.from_user.id)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     text = (command.args or "").strip()
     open_event = repo.open_craving(db, user["id"], dom.EPISODE_WINDOW_MIN)

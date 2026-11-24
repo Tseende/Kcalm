@@ -31,11 +31,11 @@ WELCOME_IMAGES = Path(__file__).resolve().parent / "assets" / "topic_welcome"
 WELCOME_VERSION = 1
 INTRO = {
     "diary": "📒 Здесь будут напоминания, карточка дня и красивые отчёты о твоём прогрессе. "
-             "Еду и воду записывай в приложении: /app. "
-             "Для разговоров о самочувствии и желании переесть открой «💬 Поговорить» или напиши /talk.",
+             "Еду и воду записывай в приложении. "
+             "Для разговоров о самочувствии и желании переесть открой «💬 Поговорить».",
     "support": "💬 Хочется переесть, тревожно или трудно понять, что чувствуешь? "
                "Напиши или запиши голосовое: вместе разберём, что происходит, и найдём посильный шаг. "
-               "Без осуждения и запретов. Здесь можно просто поговорить; еду записывай в приложении: /app.",
+               "Без осуждения и запретов. Здесь можно просто поговорить; еду записывай в приложении.",
 }
 _forced: ContextVar[str | None] = ContextVar("topic_destination", default=None)
 
@@ -207,15 +207,18 @@ class Topics:
         return topics
 
     async def send_welcome(self, bot, chat_id: int, kind: str, thread: int) -> None:
+        from app.routers.menu import main_kb
+        kb = main_kb()
         image = WELCOME_IMAGES / f"{kind}.png"
         if image.is_file():
             try:
                 await bot.send_photo(chat_id, FSInputFile(image), caption=INTRO[kind],
-                                     message_thread_id=thread, disable_notification=True)
+                                     message_thread_id=thread, disable_notification=True, reply_markup=kb)
                 return
             except (TelegramBadRequest, OSError):
                 log.info("Картинка приветствия %s недоступна, отправляю текст", kind, exc_info=True)
-        await bot.send_message(chat_id, INTRO[kind], message_thread_id=thread, disable_notification=True)
+        await bot.send_message(chat_id, INTRO[kind], message_thread_id=thread,
+                               disable_notification=True, reply_markup=kb)
 
     async def redirect_notice(self, bot, msg: Message, support: int) -> None:
         key = (msg.chat.id, msg.message_thread_id)
@@ -272,7 +275,7 @@ class TopicMiddleware(BaseMiddleware):
                 return
             if (topics and not isinstance(event, Message)
                     and (getattr(event, "data", "") or "").startswith(("meal_", "bc_"))):
-                await event.answer("Еду теперь записываем и уточняем в приложении: /app", show_alert=True)
+                await event.answer("Еду теперь записываем и уточняем в приложении", show_alert=True)
                 return
             result = await handler(event, data)
             profile = repo.get_user_by_tg(self.service.db, user.id)

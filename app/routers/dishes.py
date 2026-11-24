@@ -46,7 +46,7 @@ def list_kb(rows) -> InlineKeyboardMarkup | None:
 async def cmd_dishes(msg: Message, db: sqlite3.Connection) -> None:
     user = repo.get_user_by_tg(db, msg.from_user.id)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     rows = repo.list_dishes(db, user["id"])
     await msg.answer(list_text(rows), reply_markup=list_kb(rows))
@@ -61,14 +61,14 @@ async def add_from_text(msg: Message, db: sqlite3.Connection, text: str) -> None
     """«добавь посуду: ...» — разобрать фразу и сохранить."""
     user = repo.get_user_by_tg(db, msg.from_user.id)
     if not user:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return
     spec = dishdom.parse_dish_text(text)
     if spec is None:
         await msg.answer(esc("Не понял, что за посуда. " + dishdom.HELP_TEXT))
         return
     if len(repo.list_dishes(db, user["id"])) >= MAX_DISHES:
-        await msg.answer(f"Посуды уже {MAX_DISHES}. Удали ненужную в /dishes.")
+        await msg.answer(f"Посуды уже {MAX_DISHES}. Удали ненужную посуду в приложении.")
         return
     dish_id = repo.create_dish(db, user["id"], **spec)
     dish = repo.get_dish(db, user["id"], dish_id)

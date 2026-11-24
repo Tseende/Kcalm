@@ -221,3 +221,66 @@ async def test_final_draft_message_is_not_converted_to_rich(db, monkeypatch):
     assert any(m.__api_method__ == 'sendMessageDraft' for m in session.requests)
     assert session.sent()[-1].__api_method__ == 'sendMessage'
     assert session.sent()[-1].text == 'Я рядом. Расскажи, как ты сейчас?'
+
+
+async def test_long_sentence_streams_before_punctuation_and_coalesces_bursts():
+    """A sentence without punctuation must already be visible while generation continues."""
+    from types import SimpleNamespace
+    import time
+
+    sent = asyncio.Queue()
+    async def send_message_draft(**kwargs):
+        sent.put_nowait((kwargs['text'], time.monotonic()))
+    msg = SimpleNamespace(bot=SimpleNamespace(send_message_draft=send_message_draft),
+                          chat=SimpleNamespace(id=1), message_thread_id=102)
+    draft = streaming.Draft(msg)
+    try:
+        await draft('Давай вместе')
+        thinking, started = await sent.get()
+        assert thinking == ''
+        first, first_at = await asyncio.wait_for(sent.get(), timeout=0.6)
+        assert first == 'Давай вместе'
+        assert first_at - started >= streaming.UPDATE_INTERVAL - 0.01
+        # Many model deltas arrive during the next interval: deliver the freshest prefix.
+        for text in ('Давай вместе раз', 'Давай вместе разберём', 'Давай вместе разберём это'):
+            await draft(text)
+        second, second_at = await asyncio.wait_for(sent.get(), timeout=0.6)
+        assert second == 'Давай вместе разберём это'
+        assert second_at - first_at >= streaming.UPDATE_INTERVAL - 0.01
+        # No redundant draft follows the coalesced deltas.
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(sent.get(), timeout=streaming.UPDATE_INTERVAL * 1.5)
+    finally:
+        await draft.close()
+    assert draft._worker.done()
+
+
+async def test_telegram_throttle_resumes_with_freshest_prefix(monkeypatch):
+    from types import SimpleNamespace
+    import time
+    from aiogram.exceptions import TelegramRetryAfter
+    from aiogram.methods import SendMessageDraft
+
+    monkeypatch.setattr(streaming, 'UPDATE_INTERVAL', 0.01)
+    calls, delivered = [], asyncio.Queue()
+    async def send_message_draft(**kwargs):
+        calls.append((kwargs['text'], time.monotonic()))
+        if len(calls) == 2:
+            raise TelegramRetryAfter(SendMessageDraft(**kwargs), 'slow down', retry_after=1)
+        delivered.put_nowait(kwargs['text'])
+    msg = SimpleNamespace(bot=SimpleNamespace(send_message_draft=send_message_draft),
+                          chat=SimpleNamespace(id=1), message_thread_id=102)
+    draft = streaming.Draft(msg)
+    try:
+        await draft('Давай')
+        assert await delivered.get() == ''
+        # Wait until the rejected update has happened, then queue a newer prefix.
+        async with asyncio.timeout(0.5):
+            while len(calls) < 2:
+                await asyncio.sleep(0.005)
+        await draft('Давай разберём вместе')
+        assert await asyncio.wait_for(delivered.get(), timeout=1.5) == 'Давай разберём вместе'
+        assert calls[2][1] - calls[1][1] >= 1
+        assert draft.active and not draft.disabled
+    finally:
+        await draft.close()

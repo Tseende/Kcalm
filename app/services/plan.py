@@ -86,8 +86,7 @@ def add_user_rule(db: sqlite3.Connection, user_id: int, text: str) -> str:
     if_text, then_text, remind = parsed
     rule_id = repo.add_rule(db, user_id, if_text, then_text, None, remind)
     if rule_id is None:
-        return (f"Не получилось: либо такое правило уже есть, либо их уже {repo.MAX_RULES}. "
-                "Удалить лишнее: /plan del 2")
+        return f"Не получилось: либо такое правило уже есть, либо их уже {repo.MAX_RULES}."
     return f"🧭 Добавил: если {esc(if_text)}, то {esc(then_text)}" + \
         (f" (напомню в {remind})" if remind else "")
 
@@ -119,7 +118,7 @@ def add_preset(db: sqlite3.Connection, user_id: int, index: int) -> str:
         return "Такого готового правила нет."
     category, if_text, then_text, remind = PRESETS[index]
     if repo.add_rule(db, user_id, if_text, then_text, category, remind) is None:
-        return "Это правило уже есть или лимит исчерпан (/plan)."
+        return "Это правило уже есть или лимит исчерпан."
     return f"🧭 Добавил: если {esc(if_text)}, то {esc(then_text)}"
 
 
@@ -131,9 +130,6 @@ def overview(db: sqlite3.Connection, user_id: int) -> str:
         lines += ["", *[format_rule(r, i) for i, r in enumerate(rules, 1)]]
     else:
         lines += ["", "Пока пусто."]
-    lines += ["", "Добавить своё: /plan если тянет сладкого после ужина, то чай и 15 минут",
-              "С напоминанием: /plan в 21:30 если ..., то ...",
-              "Удалить: /plan del 2"]
     return "\n".join(lines)
 
 
@@ -172,5 +168,5 @@ def rule_from_lesson(db: sqlite3.Connection, user_id: int, event: sqlite3.Row) -
     category = event["category"] if event["category"] != "unknown" else None
     if_text = IF_BY_CATEGORY.get(event["category"], IF_BY_CATEGORY["unknown"])
     if repo.add_rule(db, user_id, if_text, lesson[:MAX_LEN], category, None) is None:
-        return "Такое правило уже есть или лимит исчерпан (/plan)."
-    return f"🧭 Добавил правило: если {esc(if_text)}, то {esc(lesson)}. Смотреть: /plan."
+        return "Такое правило уже есть или лимит исчерпан."
+    return f"🧭 Добавил правило: если {esc(if_text)}, то {esc(lesson)}."

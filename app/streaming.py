@@ -4,14 +4,13 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import logging
-import re
 import secrets
 import time
 from contextlib import suppress
 from functools import wraps
 
 from aiogram.client.session.middlewares.base import BaseRequestMiddleware
-from aiogram.exceptions import TelegramAPIError
+from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
 from aiogram.methods import EditMessageText, SendMessage
 from aiogram.types import Message
 
@@ -19,7 +18,7 @@ from app.config import get_config
 from app.llm import client as llm
 
 log = logging.getLogger(__name__)
-UPDATE_INTERVAL = 0.7
+UPDATE_INTERVAL = 0.2
 KEEPALIVE = 4.0
 _current = contextvars.ContextVar("telegram_reply_stream", default=None)
 finalizing = contextvars.ContextVar("telegram_reply_finalizing", default=False)
@@ -45,6 +44,11 @@ class Draft:
                 chat_id=self.msg.chat.id, message_thread_id=self.msg.message_thread_id,
                 draft_id=self.draft_id, text=text[:4000], parse_mode=None, can_stop=False)
             self._last_at = time.monotonic()
+        except TelegramRetryAfter as exc:
+            # Сохраняем самый свежий текст и ждём разрешённого Telegram времени.
+            # Ограничение частоты не должно выключать поток до конца ответа.
+            self._last_at = time.monotonic() + exc.retry_after
+            self._event.set()
         except TelegramAPIError:
             self.disabled = True
             log.info("Черновики недоступны, ответ придёт обычным сообщением", exc_info=True)
@@ -57,11 +61,10 @@ class Draft:
             await self._send("")  # нативный Thinking… вместо искусственного текста
             if self.active:
                 self._worker = asyncio.create_task(self._run())
-        # Показываем законченные фразы: обрывок числа или слова не мелькает в черновике.
-        ends = list(re.finditer(r"[.!?…](?:\s|$)", text))
-        preview = text[:ends[-1].start() + 1] if ends else ""
-        if preview != self.latest:
-            self.latest = preview
+        # Проверенный префикс показываем сразу, не ждём пунктуации: длинное предложение
+        # иначе появляется целым рывком. Telegram анимирует обновления одного draft_id.
+        if text != self.latest:
+            self.latest = text
             self._event.set()
 
     async def _run(self):
@@ -69,10 +72,11 @@ class Draft:
             while self.active:
                 with suppress(asyncio.TimeoutError):
                     await asyncio.wait_for(self._event.wait(), timeout=KEEPALIVE)
-                self._event.clear()
                 pause = UPDATE_INTERVAL - (time.monotonic() - self._last_at)
                 if pause > 0:
                     await asyncio.sleep(pause)
+                # Все дельты, пришедшие во время паузы, объединяем в одно обновление.
+                self._event.clear()
                 if self.active:
                     await self._send(self.latest)
         except asyncio.CancelledError:

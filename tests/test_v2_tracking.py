@@ -476,7 +476,7 @@ async def test_chat_sleep_not_swallowed_as_caption_of_fresh_photo(db, monkeypatc
 async def test_chat_tracking_needs_onboarding(db):
     bot, dp, session = build(db)
     await send(dp, bot, "спал 7 часов")
-    assert any("/start" in t for t in session.texts)
+    assert any("заполни профиль в приложении" in t for t in session.texts)
     assert db.execute("SELECT COUNT(*) c FROM sleep_sessions").fetchone()["c"] == 0
 
 

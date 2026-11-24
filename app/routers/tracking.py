@@ -27,7 +27,7 @@ async def log_from_text(msg: Message, db: sqlite3.Connection, text: str) -> bool
     """Записать всё, что нашлось в фразе: сон, шаги, тренировку. True — что-то записано."""
     user = repo.get_user_by_tg(db, msg.from_user.id)
     if not user or not user["onboarded"]:
-        await msg.answer("Сначала настрой профиль: /start")
+        await msg.answer("Сначала заполни профиль в приложении.")
         return True
     today = local_today(user["tz"])
     lines: list[str] = []
