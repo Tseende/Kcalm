@@ -4,12 +4,9 @@
 """
 from __future__ import annotations
 
-import json
 import os
-import sqlite3
 import sys
 import tempfile
-from datetime import date, datetime, timedelta
 from pathlib import Path
 
 # Позволяет запускать и `python -m app.check`, и `python app/check.py`.
@@ -254,7 +251,6 @@ def t_migrations():
         v2 = migrate(conn)
         assert v1 == v2
         from app.storage import repo
-        from app.domain.nutrition import FoodRef
         uid = repo.create_user(conn, 42, height_cm=180.0)
         u = repo.get_user_by_tg(conn, 42)
         assert u["height_cm"] == 180.0
@@ -303,7 +299,6 @@ def t_formatting():
     from app.services.food import format_card
     from app.domain.nutrition import (FoodRef, IngredientEstimate, calculate_meal)
     items = []
-    refs = []
     for i in range(40):
         it = IngredientEstimate(name=f"dish{i}", grams_min=100, grams_max=200)
         ref = FoodRef(name_ru=f"блюдо {i}", name_en=f"dish {i}", kcal_100g=200,

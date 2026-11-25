@@ -311,22 +311,6 @@ def product_from_food(db: sqlite3.Connection, user, food_id: int
     name, brand = (m.group("name"), m.group("brand")) if m else (label, None)
     draft = {"name": name, "brand": brand, "kcal": round(row["kcal_100g"]),
              "protein": row["protein_100g"], "fat": row["fat_100g"],
-             "carbs": row["carbs_100g"],
+             "carbs": row["carbs_100g"], "default_grams": row["default_grams"],
              "nutrition_source": row["nutrition_source"] or ("off" if row["source"] == "off" else None)}
     return save_product(db, user, draft, barcode=row["barcode"])
-
-
-# ------------------------------------------------------------------ форма API
-
-def product_dict(row) -> dict:
-    """Строка foods → Product из docs/V2_API.md."""
-    def get(key):
-        try:
-            return row[key]
-        except (KeyError, IndexError):
-            return None
-    return {"id": row["id"], "name": row["name_ru"], "brand": get("brand"),
-            "kcal": row["kcal_100g"], "protein": row["protein_100g"], "fat": row["fat_100g"],
-            "carbs": row["carbs_100g"], "default_grams": get("default_grams"),
-            "unit_name": get("unit_name"), "unit_grams": get("unit_grams"),
-            "barcode": get("barcode"), "times_used": get("times_used") or 0}

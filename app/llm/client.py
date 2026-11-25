@@ -13,7 +13,7 @@ from contextlib import contextmanager
 
 import httpx
 
-from app.config import get_config, mask_secret
+from app.config import get_config
 
 log = logging.getLogger(__name__)
 

@@ -887,16 +887,15 @@ def get_meal(conn: sqlite3.Connection, user_id: int, meal_id: int) -> sqlite3.Ro
 def _scaled_values(item: sqlite3.Row, new_grams: float) -> tuple[int, float, float, float]:
     """Значения позиции при новых граммах: от базы на 100 г (у старых строк — пропорционально)."""
     if item["kcal_100g"] is not None:
-        # база на 100 г известна: считаем от неё, как в calculate_item
         scale = new_grams / 100.0
-        kcal = max(0, round(item["kcal_100g"] * scale / 5) * 5)
-        return (kcal, round((item["protein_100g"] or 0) * scale, 1),
-                round((item["fat_100g"] or 0) * scale, 1),
-                round((item["carbs_100g"] or 0) * scale, 1))
-    old = item["grams"]
-    ratio = new_grams / old if old else 0
-    return (max(0, round(item["kcal"] * ratio / 5) * 5), round(item["protein_g"] * ratio, 1),
-            round(item["fat_g"] * ratio, 1), round(item["carbs_g"] * ratio, 1))
+        kcal, protein, fat, carbs = (item["kcal_100g"], item["protein_100g"],
+                                     item["fat_100g"], item["carbs_100g"])
+    else:
+        scale = new_grams / item["grams"] if item["grams"] else 0
+        kcal, protein, fat, carbs = item["kcal"], item["protein_g"], item["fat_g"], item["carbs_g"]
+    step = 1 if is_exact_item(item) else 5
+    return (max(0, round(kcal * scale / step) * step), round((protein or 0) * scale, 1),
+            round((fat or 0) * scale, 1), round((carbs or 0) * scale, 1))
 
 
 def edit_item_grams(conn: sqlite3.Connection, item_id: int, new_grams: float) -> None:
@@ -906,6 +905,7 @@ def edit_item_grams(conn: sqlite3.Connection, item_id: int, new_grams: float) ->
         if not item:
             return
         old = item["grams"]
+        old_total = conn.execute("SELECT kcal_total FROM meals WHERE id=?", (item["meal_id"],)).fetchone()[0]
         kcal, protein, fat, carbs = _scaled_values(item, new_grams)
         conn.execute(
             """UPDATE meal_items SET grams=?, kcal=?, protein_g=?, fat_g=?, carbs_g=?,
@@ -913,6 +913,7 @@ def edit_item_grams(conn: sqlite3.Connection, item_id: int, new_grams: float) ->
             (new_grams, kcal, protein, fat, carbs, item_id),
         )
         _resum_meal(conn, item["meal_id"])
+        _refresh_range(conn, item["meal_id"], old_total)
         conn.execute("INSERT INTO meal_edits (meal_item_id, field, old_value, new_value) "
                      "VALUES (?,?,?,?)", (item_id, "grams", str(old), str(new_grams)))
         conn.execute(
@@ -1012,10 +1013,9 @@ def edit_item_manual(conn: sqlite3.Connection, item_id: int, *, name: str | None
                              "VALUES (?,?,?,?)", (item_id, field, str(item[col]), str(cols[col])))
         if grams is not None or macros is not None:
             _resum_meal(conn, meal_id)
+            _refresh_range(conn, meal_id, old_total)
         else:
             sync_meal_water(conn, meal_id)
-        if macros is not None:
-            _refresh_range(conn, meal_id, old_total)
         conn.execute(
             """INSERT INTO audit_events (user_id, entity_type, entity_id, event_type,
                before_json, after_json) VALUES (?, 'meal_item', ?, 'edit_manual', ?, ?)""",
@@ -1766,16 +1766,18 @@ def last_meal_time(conn: sqlite3.Connection, user_id: int, local_date: str) -> s
 # ----------------------------------------------------------- Open Food Facts
 
 def save_off_food(conn: sqlite3.Connection, code: str, name_ru: str, name_en: str,
-                  kcal: float, protein: float, fat: float, carbs: float) -> int:
+                  kcal: float, protein: float, fat: float, carbs: float,
+                  serving_g: float | None = None) -> int:
     """Продукт OFF в локальную базу (кэш по штрихкоду); повторный вызов обновляет значения."""
     conn.execute(
         """INSERT INTO foods (name_ru, name_en, kcal_100g, protein_100g, fat_100g, carbs_100g,
-           source, barcode, external_id) VALUES (?,?,?,?,?,?, 'off', ?, ?)
+           source, barcode, external_id, default_grams) VALUES (?,?,?,?,?,?, 'off', ?, ?, ?)
            ON CONFLICT(source, external_id) DO UPDATE SET
              name_ru=excluded.name_ru, name_en=excluded.name_en, kcal_100g=excluded.kcal_100g,
              protein_100g=excluded.protein_100g, fat_100g=excluded.fat_100g,
-             carbs_100g=excluded.carbs_100g, barcode=excluded.barcode""",
-        (name_ru, name_en, kcal, protein, fat, carbs, code, f"off:{code}"),
+             carbs_100g=excluded.carbs_100g, barcode=excluded.barcode,
+             default_grams=COALESCE(excluded.default_grams, foods.default_grams)""",
+        (name_ru, name_en, kcal, protein, fat, carbs, code, f"off:{code}", serving_g),
     )
     conn.commit()
     return conn.execute("SELECT id FROM foods WHERE source='off' AND external_id=?",

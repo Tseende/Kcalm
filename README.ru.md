@@ -121,8 +121,14 @@ python3.11 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 cp .env.example .env    # TELEGRAM_BOT_TOKEN, OPENROUTER_API_KEY, ALLOWED_TG_IDS
 .venv/bin/python -m app.check    # проверки без сети
-.venv/bin/python -m pytest -q    # тесты
 .venv/bin/python -m app.bot      # запуск
+```
+
+Для запуска тестов установите зависимости разработки.
+
+```bash
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/python -m pytest -q
 ```
 
 Посмотреть Mini App без бота и ключей, на демо-данных:

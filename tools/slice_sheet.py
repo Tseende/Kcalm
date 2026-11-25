@@ -2,6 +2,7 @@
 
 python tools/slice_sheet.py sheet.png name1 name2 name3 name4 name5 name6 [--out app/web/static/img/food]
 Имена — по порядку: слева направо, сверху вниз.
+Для этого инструмента дополнительно нужен SciPy (`python -m pip install scipy`).
 """
 from __future__ import annotations
 

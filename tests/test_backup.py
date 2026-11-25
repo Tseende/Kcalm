@@ -4,6 +4,8 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from app import backup
 from app.db import connect, migrate
 from app.storage import repo
@@ -37,21 +39,19 @@ def test_verify_rejects_incomplete_or_corrupt_backup(tmp_path):
     assert not backup.verify_restore(old)
     garbage = tmp_path / "garbage.db"
     garbage.write_bytes(b"not a database" * 100)
-    try:
-        assert not backup.verify_restore(garbage)
-    except sqlite3.DatabaseError:
-        pass                                           # тоже «не прошёл»
+    assert not backup.verify_restore(garbage)
 
 
 def test_rotation_keeps_seven(tmp_path):
-    db = tmp_path / "health.db"
+    # Исходная БД может лежать в той же папке и подходить под шаблон имён копий.
+    db = tmp_path / "health_00000000.db"
     _make_db(db)
-    out = tmp_path / "bk"
-    out.mkdir()
+    out = tmp_path
     for i in range(10):
         (out / f"health_2026010{i % 10}_000000.db").write_bytes(b"x")
     backup.backup_db(str(db), str(out))
-    assert len(list(out.glob("health_*.db"))) == 7
+    assert db.exists()
+    assert len(set(out.glob("health_*.db")) - {db}) == 7
 
 
 def test_photos_copied_incrementally(tmp_path):
@@ -61,5 +61,38 @@ def test_photos_copied_incrementally(tmp_path):
     (photos / "empty.jpg").write_bytes(b"")          # битый нулевой файл не копируем
     assert backup.backup_photos(str(photos), str(tmp_path / "bk")) == 1
     assert backup.backup_photos(str(photos), str(tmp_path / "bk")) == 0   # повтор ничего не копирует
-    (photos / "b.jpg").write_bytes(b"456")
+    (photos / "dishes").mkdir()
+    (photos / "dishes" / "a.jpg").write_bytes(b"plate")
     assert backup.backup_photos(str(photos), str(tmp_path / "bk")) == 1
+    saved = tmp_path / "bk" / "photos"
+    assert (saved / "a.jpg").read_bytes() == b"123"
+    assert (saved / "dishes" / "a.jpg").read_bytes() == b"plate"
+    (saved / "dishes" / "a.jpg").write_bytes(b"p")
+    assert backup.backup_photos(str(photos), str(tmp_path / "bk")) == 1
+    assert (saved / "dishes" / "a.jpg").read_bytes() == b"plate"
+
+
+def test_missing_db_cannot_create_an_empty_source_or_rotate_backups(tmp_path):
+    db = tmp_path / "missing.db"
+    out = tmp_path / "bk"
+    out.mkdir()
+    old = [out / f"health_2026010{i}_000000.db" for i in range(1, 8)]
+    for path in old:
+        path.touch()
+    with pytest.raises((FileNotFoundError, sqlite3.OperationalError)):
+        backup.backup_db(str(db), str(out))
+    assert not db.exists()
+    assert sorted(out.iterdir()) == old
+
+
+def test_failed_restore_check_preserves_previous_snapshots(tmp_path):
+    db = tmp_path / "health.db"
+    db.touch()  # SQLite открывается, схема дневника отсутствует.
+    out = tmp_path / "bk"
+    out.mkdir()
+    old = [out / f"health_2026010{i}_000000.db" for i in range(1, 8)]
+    for path in old:
+        path.touch()
+    failed = backup.backup_db(str(db), str(out))
+    assert not backup.verify_restore(failed)
+    assert sorted(out.glob("health_*.db")) == old

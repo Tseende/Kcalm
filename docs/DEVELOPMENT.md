@@ -10,7 +10,7 @@ Self-hosted бот для одного человека: еда по фото/г
 ```bash
 cd bot
 python3.11 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+.venv/bin/pip install -r requirements-dev.txt
 cp .env.example .env          # вписать TELEGRAM_BOT_TOKEN и OPENROUTER_API_KEY
 .venv/bin/python -m app.check # 18/18 без сети — каркас жив
 .venv/bin/pytest -q           # ~130 тестов: домен, конвейер, роутеры, Picooc, вода, поддержка, OFF, бэкап

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import csv
 import io
-import json
 import sqlite3
 from datetime import date, datetime, timedelta, timezone
 

@@ -148,7 +148,6 @@ def _food(name_ru: str, grams: float) -> foodsvc.MealUnderstanding:
 
 @pytest.fixture(autouse=True)
 def _fast(monkeypatch):
-    monkeypatch.setattr(intake, "ALBUM_WAIT_SEC", 0)
     from zoneinfo import ZoneInfo
     # фиксированное «сейчас» (14:30), чтобы «обед 13:00» не зависел от часов прогона
     monkeypatch.setattr(foodsvc, "local_now", lambda tz: NOW.replace(tzinfo=ZoneInfo(tz)))

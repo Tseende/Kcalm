@@ -9,6 +9,8 @@ import logging
 import shutil
 import sqlite3
 import sys
+import tempfile
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 
@@ -23,23 +25,31 @@ REQUIRED_TABLES = ("users", "meals", "meal_items", "body_measurements", "water_l
 
 
 def backup_db(db_path: str, backup_dir: str = "./data/backups") -> Path:
-    src = Path(db_path)
-    out_dir = Path(backup_dir)
+    path, _ = _backup_db(Path(db_path), Path(backup_dir))
+    return path
+
+
+def _backup_db(src: Path, out_dir: Path) -> tuple[Path, bool]:
+    src = src.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
-    dest = out_dir / f"health_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
-    conn = sqlite3.connect(src)
-    try:
-        conn.execute("VACUUM INTO ?", (str(dest),))
-    finally:
-        conn.close()
-    copies = sorted(out_dir.glob("health_*.db"))
-    for old in copies[:-ROTATE]:
-        old.unlink()
-    return dest
+    with tempfile.TemporaryDirectory(dir=out_dir) as staging:
+        snapshot = Path(staging) / "snapshot.db"
+        with closing(sqlite3.connect(src.as_uri() + "?mode=ro", uri=True)) as conn:
+            conn.execute("VACUUM INTO ?", (str(snapshot),))
+        ok = verify_restore(snapshot)
+        prefix = "health" if ok else "failed-health"
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        dest = out_dir / f"{prefix}_{stamp}_{Path(staging).name}.db"
+        snapshot.replace(dest)
+    copies = sorted(p for p in out_dir.glob(f"{prefix}_*.db") if p.resolve() != src)
+    keep = ROTATE if ok else 1
+    for old in copies[:-keep]:
+        old.unlink(missing_ok=True)
+    return dest, ok
 
 
 def backup_photos(photos_dir: str, backup_dir: str = "./data/backups") -> int:
-    """Скопировать новые фото (имя файла = хэш содержимого, поэтому достаточно «нет такого»).
+    """Скопировать фото еды и посуды, если копия отсутствует или отличается размером.
     Возвращает число скопированных файлов."""
     src = Path(photos_dir)
     if not src.is_dir():
@@ -47,10 +57,17 @@ def backup_photos(photos_dir: str, backup_dir: str = "./data/backups") -> int:
     dest = Path(backup_dir) / "photos"
     dest.mkdir(parents=True, exist_ok=True)
     copied = 0
-    for photo in src.glob("*.jpg"):
-        target = dest / photo.name
-        if photo.stat().st_size and (not target.exists() or target.stat().st_size == 0):
-            shutil.copy2(photo, target)
+    for folder in (src, src / "dishes"):
+        for photo in folder.glob("*.jpg"):
+            target = dest / photo.relative_to(src)
+            size = photo.stat().st_size
+            if not size or (target.exists() and target.stat().st_size == size):
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(dir=target.parent) as staging:
+                staged = Path(staging) / photo.name
+                shutil.copy2(photo, staged)
+                staged.replace(target)
             copied += 1
     return copied
 
@@ -61,24 +78,25 @@ def latest_schema_version() -> int:
 
 def verify_restore(dest: Path) -> bool:
     """Бэкап проверяется как восстановленный: целостность, версия схемы, нужные таблицы."""
-    conn = sqlite3.connect(dest)
+    if not dest.is_file():
+        return False
     try:
-        if conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
-            return False
-        if conn.execute("PRAGMA user_version").fetchone()[0] < latest_schema_version():
-            return False
-        names = {r[0] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'")}
-        return all(t in names for t in REQUIRED_TABLES)
-    finally:
-        conn.close()
+        with closing(sqlite3.connect(dest.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+            if conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                return False
+            if conn.execute("PRAGMA user_version").fetchone()[0] < latest_schema_version():
+                return False
+            names = {r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            return all(t in names for t in REQUIRED_TABLES)
+    except sqlite3.DatabaseError:
+        return False
 
 
 def run_backup() -> tuple[Path, bool, int]:
     """Полный цикл: копия БД, проверка, фото. Возвращает (файл, проверка_ок, фото)."""
     cfg = get_config()
-    path = backup_db(cfg.db_path, cfg.backup_dir)
-    ok = verify_restore(path)
+    path, ok = _backup_db(Path(cfg.db_path), Path(cfg.backup_dir))
     if not ok:
         log.error("бэкап %s не прошёл проверку восстановления", path)
     photos = backup_photos(cfg.photos_dir, cfg.backup_dir)

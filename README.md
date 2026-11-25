@@ -121,8 +121,14 @@ python3.11 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 cp .env.example .env    # TELEGRAM_BOT_TOKEN, OPENROUTER_API_KEY, ALLOWED_TG_IDS
 .venv/bin/python -m app.check    # offline checks
-.venv/bin/python -m pytest -q    # tests
 .venv/bin/python -m app.bot      # run
+```
+
+To run the tests, install the development dependencies first.
+
+```bash
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/python -m pytest -q
 ```
 
 Try the Mini App without the bot or any keys, on demo data:

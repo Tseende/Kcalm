@@ -50,7 +50,6 @@ def db():
 
 @pytest.mark.asyncio
 async def test_ten_text_cases(db, monkeypatch):
-    pytest.importorskip("pytest_asyncio", reason="нужен pytest-asyncio") if False else None
     cases = json.loads(FIXTURES.read_text(encoding="utf-8"))["cases"]
     mock = MockLLM(cases)
     monkeypatch.setattr("app.services.food.llm.chat_json", mock.chat_json)

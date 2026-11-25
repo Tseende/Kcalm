@@ -495,12 +495,13 @@ async def test_barcode_save_button_copies_off_product(db):
     bot, dp, session = build(db)
     uid = await onboard(dp, bot)
     fid = repo.save_off_food(db, "4600605123453", "Кефир (Простоквашино)", "Kefir",
-                             52, 3.0, 2.5, 4.0)
+                             52, 3.0, 2.5, 4.0, serving_g=200)
     await _press(dp, bot, f"bc_save:{fid}")
     row = repo.list_products(db, uid)[0]
     assert (row["name_ru"], row["brand"], row["kcal_100g"], row["barcode"]) == \
         ("Кефир", "Простоквашино", 52, "4600605123453")
     assert row["id"] != fid and row["owner_user_id"] == uid
+    assert row["default_grams"] == 200
     await _press(dp, bot, f"bc_save:{fid}")                            # повтор не плодит копии
     assert len(repo.list_products(db, uid)) == 1
     # свой продукт по штрихкоду важнее общего
@@ -530,10 +531,11 @@ async def test_products_command_lists_and_deletes(db):
     assert [r["id"] for r in repo.list_products(db, uid)] == [b]
 
 
-@pytest.mark.asyncio
-async def test_products_in_menu_commands_and_help(db):
+def test_product_help_points_to_app_in_chat_logging_mode():
     from app.services import assistant
-    assert "/app" in assistant.HELP_TEXT
+    help_text = assistant.help_text()
+    assert "свои продукты" in help_text and "в приложении" in help_text
+    assert "/app" not in help_text
 
 
 @pytest.mark.asyncio

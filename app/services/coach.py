@@ -12,7 +12,7 @@ from datetime import date, timedelta
 
 from app.domain import analytics
 from app.llm import client as llm
-from app.services.food import load_prompt, meal_type_ru
+from app.services.food import load_prompt
 from app.storage import repo
 from app.textutil import esc
 

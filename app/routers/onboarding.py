@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import re
 import sqlite3
-from datetime import datetime, date
 
 from aiogram import Router
 from aiogram.filters import CommandStart

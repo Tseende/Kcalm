@@ -1407,7 +1407,7 @@ async def test_item_patch_manual_per100_writes_both(client, db, fake_food):
     assert db.execute("SELECT COUNT(*) FROM audit_events WHERE event_type='edit_manual'").fetchone()[0] == 1
     # степпер после ручной правки считает от ручных per100
     after = (await (await client.patch(f"/api/items/{item['id']}", json={"grams": 100}, headers=H)).json())
-    assert after["items"][0]["per100"]["protein"] == 17.3 and after["items"][0]["kcal"] == 115
+    assert after["items"][0]["per100"]["protein"] == 17.3 and after["items"][0]["kcal"] == 117
     assert after["items"][0]["source"] == "manual"
 
 
@@ -1529,6 +1529,22 @@ async def test_foods_search_own_then_shared_no_foreign(client, db, user_id):
     repo.delete_product(db, user_id, mine)
     gone = (await (await client.get("/api/foods/search", params={"q": "лепёшка"}, headers=H)).json())["foods"]
     assert gone == []
+
+
+@pytest.mark.parametrize("extra", [{}, {"name": "Яблоко без кожуры"}])
+async def test_manual_portion_edit_keeps_exact_kcal_and_range(client, extra):
+    item = {"name": "Яблоко", "grams": 150, "per": "100g", "kcal": 52,
+            "protein": 0.3, "fat": 0.2, "carbs": 13.8}
+    created = await client.post("/api/meals/manual", json={"items": [item]}, headers=H)
+    assert created.status == 201
+    meal = await created.json()
+    assert meal["kcal"] == 78
+    url = f"/api/items/{meal['items'][0]['id']}"
+    response = await client.patch(url, json={"grams": 160, **extra}, headers=H)
+    assert response.status == 200
+    updated = await response.json()
+    assert updated["items"][0]["kcal"] == updated["kcal"] == 83
+    assert updated["kcal_low"] == updated["kcal_high"] == 83
 
 
 async def test_meal_manual_food_id_and_free_input(client, db, user_id):

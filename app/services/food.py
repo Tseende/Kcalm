@@ -22,7 +22,6 @@ from app.domain import intents, matching
 from app.domain.generic_foods import generic_ref
 from app.domain.nutrition import (FoodRef, IngredientEstimate, MealUnderstanding,
                                   calculate_meal)
-from app.domain.targets import round10_kcal
 from app.llm import client as llm
 from app.rich import Doc
 from app.services import dishes as dishsvc
@@ -684,7 +683,8 @@ async def _off_branded_ref(item: IngredientEstimate, conn: sqlite3.Connection) -
     if product["code"]:
         food_id = repo.save_off_food(conn, product["code"], label, product["name"],
                                      product["kcal_100g"], product["protein_100g"],
-                                     product["fat_100g"], product["carbs_100g"])
+                                     product["fat_100g"], product["carbs_100g"],
+                                     serving_g=product.get("serving_g"))
     return FoodRef(food_id=food_id, name_ru=label, name_en=product["name"],
                    kcal_100g=product["kcal_100g"], protein_100g=product["protein_100g"],
                    fat_100g=product["fat_100g"], carbs_100g=product["carbs_100g"],

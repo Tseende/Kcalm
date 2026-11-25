@@ -16,7 +16,6 @@ from aiogram.types import Message
 from app.domain import intents
 from app.routers import commands, dishes, menu, products, support, tracking
 from app.services import assistant
-from app.services import food as foodsvc
 from app.storage import repo
 from app.textutil import esc
 

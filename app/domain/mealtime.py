@@ -9,11 +9,6 @@ import struct
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
-# время по умолчанию для слов «завтрак/обед/…»
-SLOT_DEFAULTS = {
-    "breakfast": "08:00", "lunch": "13:00", "snack": "16:00", "dinner": "19:00",
-}
-
 # кнопки «🕐 Другое время»: ключ → (подпись, смещение дня, время, тип приёма)
 SLOTS: dict[str, tuple[str, int, str, str]] = {
     "b": ("Завтрак 08:00", 0, "08:00", "breakfast"),

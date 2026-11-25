@@ -25,7 +25,7 @@ def _product(**over):
     return base
 
 
-def _transport(payload: dict, status: int = 200, hits: list | None = None):
+def _transport(payload: dict | list, status: int = 200, hits: list | None = None):
     def handler(request: httpx.Request) -> httpx.Response:
         if hits is not None:
             hits.append(str(request.url))
@@ -51,6 +51,7 @@ def test_barcode_checksum():
     assert not off.valid_barcode("3017620422004")        # неверная контрольная цифра
     assert not off.valid_barcode("12345")
     assert not off.valid_barcode("30176204220AB")
+    assert not off.valid_barcode("²" * 8)
 
 
 def test_parse_product_requires_complete_sane_data():
@@ -75,6 +76,9 @@ async def test_fetch_barcode_ok_and_failures():
     assert await off.fetch_barcode(NUTELLA, transport=_transport({"status": 0})) is None
     assert await off.fetch_barcode(NUTELLA, transport=_transport({}, status=503)) is None
     assert await off.fetch_barcode("123", transport=_transport({})) is None     # даже не ходим в сеть
+    assert await off.fetch_barcode(NUTELLA, transport=_transport([])) is None
+    assert await off.fetch_barcode(NUTELLA, transport=_transport(
+        {"status": 1, "product": _product(nutriments="missing")})) is None
 
 
 @pytest.mark.asyncio
@@ -85,11 +89,12 @@ async def test_lookup_caches_in_local_db(db):
     assert ref.source == "off" and ref.kcal_100g == 539 and serving == 15
     again = await barcode.lookup(db, NUTELLA, transport=t)      # теперь из кэша, без сети
     assert again[0].food_id == ref.food_id and len(hits) == 1
+    assert again[1] == serving
 
 
 @pytest.mark.asyncio
 async def test_branded_search_requires_brand_and_name_match():
-    products = {"products": [_product(brands="Другой бренд"), _product()]}
+    products = {"products": [None, _product(brands=123), _product(brands="Другой бренд"), _product()]}
     hit = await off.search_branded("Nutella паста", "Ferrero", transport=_transport(products))
     assert hit and "Ferrero" not in hit["name"] and hit["brand"] == "Nutella"
     miss = await off.search_branded("Совсем другое", "Ferrero", transport=_transport(products))
@@ -100,6 +105,8 @@ async def test_branded_search_requires_brand_and_name_match():
 def test_message_parsing():
     assert barcode.parse_barcode_message(NUTELLA) == (NUTELLA, None)
     assert barcode.parse_barcode_message(f"штрихкод {NUTELLA} 40 г") == (NUTELLA, 40.0)
+    assert barcode.parse_barcode_message(f"{NUTELLA} 0 г") == (NUTELLA, None)
+    assert barcode.parse_barcode_message(f"{NUTELLA} 3001 г") == (NUTELLA, None)
     assert barcode.parse_barcode_message("гречка 150") is None
     assert barcode.parse_barcode_message("500") is None
     assert barcode.parse_grams_reply("40") == 40 and barcode.parse_grams_reply("2,5 г") == 2.5

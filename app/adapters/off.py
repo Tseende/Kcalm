@@ -23,7 +23,7 @@ MAX_KCAL_100G = 900
 
 def valid_barcode(code: str) -> bool:
     """EAN-8/UPC-A/EAN-13/GTIN-14 с проверкой контрольной цифры GS1."""
-    if not code.isdigit() or len(code) not in (8, 12, 13, 14):
+    if not code.isascii() or not code.isdigit() or len(code) not in (8, 12, 13, 14):
         return False
     digits = [int(c) for c in code]
     check = digits.pop()
@@ -34,14 +34,16 @@ def valid_barcode(code: str) -> bool:
 def _num(value, high: float) -> float | None:
     try:
         number = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     return number if 0 <= number <= high else None
 
 
-def parse_product(product: dict) -> dict | None:
+def parse_product(product: object) -> dict | None:
     """Поля продукта OFF → наш формат. None, если данных недостаточно или они подозрительны."""
-    nutr = product.get("nutriments") or {}
+    if not isinstance(product, dict) or not isinstance(product.get("nutriments"), dict):
+        return None
+    nutr = product["nutriments"]
     kcal = _num(nutr.get("energy-kcal_100g"), MAX_KCAL_100G)
     if kcal is None:
         kj = _num(nutr.get("energy_100g"), MAX_KCAL_100G * 4.184)
@@ -51,11 +53,12 @@ def parse_product(product: dict) -> dict | None:
     carbs = _num(nutr.get("carbohydrates_100g"), 100)
     if None in (kcal, protein, fat, carbs) or protein + fat + carbs > 105:
         return None
-    name = (product.get("product_name_ru") or product.get("product_name")
-            or product.get("generic_name") or "").strip()
+    name = next((v.strip() for key in ("product_name_ru", "product_name", "generic_name")
+                 if isinstance(v := product.get(key), str) and v.strip()), "")
     if not name:
         return None
-    brand = (product.get("brands") or "").split(",")[0].strip()
+    brands = product.get("brands")
+    brand = brands.split(",")[0].strip() if isinstance(brands, str) else ""
     serving = _num(product.get("serving_quantity"), 2000)
     return {
         "code": str(product.get("code") or ""),
@@ -110,7 +113,7 @@ async def fetch_barcode(code: str, transport: httpx.AsyncBaseTransport | None = 
     finally:
         if temporary:
             await client.aclose()
-    if data.get("status") != 1 or not isinstance(data.get("product"), dict):
+    if not isinstance(data, dict) or data.get("status") != 1 or not isinstance(data.get("product"), dict):
         return None
     product = dict(data["product"])
     product.setdefault("code", code)
@@ -140,13 +143,16 @@ async def search_branded(name: str, brand: str,
     finally:
         if temporary:
             await client.aclose()
+    if not isinstance(products, list):
+        return None
     want = _tokens(name)
     brand_l = brand.lower().replace("ё", "е")
     for raw in products:
+        brands = raw.get("brands") if isinstance(raw, dict) else None
+        if not isinstance(brands, str) or brand_l not in brands.lower().replace("ё", "е"):
+            continue
         parsed = parse_product(raw)
         if not parsed:
-            continue
-        if brand_l not in (raw.get("brands") or "").lower().replace("ё", "е"):
             continue
         have = _tokens(parsed["name"])
         if want and len(want & have) / len(want) >= 0.5:

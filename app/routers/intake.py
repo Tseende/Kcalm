@@ -12,8 +12,7 @@ import re
 import sqlite3
 import time
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
+from datetime import date, datetime, timedelta
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -269,7 +268,6 @@ async def cb_barcode_serving(cb: CallbackQuery, db: sqlite3.Connection) -> None:
 @router.message(F.voice | F.audio)
 @streaming.response
 async def on_voice(msg: Message, db: sqlite3.Connection, bot=None) -> None:
-    from aiogram import Bot
     bot = bot or msg.bot
     user = _user_or_ask(msg, db)
     if user is None:

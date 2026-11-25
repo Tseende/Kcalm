@@ -2,7 +2,7 @@
 статистики с явными порогами; порог не достигнут — молчать."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 def _parse_hhmm(s: str) -> int:
@@ -19,28 +19,9 @@ def is_late(local_time: str, cutoff: str) -> bool:
     return t > c
 
 
-@dataclass
-class DayIntake:
-    local_date: str
-    kcal: int
-    late_kcal: int
-    meals: int
-
-
 def late_kcal_for_day(meal_times_kcal: list[tuple[str, int]], cutoff: str) -> int:
     """late_kcal = Σ ккал приёмов с local_time > cutoff. 21:00 ровно — НЕ поздний."""
     return sum(k for t, k in meal_times_kcal if is_late(t, cutoff))
-
-
-def week_late_summary(days: list[DayIntake]) -> dict:
-    evenings = [d for d in days if d.late_kcal > 0]
-    kcal_all = sum(d.kcal for d in days) or 1
-    return {
-        "late_evenings": len(evenings),
-        "avg_late_kcal": int(sum(d.late_kcal for d in evenings) / len(evenings)) if evenings else 0,
-        "late_share": round(sum(d.late_kcal for d in days) / kcal_all, 2),
-        "days": len(days),
-    }
 
 
 def compare_late_weeks(week_summaries: list[dict]) -> dict | None:

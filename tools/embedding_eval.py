@@ -11,11 +11,10 @@ from __future__ import annotations
 
 import json
 import math
-import sqlite3
 import sys
 import tempfile
 import time
-from collections import Counter, defaultdict
+from collections import defaultdict
 from pathlib import Path
 
 import httpx

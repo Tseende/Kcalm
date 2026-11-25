@@ -20,7 +20,7 @@ def parse_barcode_message(text: str) -> tuple[str, float | None] | None:
     m = _BARCODE_MSG.match(text.strip())
     if not m:
         return None
-    grams = float(m.group(2).replace(",", ".")) if m.group(2) else None
+    grams = parse_grams_reply(m.group(2)) if m.group(2) else None
     return m.group(1), grams
 
 
@@ -44,14 +44,14 @@ async def lookup(db: sqlite3.Connection, code: str, transport=None,
     """Продукт по штрихкоду: сначала локальный кэш, затем OFF. Возвращает (ref, порция в г)."""
     cached = repo.food_by_barcode(db, code, user_id)
     if cached:
-        return _ref_from_row(cached), None
+        return _ref_from_row(cached), cached["default_grams"]
     product = await off.fetch_barcode(code, transport=transport)
     if not product:
         return None
     label = f"{product['name']} ({product['brand']})" if product["brand"] else product["name"]
     food_id = repo.save_off_food(db, code, label, product["name"], product["kcal_100g"],
                                  product["protein_100g"], product["fat_100g"],
-                                 product["carbs_100g"])
+                                 product["carbs_100g"], serving_g=product["serving_g"])
     row = db.execute("SELECT * FROM foods WHERE id=?", (food_id,)).fetchone()
     return _ref_from_row(row), product["serving_g"]
 

@@ -108,21 +108,6 @@ def snack_lines(db: sqlite3.Connection, user_id: int, limit: int = 3) -> list[st
 
 # ---------------------------------------------------------------------- клавиатуры
 
-def triage_keyboard(event_id: int, user=None) -> InlineKeyboardMarkup:
-    def b(text: str, data: str) -> InlineKeyboardButton:
-        return InlineKeyboardButton(text=text, callback_data=data)
-    overate = _g(user, "😔 Уже переел", "😔 Уже переела") if user else "😔 Уже переел(а)"
-    tired = _g(user, "😴 Устал", "😴 Устала") if user else "😴 Усталость"
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [b("🥣 Голод", f"cr:cat:{event_id}:hunger"),
-         b("😩 Эмоции", f"cr:cat:{event_id}:emotion"),
-         b("🔁 Привычка", f"cr:cat:{event_id}:habit")],
-        [b(tired, f"cr:cat:{event_id}:tired"),
-         b(overate, f"cr:cat:{event_id}:overate"),
-         b(f"⏱ {FOLLOWUP_MIN} мин", f"cr:wait:{event_id}")],
-    ])
-
-
 def outcome_keyboard(user, event_id: int, with_wait: bool = True) -> InlineKeyboardMarkup:
     def b(text: str, data: str) -> InlineKeyboardButton:
         return InlineKeyboardButton(text=text, callback_data=data)
