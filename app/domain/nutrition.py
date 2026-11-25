@@ -65,7 +65,7 @@ class FoodRef(BaseModel):
     protein_100g: float
     fat_100g: float
     carbs_100g: float
-    source: Literal["off", "usda", "user", "seed", "llm", "generic", "unresolved", "label"]
+    source: Literal["off", "green", "usda", "user", "seed", "llm", "generic", "unresolved", "label"]
     confidence: float = 0.5
     unresolved: bool = False      # КБЖУ не определены: в сумме 0 ккал, это надо показать
 

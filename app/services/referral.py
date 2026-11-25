@@ -19,6 +19,7 @@ from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from app.config import get_config
+from app.db import write_transaction
 from app.storage import repo
 from app.textutil import esc
 from app.timeutils import local_today
@@ -198,15 +199,11 @@ def on_onboarded(db: sqlite3.Connection, tg_id: int, user_id: int) -> bool:
     ref = repo.referral_of_invitee_tg(db, tg_id)
     if ref is None or ref["onboarded_at"]:
         return False
-    try:
+    with write_transaction(db):
         if not repo.mark_referral_onboarded(db, ref["id"], user_id, ref["inviter_user_id"], _utcnow()):
             return False
         repo.credit_subscription_days(db, user_id, ref["friend_bonus_days"], "invited_welcome", ref["id"])
         repo.add_reward(db, user_id, "freeze", 1, "invited_welcome", ref["id"])
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
     return True
 
 
@@ -241,9 +238,8 @@ def check_activation(db: sqlite3.Connection, user_id: int) -> None:
     inviter_id = ref["inviter_user_id"]
     inviter = repo.get_user_by_id(db, inviter_id) if inviter_id else None
     rewarded = False
-    try:
+    with write_transaction(db):
         if not repo.mark_referral_activated(db, ref["id"], _utcnow()):
-            db.rollback()
             return
         if inviter is not None and repo.rewarded_referrals(db, inviter["id"]) < REWARD_CAP:
             repo.add_reward(db, inviter["id"], "freeze", 1, "friend_activated", ref["id"])
@@ -251,10 +247,6 @@ def check_activation(db: sqlite3.Connection, user_id: int) -> None:
             repo.credit_subscription_days(db, inviter["id"], ref["inviter_bonus_days"], "friend_activated", ref["id"])
             repo.mark_referral_rewarded(db, ref["id"], _utcnow())
             rewarded = True
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
     if inviter is not None:
         fresh = repo.get_user_by_id(db, inviter["id"])
         head = f"🎉 У приглашённого тобой друга{_friend_label(ref)} уже сложилась привычка: записи в три разных дня за первую неделю."

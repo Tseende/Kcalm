@@ -1249,8 +1249,8 @@ async def cb_ok(cb: CallbackQuery, db: sqlite3.Connection) -> None:
 def _options_for(db: sqlite3.Connection, uid: int, meal_id: int) -> dict | None:
     for row in db.execute(
             """SELECT payload_json FROM pending_inputs WHERE user_id=? AND kind='meal_options'
-               AND created_at >= datetime('now', ?) ORDER BY id DESC LIMIT 20""",
-            (uid, f"-{OPTIONS_WAIT_MIN} minutes")):
+               AND created_at >= ? ORDER BY id DESC LIMIT 20""",
+            (uid, repo.utcnow_iso(minutes=-OPTIONS_WAIT_MIN))):
         payload = json.loads(row["payload_json"])
         if payload.get("meal_id") == meal_id:
             return payload

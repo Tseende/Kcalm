@@ -247,12 +247,20 @@ def connect(db_path: str | Path, *, url: str = "", token: str = ""):
 
 
 def connect_from_config(cfg):
+    if cfg.supabase_db_url:
+        from app.postgres import PostgresConnection
+
+        return PostgresConnection(cfg.supabase_db_url.get_secret_value())
     return connect(cfg.db_path, url=cfg.turso_database_url, token=cfg.turso_auth_token)
 
 
 @contextmanager
 def write_transaction(conn):
     """Закрепить право записи до первого чтения и откатить всю операцию при сбое."""
+    if getattr(conn, "postgres", False):
+        with conn.transaction():
+            yield
+        return
     with conn:
         if not conn.in_transaction:
             conn.execute("BEGIN IMMEDIATE")
@@ -297,6 +305,8 @@ def migrate(conn, migrations_dir: Path = MIGRATIONS_DIR) -> int:
     Возвращает номер версии после миграции. Каждая миграция — отдельный файл
     NNN_name.sql, версия = числовой префикс имени.
     """
+    if getattr(conn, "postgres", False):
+        return conn.schema_version
     files = sorted(migrations_dir.glob("*.sql"))
     applied = user_version(conn)
     for f in files:

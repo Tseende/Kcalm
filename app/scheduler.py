@@ -24,7 +24,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 from app.config import get_config
 from app.services import reminders as remsvc
-from app.storage import repo
+from app.storage import photos, repo
 from app.timeutils import minutes_before
 
 log = logging.getLogger(__name__)
@@ -53,7 +53,10 @@ def build_scheduler(db: sqlite3.Connection, bot) -> AsyncIOScheduler:
                       coalesce=True, max_instances=1, misfire_grace_time=60)
     else:
         log.info("keepalive: выключен")
-    if cfg_.backup_in_process and not cfg_.turso_database_url:   # в облаке данные уже в Turso
+    if cfg_.supabase_db_url:
+        sched.add_job(photos.prune_temporary, "interval", minutes=5, id="temp-media",
+                      coalesce=True, max_instances=1)
+    if cfg_.backup_in_process and not (cfg_.supabase_db_url or cfg_.turso_database_url):
         sched.add_job(
             run_daily_backup,
             CronTrigger(hour=3, minute=30, timezone=timezone.utc),
@@ -354,7 +357,7 @@ async def _send_reminder(db: sqlite3.Connection, bot, user, kind: str,
         await _send_notification(bot, tg_id, "☀️ Доброе утро! План на день уже ждёт в приложении.",
                                  kind, "analysis", "☀️ Открыть план дня")
     elif kind == "midday":
-        from app.storage import repo
+        from app.storage import photos, repo
         day = repo.day_totals(db, uid, local_day.isoformat())
         if day["meals"] == 0:
             await _send_notification(bot, tg_id, "🍽 Пока пусто в дневнике. Запиши завтрак/обед — "
@@ -375,7 +378,7 @@ async def _send_reminder(db: sqlite3.Connection, bot, user, kind: str,
         doc = report.day_doc(db, user, day, closed=True, title="Итоги дня", chart=chart)
         await _send_with_flood_wait(rich.send, bot, tg_id, doc, reply_markup=report.actions_kb("today"))
     elif kind == "weigh":
-        from app.storage import repo
+        from app.storage import photos, repo
         if user["care_mode"]:
             return                                    # осторожный режим: без напоминаний о весе
         if repo.weight_series(db, uid, local_day.isoformat(), local_day.isoformat()):
@@ -386,7 +389,7 @@ async def _send_reminder(db: sqlite3.Connection, bot, user, kind: str,
             "Пришли скриншот весов. Одна цифра ничего не значит, смотрим на тренд.", kind)
     elif kind == "water":
         from app.services import water as watersvc
-        from app.storage import repo
+        from app.storage import photos, repo
         total = repo.day_water_ml(db, uid, local_day.isoformat())
         goal = watersvc.goal_for(db, user)
         if total < goal // 2:

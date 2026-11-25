@@ -436,8 +436,8 @@ def service(module: str, attr: str):
         raise ApiError(501, "not_ready", "Эта функция ещё не готова.") from None
 
 
-async def call(fn, *args):
-    result = fn(*args)
+async def call(fn, *args, **kwargs):
+    result = fn(*args, **kwargs)
     return await result if inspect.isawaitable(result) else result
 
 
@@ -1458,7 +1458,7 @@ async def api_product_label(request: web.Request) -> web.Response:
         draft, confidence, notes = await call(fn, db, user, [base64.b64encode(p).decode() for p in photos])
     except llm.LLMError as e:
         raise llm_failure(e, "Нет связи с моделью. Попробуйте ещё раз чуть позже.") from None
-    draft, notes = await call(service("products", "enrich_with_off"), draft, notes)
+    draft, notes = await call(service("products", "enrich_with_off"), draft, notes, db=db, user_id=user["id"])
     return ok({"draft": {**product_json(draft), "id": None,
                          "nutrition_source": draft.get("nutrition_source")}, "confidence": confidence,
                "notes": notes})

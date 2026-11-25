@@ -95,7 +95,7 @@ def activity_hint(db: sqlite3.Connection, user_id: int, today: date, current: in
         return None
     workouts = db.execute(
         "SELECT COUNT(*) FROM activity_daily WHERE user_id=? AND local_date BETWEEN ? AND ? "
-        "AND workouts_json IS NOT NULL AND workouts_json NOT IN ('', '[]')",
+        "AND workouts_json IS NOT NULL AND CAST(workouts_json AS TEXT) NOT IN ('', '[]')",
         (user_id, start, today.isoformat())).fetchone()[0]
     avg = sum(steps) / len(steps)
     suggested = trk.activity_hint(avg, len(steps), int(workouts or 0), current)

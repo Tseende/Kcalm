@@ -5,7 +5,7 @@ import os
 
 from pathlib import Path
 
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.timeutils import validate_hhmm, validate_timezone
@@ -45,6 +45,8 @@ class Config(BaseSettings):
     picooc_owner_tg_id: int = 0       # чей это Picooc; 0 = единственный из ALLOWED_TG_IDS
 
     db_path: str = "./data/health.db"
+    supabase_db_url: SecretStr | None = None
+    supabase_admin_db_url: SecretStr | None = None  # обслуживающие команды, не используется ботом
     turso_database_url: str = ""            # libsql://<db>-<org>.turso.io: облачная БД вместо локального файла
     turso_auth_token: str = ""
     backup_dir: str = "./data/backups"      # лучше внешний диск или синхронизируемая папка

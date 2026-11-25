@@ -10,6 +10,7 @@ from app.config import get_config
 from app.domain.targets import (
     MAX_RATE, bmi, compute_target, kcal_floor_check, min_goal_weight, pal_from_pa,
 )
+from app.db import write_transaction
 from app.storage import repo
 
 # уровень активности → (PA для профиля, PAL для расчёта); как в онбординге
@@ -190,7 +191,7 @@ def _still_referenced(db: sqlite3.Connection, path: str) -> bool:
     for sql in ("SELECT 1 FROM meals WHERE photo_path=? LIMIT 1", "SELECT 1 FROM meal_photos WHERE path=? LIMIT 1",
                 "SELECT 1 FROM dishes WHERE photo_path=? LIMIT 1",
                 "SELECT 1 FROM raw_observations WHERE file_path=? LIMIT 1",
-                "SELECT 1 FROM pending_inputs WHERE payload_json LIKE ? LIMIT 1"):
+                "SELECT 1 FROM pending_inputs WHERE CAST(payload_json AS TEXT) LIKE ? LIMIT 1"):
         arg = f'%"{path}"%' if "LIKE" in sql else path
         if db.execute(sql, (arg,)).fetchone():
             return True
@@ -205,7 +206,7 @@ def delete_all_data(db: sqlite3.Connection, user) -> None:
     photo_blobs удаляются только если на них больше никто не ссылается."""
     uid = user["id"]
     root = Path(get_config().photos_dir).resolve()
-    with db:
+    with write_transaction(db):
         paths = _photo_paths(db, uid)
         repo.anonymize_referrals(db, uid, user["tg_id"])
         for sql in ("DELETE FROM favorite_meals WHERE user_id=?", "DELETE FROM dishes WHERE user_id=?",
@@ -215,8 +216,9 @@ def delete_all_data(db: sqlite3.Connection, user) -> None:
                     "DELETE FROM users WHERE id=?"):
             db.execute(sql, (uid,))
         orphans = [p for p in paths if not _still_referenced(db, p)]
-        for p in orphans:
-            db.execute("DELETE FROM photo_blobs WHERE path=?", (p,))
+        if not getattr(db, "postgres", False):
+            for p in orphans:
+                db.execute("DELETE FROM photo_blobs WHERE path=?", (p,))
     for p in orphans:                                       # файлы после коммита: откат не потеряет фото
         try:
             path = Path(p).resolve()

@@ -2,17 +2,21 @@
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 
 log = logging.getLogger(__name__)
 _db = None
 _root: Path | None = None
+_TEMP_RETENTION_SECONDS = 30 * 60
 
 
-def enable(db, root: str | Path | None = None) -> None:
+def enable(db, root: str | Path | None = None, *, temporary: bool = False) -> None:
     global _db, _root
     _db = db
     _root = Path(root).resolve() if root is not None else None
+    if temporary:
+        prune_temporary()
 
 
 def write(path: str | Path, data: bytes) -> str:
@@ -65,3 +69,16 @@ def restore(db) -> int:
             continue
         n += _restore_file(db, p)
     return n
+
+
+def prune_temporary() -> None:
+    """Keep meal uploads only for the short window for album and caption edits."""
+    if _root is None:
+        return
+    cutoff = time.time() - _TEMP_RETENTION_SECONDS
+    for path in _root.glob("*.jpg"):
+        try:
+            if path.stat().st_mtime < cutoff:
+                path.unlink(missing_ok=True)
+        except OSError:
+            log.warning("Could not remove an expired upload", exc_info=True)

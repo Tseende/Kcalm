@@ -136,7 +136,19 @@ def _off_draft(found: dict, code: str) -> dict:
             "unit_grams": serving, "barcode": code, "nutrition_source": "off"}
 
 
-async def enrich_with_off(draft: dict, notes: list[str], transport=None) -> tuple[dict, list[str]]:
+def _catalog_draft(row, code: str) -> dict:
+    return {
+        "name": _text(row["name_ru"]), "brand": _text(row["brand"], 40),
+        "kcal": round(row["kcal_100g"]), "protein": row["protein_100g"],
+        "fat": row["fat_100g"], "carbs": row["carbs_100g"],
+        "default_grams": row["default_grams"], "unit_name": row["unit_name"],
+        "unit_grams": row["unit_grams"], "barcode": code,
+        "nutrition_source": row["nutrition_source"] or ("off" if row["source"] == "off" else None),
+    }
+
+
+async def enrich_with_off(draft: dict, notes: list[str], transport=None, *,
+                          db=None, user_id: int | None = None) -> tuple[dict, list[str]]:
     """Штрихкод с фото → Open Food Facts: дополняет пробелы и сверяет калории.
 
     Числа с упаковки главнее: база краудсорсная. OFF берём целиком только когда на фото
@@ -144,18 +156,24 @@ async def enrich_with_off(draft: dict, notes: list[str], transport=None) -> tupl
     code = draft.get("barcode")
     if not code:
         return draft, notes
-    found = await off.fetch_barcode(code, transport=transport)
-    if not found:
-        return draft, notes
-    ref = _off_draft(found, code)
+    cached = repo.food_by_barcode(db, code, user_id) if db is not None else None
+    if cached:
+        ref = _catalog_draft(cached, code)
+        source = {"green": "GREEN", "off": "Open Food Facts"}.get(cached["source"], "справочник")
+    else:
+        found = await off.fetch_barcode(code, transport=transport)
+        if not found:
+            return draft, notes
+        ref = _off_draft(found, code)
+        source = "Open Food Facts"
     out, notes = dict(draft), list(notes)
     if any(out.get(k) is None for k in _NUTRIENTS):
         for k in _NUTRIENTS:
             out[k] = ref[k]
-        out["nutrition_source"] = "off"
-        notes.append("КБЖУ не читалось с фото, взял из Open Food Facts: проверьте")
+        out["nutrition_source"] = ref["nutrition_source"]
+        notes.append(f"КБЖУ не читалось с фото, источник: {source}. Сверьте с упаковкой.")
     elif ref["kcal"] and abs(out["kcal"] - ref["kcal"]) / ref["kcal"] > 0.2:
-        notes.append(f"На фото {out['kcal']} ккал, в Open Food Facts {ref['kcal']}: проверьте упаковку")
+        notes.append(f"На фото {out['kcal']} ккал, в каталоге {source} {ref['kcal']}: проверьте упаковку")
     for k in ("name", "brand", "default_grams", "unit_name", "unit_grams"):
         if not out.get(k) and ref.get(k):
             out[k] = ref[k]
@@ -164,25 +182,14 @@ async def enrich_with_off(draft: dict, notes: list[str], transport=None) -> tupl
 
 async def barcode_draft(db: sqlite3.Connection, user, code: str, transport=None
                         ) -> tuple[dict, int | None] | None:
-    """Штрихкод → (черновик, id своего продукта с этим кодом | None) или None, если нигде нет.
-
-    Сначала Open Food Facts; при сбое сети берём локальный кэш прошлых находок."""
+    """Черновик по коду: сначала личный или общий каталог, затем Open Food Facts."""
+    user_id = user["id"] if user else None
+    cached = repo.food_by_barcode(db, code, user_id)
+    if cached:
+        own_id = cached["id"] if user_id is not None and cached["owner_user_id"] == user_id else None
+        return _catalog_draft(cached, code), own_id
     found = await off.fetch_barcode(code, transport=transport)
-    if found:
-        draft = _off_draft(found, code)
-    else:
-        cached = repo.food_by_barcode(db, code, user["id"] if user else None)
-        if cached is None:
-            return None
-        draft = {"name": _text(cached["name_ru"]), "brand": _text(cached["brand"], 40),
-                 "kcal": round(cached["kcal_100g"]), "protein": cached["protein_100g"],
-                 "fat": cached["fat_100g"], "carbs": cached["carbs_100g"],
-                 "default_grams": cached["default_grams"], "unit_name": cached["unit_name"],
-                 "unit_grams": cached["unit_grams"], "barcode": code,
-                 "nutrition_source": cached["nutrition_source"] or ("off" if cached["source"] == "off" else None)}
-    own = db.execute("SELECT id FROM foods WHERE barcode=? AND owner_user_id=? AND deleted_at IS NULL",
-                     (code, user["id"])).fetchone()
-    return draft, (own["id"] if own else None)
+    return (_off_draft(found, code), None) if found else None
 
 
 # ------------------------------------------------------------------ текст

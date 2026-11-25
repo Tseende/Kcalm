@@ -3,15 +3,15 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from app.db import write_transaction
 from app.chat_context import pending_thread
 from app.domain.nutrition import MealCalculation
 
 
-def utcnow_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+def utcnow_iso(**offset: int) -> str:
+    return (datetime.now(timezone.utc) + timedelta(**offset)).strftime("%Y-%m-%d %H:%M:%S")
 
 
 # ------------------------------------------------------------------- users
@@ -63,7 +63,7 @@ def upsert_food(conn: sqlite3.Connection, name_ru: str, name_en: str, kcal: floa
            carbs_100g, source, external_id) VALUES (?,?,?,?,?,?,?,?)
            ON CONFLICT(source, external_id) DO UPDATE SET
              name_ru=excluded.name_ru, kcal_100g=excluded.kcal_100g
-           WHERE external_id IS NOT NULL""",
+           WHERE foods.external_id IS NOT NULL""",
         (name_ru, name_en, kcal, protein, fat, carbs, source, external_id),
     )
     if external_id is None:
@@ -484,9 +484,10 @@ def frequent_meals(conn: sqlite3.Connection, user_id: int, limit: int = 6,
     {meal_id (последняя запись), count, kcal, names}. Напитки без калорий не в счёт."""
     rows = conn.execute(
         """SELECT id, kcal_total FROM meals WHERE user_id=? AND deleted_at IS NULL
-           AND kcal_total>=50 AND local_date >= date(COALESCE(?, 'now'), ?)
+           AND kcal_total>=50 AND local_date >= ?
            ORDER BY id DESC LIMIT 150""",
-        (user_id, today, f"-{int(days)} days")).fetchall()
+        (user_id, ((date.fromisoformat(today) if today else datetime.now(timezone.utc).date())
+                   - timedelta(days=days)).isoformat())).fetchall()
     # позиции всех приёмов одним запросом (вместо запроса на каждый приём), порядок как в get_meal_items
     items_by_meal: dict[int, list] = {}
     if rows:
@@ -531,16 +532,16 @@ def repeat_meal(conn: sqlite3.Connection, user_id: int, meal_id: int, eaten_utc:
              src["protein_g"], src["fat_g"], src["carbs_g"], src["kcal_low"], src["kcal_high"],
              src["confidence"], src["method"]))
         new_id = cur.lastrowid
-        cols = [r[1] for r in conn.execute("PRAGMA table_info(meal_items)")
-                if r[1] not in ("id", "meal_id")]
+        cols = [key[0] for key in conn.execute("SELECT * FROM meal_items LIMIT 0").description
+                if key[0] not in ("id", "meal_id")]
         names = ", ".join(cols)
         conn.execute(f"INSERT INTO meal_items (meal_id, {names}) SELECT ?, {names} "
                      "FROM meal_items WHERE meal_id=?", (new_id, meal_id))
         if abs(factor - 1.0) > 1e-9:
             conn.execute(
-                """UPDATE meal_items SET grams = ROUND(grams * ?, 1), kcal = MAX(0, CAST(ROUND(kcal * ?) AS INTEGER)),
-                   protein_g = ROUND(protein_g * ?, 1), fat_g = ROUND(fat_g * ?, 1),
-                   carbs_g = ROUND(carbs_g * ?, 1) WHERE meal_id = ?""",
+                """UPDATE meal_items SET grams = ROUND(CAST(grams * ? AS NUMERIC), 1), kcal = MAX(0, CAST(ROUND(kcal * ?) AS INTEGER)),
+                   protein_g = ROUND(CAST(protein_g * ? AS NUMERIC), 1), fat_g = ROUND(CAST(fat_g * ? AS NUMERIC), 1),
+                   carbs_g = ROUND(CAST(carbs_g * ? AS NUMERIC), 1) WHERE meal_id = ?""",
                 (factor, factor, factor, factor, factor, new_id))
             _resum_meal(conn, new_id)
             conn.execute("UPDATE meals SET kcal_low = CAST(ROUND(kcal_low * ?) AS INTEGER), "
@@ -692,7 +693,7 @@ def update_favorite(conn: sqlite3.Connection, user_id: int, favorite_id: int, *,
 
 def touch_favorite(conn: sqlite3.Connection, user_id: int, favorite_id: int) -> None:
     """Избранное записали в дневник: счётчик и время последнего использования."""
-    conn.execute("UPDATE favorite_meals SET use_count = use_count + 1, last_used_at = datetime('now') "
+    conn.execute("UPDATE favorite_meals SET use_count = use_count + 1, last_used_at = CURRENT_TIMESTAMP "
                  "WHERE id=? AND user_id=?", (favorite_id, user_id))
     conn.commit()
 
@@ -1078,9 +1079,9 @@ def _resum_meal(conn: sqlite3.Connection, meal_id: int) -> None:
     conn.execute(
         """UPDATE meals SET
              kcal_total = COALESCE((SELECT SUM(kcal) FROM meal_items WHERE meal_id=?), 0),
-             protein_g  = COALESCE((SELECT ROUND(SUM(protein_g),1) FROM meal_items WHERE meal_id=?), 0),
-             fat_g      = COALESCE((SELECT ROUND(SUM(fat_g),1) FROM meal_items WHERE meal_id=?), 0),
-             carbs_g    = COALESCE((SELECT ROUND(SUM(carbs_g),1) FROM meal_items WHERE meal_id=?), 0)
+             protein_g  = COALESCE((SELECT ROUND(CAST(SUM(protein_g) AS NUMERIC),1) FROM meal_items WHERE meal_id=?), 0),
+             fat_g      = COALESCE((SELECT ROUND(CAST(SUM(fat_g) AS NUMERIC),1) FROM meal_items WHERE meal_id=?), 0),
+             carbs_g    = COALESCE((SELECT ROUND(CAST(SUM(carbs_g) AS NUMERIC),1) FROM meal_items WHERE meal_id=?), 0)
            WHERE id = ?""",
         (meal_id, meal_id, meal_id, meal_id, meal_id),
     )
@@ -1138,7 +1139,7 @@ def save_body_measurement(conn: sqlite3.Connection, user_id: int, local_date: st
     with write_transaction(conn):
         existing = conn.execute(
             "SELECT id, fasting FROM body_measurements WHERE user_id=? AND local_date=? "
-            "ORDER BY (fasting IS 1) DESC, id DESC LIMIT 1",
+            "ORDER BY (COALESCE(fasting = 1, FALSE)) DESC, id DESC LIMIT 1",
             (user_id, local_date)).fetchone()
         if existing and existing["fasting"] == 1 and metrics.get("fasting") == 0:
             # утренний замер натощак главнее: вечерний не перезаписывает вес дня
@@ -1174,7 +1175,7 @@ def save_activity(conn: sqlite3.Connection, user_id: int, local_date: str,
     full_vals = [user_id, local_date, *[values.get(c) for c in cols],
                  source, confidence, raw_id]
     # пустое поле нового скриншота не стирает уже сохранённое
-    sets = ", ".join([*(f"{c}=COALESCE(excluded.{c}, {c})" for c in cols),
+    sets = ", ".join([*(f"{c}=COALESCE(excluded.{c}, activity_daily.{c})" for c in cols),
                       "source=excluded.source", "confidence=excluded.confidence"])
     conn.execute(
         f"""INSERT INTO activity_daily ({names}) VALUES ({", ".join(["?"] * len(full_vals))})
@@ -1196,7 +1197,7 @@ def save_sleep(conn: sqlite3.Connection, user_id: int, wake_date: str,
     full_vals = [user_id, wake_date, *[values.get(c) for c in cols],
                  source, confidence, raw_id]
     # пустое поле нового скриншота не стирает уже сохранённое
-    sets = ", ".join([*(f"{c}=COALESCE(excluded.{c}, {c})" for c in cols),
+    sets = ", ".join([*(f"{c}=COALESCE(excluded.{c}, sleep_sessions.{c})" for c in cols),
                       "source=excluded.source", "confidence=excluded.confidence"])
     conn.execute(
         f"""INSERT INTO sleep_sessions ({names}) VALUES ({", ".join(["?"] * len(full_vals))})
@@ -1301,8 +1302,8 @@ def file_seen(conn: sqlite3.Connection, user_id: int, file_hash: str,
               window_min: int = 10) -> bool:
     row = conn.execute(
         """SELECT created_at FROM recent_files WHERE user_id=? AND file_hash=?
-           AND created_at >= datetime('now', ?) ORDER BY created_at DESC LIMIT 1""",
-        (user_id, file_hash, f"-{window_min} minutes"),
+           AND created_at >= ? ORDER BY created_at DESC LIMIT 1""",
+        (user_id, file_hash, utcnow_iso(minutes=-window_min)),
     ).fetchone()
     return row is not None
 
@@ -1316,7 +1317,7 @@ def forget_file(conn: sqlite3.Connection, user_id: int, file_hash: str) -> None:
 def remember_file(conn: sqlite3.Connection, user_id: int, file_hash: str) -> None:
     conn.execute("INSERT INTO recent_files (user_id, file_hash) VALUES (?,?)",
                  (user_id, file_hash))
-    conn.execute("DELETE FROM recent_files WHERE created_at < datetime('now', '-1 day')")
+    conn.execute("DELETE FROM recent_files WHERE created_at < ?", (utcnow_iso(days=-1),))
     conn.commit()
 
 
@@ -1336,9 +1337,9 @@ def log_llm_call(conn: sqlite3.Connection, user_id: int | None, purpose: str,
             """INSERT INTO model_usage_daily (day, user_id, model, requests, input_tokens,
                output_tokens) VALUES (?,?,?,1,?,?)
                ON CONFLICT(day, user_id, model) DO UPDATE SET
-                 requests = requests + 1,
-                 input_tokens = input_tokens + excluded.input_tokens,
-                 output_tokens = output_tokens + excluded.output_tokens""",
+                 requests = model_usage_daily.requests + 1,
+                 input_tokens = model_usage_daily.input_tokens + excluded.input_tokens,
+                 output_tokens = model_usage_daily.output_tokens + excluded.output_tokens""",
             (day, user_id or 0, model, tokens_in or 0, tokens_out or 0),
         )
     conn.commit()
@@ -1363,8 +1364,8 @@ def latest_pending_input(conn: sqlite3.Connection, user_id: int, kind: str,
         sql += " AND message_thread_id=?"
         params.append(pending_thread.get())
     if max_age_min is not None:
-        sql += " AND created_at >= datetime('now', ?)"
-        params.append(f"-{int(max_age_min)} minutes")
+        sql += " AND created_at >= ?"
+        params.append(utcnow_iso(minutes=-max_age_min))
     return conn.execute(sql + " ORDER BY id DESC LIMIT 1", params).fetchone()
 
 
@@ -1409,8 +1410,8 @@ def put_photo_session(conn: sqlite3.Connection, user_id: int, context: dict,
                  (user_id, utcnow_iso()))
     cur = conn.execute(
         """INSERT INTO photo_sessions (user_id, status, context_json, expires_at, meal_id, message_thread_id)
-           VALUES (?, 'awaiting_caption', ?, datetime('now', ?), ?, ?)""",
-        (user_id, json.dumps(context, ensure_ascii=False), f"+{expires_min * 60} seconds",
+           VALUES (?, 'awaiting_caption', ?, ?, ?, ?)""",
+        (user_id, json.dumps(context, ensure_ascii=False), utcnow_iso(minutes=expires_min),
          meal_id, pending_thread.get() or 0),
     )
     conn.commit()
@@ -1662,8 +1663,8 @@ def open_craving(conn: sqlite3.Connection, user_id: int,
     живой разговор не обрывается только потому, что начался давно."""
     return conn.execute(
         f"""SELECT c.* FROM craving_events c WHERE c.user_id=? AND c.outcome='open'
-           AND {_LAST_ACTIVITY} >= datetime('now', ?) ORDER BY c.id DESC LIMIT 1""",
-        (user_id, f"-{int(window_min)} minutes"),
+           AND {_LAST_ACTIVITY} >= ? ORDER BY c.id DESC LIMIT 1""",
+        (user_id, utcnow_iso(minutes=-window_min)),
     ).fetchone()
 
 
@@ -1724,7 +1725,7 @@ def due_craving_followups(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     return conn.execute(
         """SELECT c.*, u.tg_id, u.sex FROM craving_events c JOIN users u ON u.id = c.user_id
            WHERE c.outcome='open' AND c.followup_sent=0 AND c.followup_at_utc IS NOT NULL
-           AND c.followup_at_utc <= datetime('now')"""
+           AND c.followup_at_utc <= CURRENT_TIMESTAMP"""
     ).fetchall()
 
 
@@ -1733,13 +1734,13 @@ def dismiss_stale_cravings(conn: sqlite3.Connection, hours: int = 3) -> None:
     # без коммита, после чего поток умирал по простою и ломал следующую запись.
     ids = [r[0] for r in conn.execute(
         f"""SELECT c.id FROM craving_events c WHERE c.outcome='open'
-            AND {_LAST_ACTIVITY} < datetime('now', ?)""",
-        (f"-{int(hours)} hours",),
+            AND {_LAST_ACTIVITY} < ?""",
+        (utcnow_iso(hours=-hours),),
     ).fetchall()]
     if not ids:
         return
     conn.execute(
-        f"""UPDATE craving_events SET outcome='dismissed', closed_utc=datetime('now')
+        f"""UPDATE craving_events SET outcome='dismissed', closed_utc=CURRENT_TIMESTAMP
            WHERE id IN ({",".join("?" * len(ids))})""",
         ids,
     )
@@ -1787,10 +1788,21 @@ def save_off_food(conn: sqlite3.Connection, code: str, name_ru: str, name_en: st
 def food_by_barcode(conn: sqlite3.Connection, code: str,
                     user_id: int | None = None) -> sqlite3.Row | None:
     """Общий продукт по штрихкоду; свой продукт этого пользователя важнее общего."""
+    if getattr(conn, "postgres", False):
+        from app.adapters.off import valid_barcode
+
+        gtin = code.zfill(14) if valid_barcode(code) else None
+        return conn.execute(
+            """SELECT f.* FROM foods f WHERE f.deleted_at IS NULL
+               AND (f.owner_user_id IS NULL OR f.owner_user_id = ?)
+               AND (f.barcode=? OR f.id IN (SELECT food_id FROM food_barcodes WHERE gtin=?))
+               ORDER BY (f.owner_user_id IS NULL), (f.source='off'), f.id LIMIT 1""",
+            (user_id if user_id is not None else -1, code, gtin),
+        ).fetchone()
     return conn.execute(
         """SELECT * FROM foods WHERE barcode=? AND deleted_at IS NULL
            AND (owner_user_id IS NULL OR owner_user_id = ?)
-           ORDER BY (owner_user_id IS NULL), id LIMIT 1""",
+           ORDER BY (owner_user_id IS NULL), (source='off'), id LIMIT 1""",
         (code, user_id if user_id is not None else -1)).fetchone()
 
 
@@ -1943,26 +1955,25 @@ def has_access_grant(conn: sqlite3.Connection, tg_id: int) -> bool:
     return conn.execute("SELECT 1 FROM access_grants WHERE tg_id = ?", (tg_id,)).fetchone() is not None
 
 
+class _NoRewardChange(Exception):
+    """Leave a compound write without applying a partial reward."""
+
+
 def redeem_referral(conn: sqlite3.Connection, inviter_id: int, tg_id: int, name: str | None,
                     friend_days: int = 0, inviter_days: int = 0) -> bool:
     """Одной транзакцией: приглашение −1, доступ, запись referral. False — приглашений нет или человек уже учтён."""
-    try:
+    with write_transaction(conn):
         if conn.execute("SELECT 1 FROM referrals WHERE invitee_tg_id = ?", (tg_id,)).fetchone():
             return False
         cur = conn.execute("UPDATE users SET invites_left = invites_left - 1 WHERE id = ? AND invites_left > 0",
                            (inviter_id,))
         if cur.rowcount != 1:
-            conn.rollback()
             return False
         conn.execute("INSERT OR IGNORE INTO access_grants (tg_id, inviter_user_id) VALUES (?, ?)", (tg_id, inviter_id))
         conn.execute("INSERT INTO referrals (inviter_user_id, invitee_tg_id, invitee_name, "
                      "friend_bonus_days, inviter_bonus_days) VALUES (?,?,?,?,?)",
                      (inviter_id, tg_id, (name or "").strip()[:64] or None, friend_days, inviter_days))
-        conn.commit()
         return True
-    except Exception:
-        conn.rollback()
-        raise
 
 
 def referral_of_invitee_tg(conn: sqlite3.Connection, tg_id: int) -> sqlite3.Row | None:
@@ -1989,7 +2000,6 @@ def mark_referral_onboarded(conn: sqlite3.Connection, referral_id: int, invitee_
     cur = conn.execute("UPDATE referrals SET invitee_user_id = ?, onboarded_at = ? "
                        "WHERE id = ? AND onboarded_at IS NULL", (invitee_user_id, now, referral_id))
     if cur.rowcount != 1:
-        conn.rollback()
         return False
     conn.execute("UPDATE users SET invited_by = ? WHERE id = ?", (inviter_id, invitee_user_id))
     return True
@@ -2050,19 +2060,20 @@ def day_has_record(conn: sqlite3.Connection, user_id: int, local_date: str) -> b
 
 def spend_freeze(conn: sqlite3.Connection, user_id: int, local_date: str) -> bool:
     """Закрыть день заморозкой: день в таблицу, заморозка −1, строка в журнал. False — заморозок нет."""
-    cur = conn.execute("UPDATE users SET streak_freezes = streak_freezes - 1 WHERE id = ? AND streak_freezes > 0",
-                       (user_id,))
-    if cur.rowcount != 1:
-        conn.rollback()
+    try:
+        with write_transaction(conn):
+            cur = conn.execute("UPDATE users SET streak_freezes = streak_freezes - 1 WHERE id = ? AND streak_freezes > 0",
+                               (user_id,))
+            if cur.rowcount != 1:
+                raise _NoRewardChange
+            inserted = conn.execute("INSERT OR IGNORE INTO streak_freeze_days (user_id, local_date) VALUES (?, ?)", (user_id, local_date))
+            if inserted.rowcount != 1:
+                raise _NoRewardChange
+            conn.execute("INSERT INTO reward_log (user_id, kind, amount, reason) VALUES (?, 'freeze', -1, 'streak_saved')",
+                         (user_id,))
+            return True
+    except _NoRewardChange:
         return False
-    inserted = conn.execute("INSERT OR IGNORE INTO streak_freeze_days (user_id, local_date) VALUES (?, ?)", (user_id, local_date))
-    if inserted.rowcount != 1:
-        conn.rollback()
-        return False
-    conn.execute("INSERT INTO reward_log (user_id, kind, amount, reason) VALUES (?, 'freeze', -1, 'streak_saved')",
-                 (user_id,))
-    conn.commit()
-    return True
 
 
 def anonymize_referrals(conn: sqlite3.Connection, user_id: int, tg_id: int) -> None:

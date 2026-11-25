@@ -112,8 +112,9 @@ async def main() -> None:
 
     db = connect_from_config(cfg)
     version = migrate(db)
-    logging.info("БД готова (%s), schema v%s", "Turso" if cfg.turso_database_url else "локальный SQLite", version)
-    photos.enable(db if cfg.turso_database_url else None, cfg.photos_dir)
+    backend = "Supabase" if cfg.supabase_db_url else ("Turso" if cfg.turso_database_url else "SQLite")
+    logging.info("БД готова (%s), schema v%s", backend, version)
+    photos.enable(db if backend == "Turso" else None, cfg.photos_dir, temporary=backend == "Supabase")
 
     bot = Bot(cfg.telegram_bot_token,
               default=DefaultBotProperties(parse_mode=ParseMode.HTML))

@@ -73,6 +73,17 @@ def photo_form(*datas: bytes, **fields) -> aiohttp.FormData:
 def db():
     import os
     import tempfile
+
+    if url := os.getenv("KCALM_TEST_POSTGRES_URL"):
+        from app.postgres import PostgresConnection
+
+        conn = PostgresConnection(url)
+        try:
+            with conn._raw.transaction(force_rollback=True):
+                yield conn
+        finally:
+            conn.close()
+        return
     fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
     conn = connect(path)
@@ -932,7 +943,7 @@ async def test_api_errors_are_json(client):
 
 async def test_build_app_chat_table_from_migration(db, cfg):
     server.build_app(db, None, cfg)
-    cols = [r["name"] for r in db.execute("PRAGMA table_info(chat_messages)")]
+    cols = [col[0] for col in db.execute("SELECT * FROM chat_messages LIMIT 0").description]
     assert cols == ["id", "user_id", "role", "text", "meal_id", "created_at"]
     server.build_app(db, None, cfg)                       # повторно: без ошибок
 

@@ -4,7 +4,7 @@ services:
     name: kcalm
     runtime: python
     plan: free
-    region: frankfurt            # ближе к Turso (выбери регион БД в Европе)
+    region: frankfurt            # близко к Supabase EU
     buildCommand: pip install -r requirements.txt
     startCommand: python -m app.bot
     healthCheckPath: /healthz
@@ -14,9 +14,7 @@ services:
         value: 3.11.9
       - key: WEB_ENABLED
         value: "true"
-      - key: TURSO_DATABASE_URL
-        sync: false
-      - key: TURSO_AUTH_TOKEN
+      - key: SUPABASE_DB_URL
         sync: false
       - key: TELEGRAM_BOT_TOKEN
         sync: false

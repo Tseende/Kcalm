@@ -13,6 +13,7 @@ from app.domain.targets import MAX_RATE, MIN_AGE, MIN_BMI, bmi, compute_target, 
 from app.services import profile as profilesvc
 from app.services import referral as referralsvc
 from app.services import water as watersvc
+from app.db import write_transaction
 from app.storage import repo
 from app.timeutils import local_today, minutes_before
 
@@ -47,7 +48,7 @@ class OnboardingError(ValueError):
 
 def skip(db: sqlite3.Connection, tg_id: int, tz: str) -> None:
     """Открыть дневник без персональных норм. Повторный запрос не меняет профиль."""
-    with db:
+    with write_transaction(db):
         db.execute(
             """INSERT INTO users (tg_id, tz, target_rate_kg_week, onboarding_skipped)
                VALUES (?, ?, 0, 1)
