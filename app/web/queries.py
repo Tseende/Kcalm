@@ -244,11 +244,16 @@ def kcal_sources(db: sqlite3.Connection, user_id: int, start: date, end: date) -
             "top": [{**x, "share": share(x["kcal"], items_total)} for x in top]}
 
 
+def comparison_series(db: sqlite3.Connection, user: sqlite3.Row, today: date, days: int):
+    """Read both periods together. Only the current period displays smoothed weight."""
+    combined = series(db, user, today - timedelta(days=2 * days - 1), 2 * days)
+    return combined[days:], combined[:days]
+
+
 def stats(db: sqlite3.Connection, user: sqlite3.Row, range_name: str, today: date) -> dict:
     """Ряды по дням за range_name (последние N дней включая сегодня), сводка и сводка прошлого периода."""
     n = RANGE_DAYS[range_name]
-    days = series(db, user, today - timedelta(days=n - 1), n)
-    prev = series(db, user, today - timedelta(days=2 * n - 1), n)
+    days, prev = comparison_series(db, user, today, n)
     tgt = repo.current_target(db, user["id"])
     return {"range": range_name, "days": days, "summary": summarize(days), "prev_summary": summarize(prev),
             "sources": kcal_sources(db, user["id"], today - timedelta(days=n - 1), today),

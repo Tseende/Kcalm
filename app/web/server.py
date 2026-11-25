@@ -47,7 +47,7 @@ from app.web import period as period_analysis
 from app.web import queries as q
 from app.web.static_assets import build_index, file_version
 from app.web.auth import InitDataError, validate_init_data
-from app.web.serializers import dish_json, food_json, meal_json, product_json, targets_json
+from app.web.serializers import day_meals_json, dish_json, food_json, meal_json, product_json, targets_json
 
 log = logging.getLogger(__name__)
 
@@ -719,7 +719,7 @@ async def api_day(request: web.Request) -> web.Response:
         "date": key, "targets": targets, "totals": totals,
         "remaining_kcal": None if totals["unresolved_items"] or not targets["kcal"] else targets["kcal"] - totals["kcal"],
         "water_ml": repo.day_water_ml(db, uid, key),
-        "meals": [meal_json(db, m) for m in repo.day_meals(db, uid, key)],
+        "meals": day_meals_json(db, uid, key),
         "sleep": q.day_sleep(db, uid, key),
         "activity": q.day_activity(db, uid, key),
         "steps_goal": q.STEPS_GOAL,

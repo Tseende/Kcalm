@@ -90,8 +90,7 @@ def _weight_block(days: list[dict], user, n: int, care: bool, tdee: int | None, 
 def build(db: sqlite3.Connection, user, today: date, period: str) -> dict:
     n = PERIODS[period]
     start = today - timedelta(days=n - 1)
-    days = q.series(db, user, start, n)
-    prev = q.series(db, user, start - timedelta(days=n), n)
+    days, prev = q.comparison_series(db, user, today, n)
     care = bool(user["care_mode"])
     tgt = repo.current_target(db, user["id"])
     kcal_t = int(tgt["kcal_target"]) if tgt else 2100

@@ -38,13 +38,17 @@ def item_json(row: sqlite3.Row) -> dict:
             "edited": bool(row["edited_by_user"]), "source": row["source"]}
 
 
-def meal_json(db: sqlite3.Connection, meal: sqlite3.Row) -> dict:
+def meal_json(db: sqlite3.Connection, meal: sqlite3.Row, *, item_rows=None, photo_rows=None) -> dict:
+    if photo_rows is None:
+        photo_rows = repo.meal_photos(db, meal["id"])
+    if item_rows is None:
+        item_rows = repo.get_meal_items(db, meal["id"])
     photos = [{"id": p["id"], "url": f"/api/photos/{p['id']}", "dish_id": p["dish_id"]}
-              for p in repo.meal_photos(db, meal["id"])]
+              for p in photo_rows]
     kcal = int(meal["kcal_total"])
     # правка граммов пересчитывает итог, но не диапазон: не отдаём диапазон, не содержащий итог
     low, high = min(int(meal["kcal_low"]), kcal), max(int(meal["kcal_high"]), kcal)
-    items = [item_json(i) for i in repo.get_meal_items(db, meal["id"])]
+    items = [item_json(i) for i in item_rows]
     unresolved = sum(i["source"] == "unresolved" for i in items)
     return {"id": meal["id"], "date": meal["local_date"], "time": meal["local_time"],
             "type": meal["meal_type"], "source": meal["source"],
@@ -53,6 +57,26 @@ def meal_json(db: sqlite3.Connection, meal: sqlite3.Row) -> dict:
             "confidence": _num(meal["confidence"], 2), "photos": photos,
             "items": items, **({"unresolved_items": unresolved} if unresolved else {}),
             "comment": meal["transcript"] or None}
+
+
+def day_meals_json(db: sqlite3.Connection, user_id: int, day: str) -> list[dict]:
+    meals = repo.day_meals(db, user_id, day)
+    if not meals:
+        return []
+    items, photos = {}, {}
+    for table, order, groups in (
+        ("meal_items", "r.id", items),
+        ("meal_photos", "r.position, r.id", photos),
+    ):
+        for row in db.execute(
+            f"""SELECT r.* FROM {table} r JOIN meals m ON m.id=r.meal_id
+                WHERE m.user_id=? AND m.local_date=? AND m.deleted_at IS NULL
+                ORDER BY {order}""",
+            (user_id, day),
+        ):
+            groups.setdefault(row["meal_id"], []).append(row)
+    return [meal_json(db, m, item_rows=items.get(m["id"], ()), photo_rows=photos.get(m["id"], ()))
+            for m in meals]
 
 
 def dish_json(dish: sqlite3.Row) -> dict:

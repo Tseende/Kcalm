@@ -76,19 +76,28 @@ def day_facts(db: sqlite3.Connection, user, day: str) -> dict:
     uid = user["id"]
     totals = repo.day_totals(db, uid, day)
     meals = repo.day_meals(db, uid, day)
-    tgt = repo.current_target(db, uid)
-    act = db.execute("SELECT * FROM activity_daily WHERE user_id=? AND local_date=?",
-                     (uid, day)).fetchone()
-    sleep = db.execute("SELECT * FROM sleep_sessions WHERE user_id=? AND wake_date=?",
-                       (uid, day)).fetchone()
+    metrics = db.execute(
+        """SELECT t.kcal_target, t.protein_g AS protein_target,
+                  a.steps, a.active_kcal, a.active_minutes, a.avg_hr, a.resting_hr,
+                  s.duration_min, s.score, s.awake_min, s.deep_min,
+                  (SELECT COALESCE(SUM(ml), 0) FROM water_log
+                   WHERE user_id=? AND local_date=?) AS water,
+                  (SELECT weight_kg FROM body_measurements WHERE user_id=? AND weight_kg IS NOT NULL
+                   ORDER BY local_date DESC LIMIT 1) AS latest_weight
+           FROM (SELECT 1 AS sentinel) base
+           LEFT JOIN (SELECT kcal_target, protein_g FROM targets_history WHERE user_id=?
+                      ORDER BY valid_from DESC LIMIT 1) t ON TRUE
+           LEFT JOIN (SELECT steps, active_kcal, active_minutes, avg_hr, resting_hr
+                      FROM activity_daily WHERE user_id=? AND local_date=? LIMIT 1) a ON TRUE
+           LEFT JOIN (SELECT duration_min, score, awake_min, deep_min
+                      FROM sleep_sessions WHERE user_id=? AND wake_date=? LIMIT 1) s ON TRUE""",
+        (uid, day, uid, uid, uid, day, uid, day),
+    ).fetchone()
     late = sum(m["kcal_total"] for m in meals
                if analytics.is_late(m["local_time"], user["eating_cutoff"]))
     gap = rhythm.meal_gap(meals)
     # чай, американо и кола без сахара записаны приёмом (source=manual), но едой не считаются
     eaten = rhythm.eaten(meals)
-
-    def col(row, name):
-        return row[name] if row and row[name] is not None else None
 
     return {
         "date": day,
@@ -98,16 +107,16 @@ def day_facts(db: sqlite3.Connection, user, day: str) -> dict:
         "kcal_high": int(sum(m["kcal_high"] or 0 for m in meals)),
         "protein": round(float(totals["protein"])),
         "fat": round(float(totals["fat"])), "carbs": round(float(totals["carbs"])),
-        "kcal_target": int(tgt["kcal_target"]) if tgt else 2100,
-        "protein_target": int(tgt["protein_g"] or 120) if tgt else 120,
-        "water": repo.day_water_ml(db, uid, day),
-        "water_goal": watersvc.goal_for(db, user),
-        "steps": col(act, "steps"),
-        "active_kcal": col(act, "active_kcal"), "active_min": col(act, "active_minutes"),
-        "avg_hr": col(act, "avg_hr"), "resting_hr": col(act, "resting_hr"),
-        "sleep_min": sleep["duration_min"] if sleep and sleep["duration_min"] else None,
-        "sleep_score": col(sleep, "score"), "sleep_awake_min": col(sleep, "awake_min"),
-        "sleep_deep_min": col(sleep, "deep_min"),
+        "kcal_target": int(metrics["kcal_target"]) if metrics["kcal_target"] is not None else 2100,
+        "protein_target": int(metrics["protein_target"] or 120),
+        "water": int(metrics["water"]),
+        "water_goal": watersvc.water_goal_ml(metrics["latest_weight"] or user["start_weight_kg"]),
+        "steps": metrics["steps"],
+        "active_kcal": metrics["active_kcal"], "active_min": metrics["active_minutes"],
+        "avg_hr": metrics["avg_hr"], "resting_hr": metrics["resting_hr"],
+        "sleep_min": metrics["duration_min"] or None,
+        "sleep_score": metrics["score"], "sleep_awake_min": metrics["awake_min"],
+        "sleep_deep_min": metrics["deep_min"],
         "late_kcal": int(late), "cutoff": user["eating_cutoff"],
         "evening_kcal": rhythm.evening_kcal(meals),
         "first_meal": eaten[0]["local_time"] if eaten else None,
