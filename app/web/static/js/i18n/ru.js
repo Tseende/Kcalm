@@ -805,6 +805,7 @@ export default {
   "photo.unreadable": "Не удалось прочитать фото. Сохраните его как JPEG или PNG и попробуйте ещё раз.",
   // prod
   "prod.cats": "Категории",
+  "prod.shared_catalog": "Общий каталог",
   "prod.search_ph": "Поиск по названию или бренду",
   "prod.title": "Мои продукты",
   "prod.add": "Добавить продукт",

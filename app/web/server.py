@@ -878,7 +878,7 @@ async def api_foods_search(request: web.Request) -> web.Response:
         limit = max(1, min(50, int(request.query.get("limit", 30))))
     except ValueError:
         limit = 30
-    found = repo.search_foods(db, user["id"], request.query.get("q", "").strip(), limit)
+    found = repo.search_foods(db, user["id"], request.query.get("q", "").strip()[:120], limit)
     return ok({"foods": [food_json(f) for f in found]})
 
 
@@ -1399,9 +1399,12 @@ def clean_product(data: dict, *, partial: bool) -> dict:
 @routes.get("/api/products")
 async def api_products(request: web.Request) -> web.Response:
     db, user, _ = ctx(request)
-    rows = repo.list_products(db, user["id"], request.query.get("q", "").strip() or None,
-                              limit=200)
-    return ok({"products": [product_json(p) for p in rows]})
+    q = request.query.get("q", "").strip()[:120]
+    rows = repo.list_products(db, user["id"], q or None, limit=200)
+    result = {"products": [product_json(p) for p in rows]}
+    if len(q) >= 2 and request.query.get("catalog") == "1":
+        result["catalog"] = [product_json(p) for p in repo.search_shared_foods(db, q, limit=50)]
+    return ok(result)
 
 
 @routes.post("/api/products")

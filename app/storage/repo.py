@@ -274,59 +274,79 @@ def _case_variants(word: str) -> list[str]:
     return seen
 
 
-def _shared_candidates_sql(words: list[str]) -> tuple[str, list]:
-    """SQL-отбор кандидатов общего справочника: каждое слово запроса входит в название/бренд/en-название.
+_EXPONENTA_TERMS = ("экспонент", "exponent")
+_EXPONENTA_SPELLINGS = {
+    "exponent", "exponenta", "экспонент", "экспанент",
+    "экспонента", "экспанента", "экспоненту", "экспаненту",
+}
 
-    Нормализованной колонки нет, поэтому сравнение по вариантам регистра слова (instr, без LIKE,
-    чтобы не экранировать % и _), а «ё» в колонках сводится к «е» через REPLACE (слова уже свёрнуты).
-    Это надмножество: точный фильтр и ранжирование остаются в Python."""
+
+def _search_terms(word: str) -> tuple[str, ...]:
+    if word in _EXPONENTA_SPELLINGS:
+        return _EXPONENTA_TERMS
+    return (word,)
+
+
+def _shared_candidates_sql(terms: list[tuple[str, ...]]) -> tuple[str, list]:
+    """SQL-отбор кандидатов по названию и бренду; ранжирование остаётся в Python."""
     cols = ("REPLACE(REPLACE(name_ru,'ё','е'),'Ё','Е')",
             "REPLACE(REPLACE(COALESCE(brand,''),'ё','е'),'Ё','Е')",
             "name_en")
     where, params = [], []
-    for w in words:
+    for alternatives in terms:
         parts = []
-        for v in _case_variants(w):
-            for c in cols:
-                parts.append(f"instr({c}, ?) > 0")
-                params.append(v)
+        for variant in alternatives:
+            for form in _case_variants(variant):
+                for col in cols:
+                    parts.append(f"instr({col}, ?) > 0")
+                    params.append(form)
         where.append("(" + " OR ".join(parts) + ")")
     sql = ("SELECT * FROM foods WHERE owner_user_id IS NULL AND deleted_at IS NULL AND "
            + " AND ".join(where) + " ORDER BY length(name_ru), name_ru LIMIT ?")
-    params.append(_CAND_LIMIT)
-    return sql, params
+    return sql, [*params, _CAND_LIMIT]
+
+
+def search_shared_foods(conn: sqlite3.Connection, q: str | None,
+                        limit: int = 30) -> list[sqlite3.Row]:
+    needle = _fold((q or "").strip())
+    if len(needle) < 2:
+        return []
+    terms = [_search_terms(word) for word in needle.split()]
+    sql, params = _shared_candidates_sql(terms)
+    ranked = []
+    for row in conn.execute(sql, params):
+        ru = _fold(f"{row['name_ru']} {row['brand'] or ''}")
+        hay = ru + " " + _fold(row["name_en"])
+        if not all(any(form in hay for form in alternatives) for alternatives in terms):
+            continue
+        rank = 0 if ru.startswith(needle) else 1 if f" {needle}" in f" {ru}" else 2
+        ranked.append((rank, len(row["name_ru"] or ""), _fold(row["name_ru"]), row))
+    ranked.sort(key=lambda entry: entry[:3])
+    return [entry[3] for entry in ranked[:limit]]
 
 
 def search_foods(conn: sqlite3.Connection, user_id: int, q: str | None,
                  limit: int = 30) -> list[dict]:
-    """Поиск продукта для ручного ввода: сначала свои, затем общий справочник (owner IS NULL).
-
-    Без LLM и сети. ``q`` короче двух символов: только свои, самые используемые.
-    Элемент: строка foods + own (bool) + times_used + default_grams с учётом личного пресета."""
+    """Сначала личные продукты, затем общий справочник для запроса от двух символов."""
     needle = _fold((q or "").strip())
     own_rows = list_products(conn, user_id, needle if len(needle) >= 2 else None, limit=limit)
-    out = [(r, True) for r in own_rows]
-    if len(needle) >= 2 and len(out) < limit:
-        words = needle.split()
-        ranked = []
-        sql, params = _shared_candidates_sql(words)
-        for r in conn.execute(sql, params):
-            ru = _fold(f"{r['name_ru']} {r['brand'] or ''}")
-            en = _fold(r["name_en"])
-            hay = ru + " " + en
-            if not all(w in hay for w in words):
-                continue
-            rank = 0 if ru.startswith(needle) else 1 if f" {needle}" in f" {ru}" else 2
-            ranked.append((rank, len(r["name_ru"] or ""), (r["name_ru"] or "").lower(), r))
-        ranked.sort(key=lambda t: t[:3])
-        out += [(t[3], False) for t in ranked[:limit - len(out)]]
-    result = []
-    for r, own in out[:limit]:
-        d = dict(r)
-        d["own"] = own
-        d["default_grams"] = user_default_grams(conn, user_id, r["id"]) or r["default_grams"]
-        result.append(d)
-    return result
+    shared = search_shared_foods(conn, needle, limit - len(own_rows)) if len(own_rows) < limit else []
+    rows = own_rows + shared
+    if not rows:
+        return []
+    marks = ",".join("?" for _ in rows)
+    defaults = {}
+    for row in conn.execute(
+        f"""SELECT food_id, default_grams FROM user_foods
+            WHERE user_id=? AND food_id IN ({marks}) ORDER BY id""",
+        (user_id, *(row["id"] for row in rows)),
+    ):
+        defaults.setdefault(row["food_id"], row["default_grams"])
+    return [
+        {**dict(row), "own": i < len(own_rows),
+         "default_grams": defaults.get(row["id"]) or row["default_grams"]}
+        for i, row in enumerate(rows)
+    ]
 
 
 def owned_meal_item(conn: sqlite3.Connection, user_id: int, item_id: int) -> sqlite3.Row | None:

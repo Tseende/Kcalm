@@ -1542,6 +1542,25 @@ async def test_foods_search_own_then_shared_no_foreign(client, db, user_id):
     assert gone == []
 
 
+async def test_products_search_shows_shared_brand_and_keeps_private_products_private(client, db, user_id):
+    shared = repo.upsert_food(db, "Напиток Exponenta ваниль", "Vanilla protein drink", 60, 12, 0, 3, "seed")
+    repo.touch_user_food(db, user_id, shared, default_grams=250)
+    other = add_user(db, 1002)
+    foreign = repo.create_product(db, other, "Exponenta чужой", 60, 12, 0, 3)
+
+    for query in ("Экспонента", "Экспанента", "экспаненту ваниль", "Exponenta"):
+        response = await client.get("/api/products", params={"q": query, "catalog": "1"}, headers=H)
+        assert response.status == 200
+        body = await response.json()
+        assert body["products"] == []
+        assert [product["id"] for product in body["catalog"]] == [shared]
+        assert all(product["id"] != foreign for product in body["catalog"])
+
+    response = await client.get("/api/foods/search", params={"q": "Экспанента"}, headers=H)
+    assert response.status == 200
+    assert [(food["id"], food["default_grams"]) for food in (await response.json())["foods"]] == [(shared, 250)]
+
+
 @pytest.mark.parametrize("extra", [{}, {"name": "Яблоко без кожуры"}])
 async def test_manual_portion_edit_keeps_exact_kcal_and_range(client, extra):
     item = {"name": "Яблоко", "grams": 150, "per": "100g", "kcal": 52,

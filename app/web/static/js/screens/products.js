@@ -50,6 +50,7 @@ export default async function render(root, ctx) {
   mainButton.show(t('prod.add'), () => openAdd());
 
   let all = [];
+  let catalog = [];
   let cat = null;
   const observer = typeof IntersectionObserver === 'function' ? new IntersectionObserver((entries) => {
     for (const { target, isIntersecting } of entries) {
@@ -91,8 +92,16 @@ export default async function render(root, ctx) {
     }
     if (cat === DRINKS) return;
     const shown = cat ? all.filter((p) => p.group === cat) : all;
+    const shared = cat ? catalog.filter((p) => p.group === cat) : catalog;
     const rows = h('div', { class: 'list tiles prod-list' });
-    const row = (p) => h('button', { class: 'row prod-row', type: 'button', onclick: () => nav.go('/menu/product/' + p.id) },
+    const row = (p, fromCatalog = false) => h('button', { class: 'row prod-row', type: 'button',
+      onclick: () => fromCatalog
+        ? sheet({ title: p.name, content: h('div', { class: 'stack' },
+          p.brand ? h('div', null, p.brand) : null,
+          h('div', { class: 'footnote' }, t('pf.per100')),
+          h('div', null, h('b', null, fmtN(p.kcal)), ' ', t('unit.kcal')),
+          macroChips({ p: p.protein, f: p.fat, c: p.carbs })) })
+        : nav.go('/menu/product/' + p.id) },
       cataloguePic(p, shown.length >= ATLAS_THRESHOLD, observer) || tile('package', PALETTE[Math.abs(Number(p.id) || 0) % PALETTE.length]),
       h('span', { class: 'grow' },
         h('span', { class: 'row-title' }, p.name),
@@ -102,15 +111,22 @@ export default async function render(root, ctx) {
     let displayed = 0;
     const more = h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => appendPage(true) }, t('prod.more'));
     function appendPage(focusFirst = false) {
-      const batch = shown.slice(displayed, displayed + PAGE_SIZE).map(row);
+      const batch = shown.slice(displayed, displayed + PAGE_SIZE).map((p) => row(p));
       rows.append(...batch);
       displayed += batch.length;
       if (focusFirst) batch[0]?.focus();
       if (displayed >= shown.length) more.remove();
     }
     appendPage();
-    list.replaceChildren(rows, h('div', { class: 'footnote' }, t('prod.count', { n: tn('prod.n', shown.length) })));
-    if (displayed < shown.length) list.append(more);
+    list.replaceChildren();
+    if (shown.length) {
+      list.append(rows, h('div', { class: 'footnote' }, t('prod.count', { n: tn('prod.n', shown.length) })));
+      if (displayed < shown.length) list.append(more);
+    }
+    if (shared.length) {
+      list.append(h('h2', { class: 'section-title' }, t('prod.shared_catalog')),
+        h('div', { class: 'list tiles prod-list' }, shared.map((p) => row(p, true))));
+    }
   }
 
   // Напитки: готовый каталог с калориями на 100 мл; тап открывает ввод напитка с этим выбором.
@@ -140,17 +156,19 @@ export default async function render(root, ctx) {
     const q = search.value.trim();
     if (!list.children.length) list.replaceChildren(skeletonCards(3, 64));
     try {
-      const { products } = await api.get('/products', { q });
+      const { products, catalog: matches = [] } = await api.get('/products', { q, catalog: q.length >= 2 ? 1 : undefined });
       if (!ctx.alive() || cat === DRINKS || q !== search.value.trim()) return;
-      all = products.map((p) => ({ ...p, group: foodGroupOf(p.name, p.icon, p.brand) }));
-      if (!products.length) {
+      const grouped = (p) => ({ ...p, group: foodGroupOf(p.name, p.icon, p.brand) });
+      all = products.map(grouped);
+      catalog = matches.map(grouped);
+      if (!products.length && !matches.length) {
         paint();
         list.replaceChildren(q ? emptyState('search', t('common.not_found'), t('common.try_other'))
           : emptyState('package', t('prod.empty_title'), t('prod.empty_text')));
         return;
       }
       paint();
-    } catch (e) { if (ctx.alive()) errorState(list, e, load); }
+    } catch (e) { if (ctx.alive() && cat !== DRINKS && q === search.value.trim()) errorState(list, e, load); }
   }
   await load();
   return () => observer?.disconnect();
