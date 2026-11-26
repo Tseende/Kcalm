@@ -9,12 +9,15 @@ import io
 import sqlite3
 from datetime import date, timedelta
 
+from app.db import read_batch
 from app.domain import analytics
 from app.domain import tracking as trk
 from app.domain.weekgoal import STEPS_GOAL
+from app.domain.weighin import pick_trend_rows
 from app.domain.targets import ewma_dated, value_at_or_before
 from app.services import water as watersvc
 from app.storage import repo
+from app.web.serializers import DAY_ITEM_SQL, DAY_PHOTO_SQL, day_meals_json, target_values
 
 RANGE_DAYS = {"week": 7, "month": 30, "90d": 90}
 CSV_KINDS = ("meals", "body", "water", "sleep", "activity")
@@ -70,33 +73,16 @@ def day_weight(db: sqlite3.Connection, user_id: int, local_date: str) -> float |
     return float(rows[-1]["weight_kg"]) if rows else None
 
 
-def last_weight(db: sqlite3.Connection, user_id: int, local_date: str) -> dict | None:
-    """Последний замер веса не позже указанного дня: вес не нужно вносить каждый день."""
-    row = db.execute(
-        """SELECT local_date, weight_kg FROM body_measurements
-           WHERE user_id=? AND local_date<=? AND weight_kg IS NOT NULL
-           ORDER BY local_date DESC, id DESC LIMIT 1""", (user_id, local_date)).fetchone()
-    return {"kg": float(row["weight_kg"]), "date": row["local_date"]} if row else None
-
-
-def day_sleep(db: sqlite3.Connection, user_id: int, wake_date: str) -> dict | None:
-    for row in repo.sleep_series(db, user_id, wake_date, wake_date):
-        if row["duration_min"] is not None or row["score"] is not None:
-            return {"duration_min": row["duration_min"], "score": row["score"]}
+def _sleep_values(row) -> dict | None:
+    if row and (row["duration_min"] is not None or row["score"] is not None):
+        return {"duration_min": row["duration_min"], "score": row["score"]}
     return None
 
 
-def activity_hint(db: sqlite3.Connection, user_id: int, today: date, current: int) -> dict | None:
-    """Подсказка «уровень активности в профиле не совпадает с шагами» или None (см. domain.tracking.activity_hint)."""
-    start = (today - timedelta(days=trk.HINT_WINDOW_DAYS - 1)).isoformat()
-    steps = [r["steps"] for r in repo.activity_series(db, user_id, start, today.isoformat())
-             if r["steps"] is not None]
+def _activity_hint_values(rows, workouts: int, current: int) -> dict | None:
+    steps = [r["steps"] for r in rows if r["steps"] is not None]
     if not steps:
         return None
-    workouts = db.execute(
-        "SELECT COUNT(*) FROM activity_daily WHERE user_id=? AND local_date BETWEEN ? AND ? "
-        "AND workouts_json IS NOT NULL AND CAST(workouts_json AS TEXT) NOT IN ('', '[]')",
-        (user_id, start, today.isoformat())).fetchone()[0]
     avg = sum(steps) / len(steps)
     suggested = trk.activity_hint(avg, len(steps), int(workouts or 0), current)
     if suggested is None:
@@ -104,18 +90,65 @@ def activity_hint(db: sqlite3.Connection, user_id: int, today: date, current: in
     return {"avg_steps": int(round(avg, -2)), "days": len(steps), "current": current, "suggested": suggested}
 
 
-def day_activity(db: sqlite3.Connection, user_id: int, local_date: str) -> dict | None:
-    for row in repo.activity_series(db, user_id, local_date, local_date):
-        if row["steps"] is not None or row["active_kcal"] is not None:
-            return {"steps": row["steps"], "active_kcal": row["active_kcal"]}
+def _activity_values(row) -> dict | None:
+    if row and (row["steps"] is not None or row["active_kcal"] is not None):
+        return {"steps": row["steps"], "active_kcal": row["active_kcal"]}
     return None
 
 
-def day_totals(db: sqlite3.Connection, user_id: int, local_date: str) -> dict:
-    t = repo.day_totals(db, user_id, local_date)
+def _day_totals_values(t) -> dict:
     return {"kcal": int(t["kcal"]), "protein": round(float(t["protein"]), 1),
             "fat": round(float(t["fat"]), 1), "carbs": round(float(t["carbs"]), 1),
             "unresolved_items": t["unresolved_items"]}
+
+
+def day_totals(db: sqlite3.Connection, user_id: int, local_date: str) -> dict:
+    return _day_totals_values(repo.day_totals(db, user_id, local_date))
+
+
+def day_snapshot(db: sqlite3.Connection, user, day: date, activity_level: int | None) -> dict:
+    """Load the whole diary screen in one database round trip."""
+    uid, key = user["id"], day.isoformat()
+    start = (day - timedelta(days=trk.HINT_WINDOW_DAYS - 1)).isoformat() if activity_level is not None else key
+    meals, items, photos, totals_rows, target_rows, water_rows, weight_rows, latest_rows, sleep_rows, activity_rows, workouts = read_batch(
+        db,
+        (repo.DAY_MEALS_SQL, (uid, key)),
+        (DAY_ITEM_SQL, (uid, key)),
+        (DAY_PHOTO_SQL, (uid, key)),
+        (repo.DAY_TOTALS_SQL, (uid, key)),
+        (repo.CURRENT_TARGET_SQL, (uid,)),
+        (repo.DAY_WATER_SQL, (uid, key)),
+        ("""SELECT local_date, weight_kg FROM body_measurements
+            WHERE user_id=? AND local_date<=? AND weight_kg IS NOT NULL
+            ORDER BY local_date DESC, id DESC LIMIT 1""", (uid, key)),
+        (repo.LATEST_WEIGHT_SQL, (uid,)),
+        (repo.SLEEP_SERIES_SQL, (uid, key, key)),
+        (repo.ACTIVITY_SERIES_SQL, (uid, start, key)),
+        ("""SELECT COUNT(*) FROM activity_daily WHERE user_id=? AND local_date BETWEEN ? AND ?
+            AND workouts_json IS NOT NULL AND CAST(workouts_json AS TEXT) NOT IN ('', '[]')""",
+         (uid, start, key)),
+    )
+    target = next(iter(target_rows), None)
+    latest = latest_rows[0]["weight_kg"] if latest_rows else user["start_weight_kg"]
+    targets = target_values(user, target, watersvc.water_goal_ml(latest))
+    totals = _day_totals_values(totals_rows[0])
+    weight = weight_rows[0] if weight_rows else None
+    sleep = next(iter(repo.merge_daily_sources(sleep_rows, "wake_date")), None)
+    active = repo.merge_daily_sources(activity_rows, "local_date")
+    today_active = next((row for row in active if row["local_date"] == key), None)
+    hint = _activity_hint_values(active, workouts[0][0], activity_level) if activity_level is not None else None
+    return {
+        "date": key, "targets": targets, "totals": totals,
+        "remaining_kcal": None if totals["unresolved_items"] or not targets["kcal"] else targets["kcal"] - totals["kcal"],
+        "water_ml": int(water_rows[0]["ml"]),
+        "meals": day_meals_json(db, meals, items, photos),
+        "sleep": _sleep_values(sleep),
+        "activity": _activity_values(today_active),
+        "steps_goal": STEPS_GOAL,
+        "activity_hint": hint,
+        "weight": float(weight["weight_kg"]) if weight and weight["local_date"] == key else None,
+        "weight_last": {"kg": float(weight["weight_kg"]), "date": weight["local_date"]} if weight else None,
+    }
 
 
 # ------------------------------------------------------------------ статистика
@@ -134,9 +167,18 @@ def series(db: sqlite3.Connection, user: sqlite3.Row, start: date, n: int) -> li
     end = start + timedelta(days=n - 1)
     f, t = start.isoformat(), end.isoformat()
 
+    meal_rows, water_rows, weight_rows, sleep_rows, activity_rows, targets = read_batch(
+        db,
+        (repo.RANGE_MEALS_SQL, (uid, f, t)),
+        (repo.WATER_BY_DAY_SQL, (uid, f, t)),
+        (repo.TREND_WEIGHT_SQL, (uid, "1900-01-01", t)),
+        (repo.SLEEP_SERIES_SQL, (uid, f, t)),
+        (repo.ACTIVITY_SERIES_SQL, (uid, f, t)),
+        ("SELECT valid_from, kcal_target FROM targets_history WHERE user_id=? ORDER BY valid_from", (uid,)),
+    )
     meals: dict[str, dict] = {}
     incomplete_days = set()
-    for m in repo.range_meals(db, uid, f, t):
+    for m in meal_rows:
         if m["incomplete"]:
             incomplete_days.add(m["local_date"])
         d = meals.setdefault(m["local_date"], {"kcal": 0, "protein": 0.0, "fat": 0.0, "carbs": 0.0, "late": 0})
@@ -146,20 +188,18 @@ def series(db: sqlite3.Connection, user: sqlite3.Row, start: date, n: int) -> li
         d["carbs"] += m["carbs_g"]
         if analytics.is_late(m["local_time"], user["eating_cutoff"] or "21:00"):
             d["late"] += m["kcal_total"]
-    water = repo.water_by_day(db, uid, f, t)
-    weights = {r["local_date"]: float(r["weight_kg"]) for r in repo.weight_series(db, uid, f, t)}
-    smooth = _trend_points(db, uid, t)
+    water = {r["local_date"]: int(r["ml"]) for r in water_rows}
+    weights = {r["local_date"]: float(r["weight_kg"]) for r in weight_rows if r["local_date"] >= f}
+    trend_rows, _ = pick_trend_rows(weight_rows)
+    smooth = ewma_dated([(date.fromisoformat(r["local_date"]).toordinal(), r["weight_kg"]) for r in trend_rows])
     sleep: dict[str, int] = {}
-    for r in repo.sleep_series(db, uid, f, t):
+    for r in repo.merge_daily_sources(sleep_rows, "wake_date"):
         if r["duration_min"] and r["wake_date"] not in sleep:
             sleep[r["wake_date"]] = r["duration_min"]
     steps: dict[str, int] = {}
-    for r in repo.activity_series(db, uid, f, t):
+    for r in repo.merge_daily_sources(activity_rows, "local_date"):
         if r["steps"] is not None and r["local_date"] not in steps:
             steps[r["local_date"]] = r["steps"]
-    targets = db.execute(
-        "SELECT valid_from, kcal_target FROM targets_history WHERE user_id=? ORDER BY valid_from",
-        (uid,)).fetchall()
 
     def target_on(day: str) -> int | None:
         found = None
@@ -212,21 +252,21 @@ MEAL_ORDER = ("breakfast", "lunch", "dinner", "snack")
 TOP_FOODS = 5
 
 
-def kcal_sources(db: sqlite3.Connection, user_id: int, start: date, end: date) -> dict:
+KCALS_BY_MEAL_TYPE_SQL = """SELECT meal_type, SUM(kcal_total) FROM meals
+WHERE user_id=? AND local_date BETWEEN ? AND ? AND deleted_at IS NULL GROUP BY meal_type"""
+KCALS_BY_ITEM_SQL = """SELECT i.name_ru, i.kcal FROM meal_items i JOIN meals m ON m.id = i.meal_id
+WHERE m.user_id=? AND m.local_date BETWEEN ? AND ? AND m.deleted_at IS NULL"""
+
+
+def kcal_sources(meal_types, items) -> dict:
     """Откуда калории за период: доли по приёмам и продукты, давшие больше всего ккал."""
-    f, t = start.isoformat(), end.isoformat()
-    by_type = {k: 0 for k in MEAL_ORDER}
-    for row in db.execute(
-            "SELECT meal_type, SUM(kcal_total) FROM meals WHERE user_id=? AND local_date BETWEEN ? AND ? "
-            "AND deleted_at IS NULL GROUP BY meal_type", (user_id, f, t)).fetchall():
+    by_type = {key: 0 for key in MEAL_ORDER}
+    for row in meal_types:
         if row[0] in by_type:
             by_type[row[0]] = int(row[1] or 0)
     total = sum(by_type.values())
     foods: dict[str, dict] = {}
-    for row in db.execute(
-            "SELECT i.name_ru, i.kcal FROM meal_items i JOIN meals m ON m.id = i.meal_id "
-            "WHERE m.user_id=? AND m.local_date BETWEEN ? AND ? AND m.deleted_at IS NULL",
-            (user_id, f, t)).fetchall():
+    for row in items:
         name = (row[0] or "").strip()
         if not name:
             continue
@@ -254,11 +294,21 @@ def stats(db: sqlite3.Connection, user: sqlite3.Row, range_name: str, today: dat
     """Ряды по дням за range_name (последние N дней включая сегодня), сводка и сводка прошлого периода."""
     n = RANGE_DAYS[range_name]
     days, prev = comparison_series(db, user, today, n)
-    tgt = repo.current_target(db, user["id"])
+    uid = user["id"]
+    dates = (uid, (today - timedelta(days=n - 1)).isoformat(), today.isoformat())
+    targets, weights, meal_types, items = read_batch(
+        db,
+        (repo.CURRENT_TARGET_SQL, (uid,)),
+        (repo.LATEST_WEIGHT_SQL, (uid,)),
+        (KCALS_BY_MEAL_TYPE_SQL, dates),
+        (KCALS_BY_ITEM_SQL, dates),
+    )
+    tgt = targets[0] if targets else None
+    weight = weights[0]["weight_kg"] if weights else user["start_weight_kg"]
     return {"range": range_name, "days": days, "summary": summarize(days), "prev_summary": summarize(prev),
-            "sources": kcal_sources(db, user["id"], today - timedelta(days=n - 1), today),
+            "sources": kcal_sources(meal_types, items),
             "goals": {"protein_g": int(tgt["protein_g"]) if tgt and tgt["protein_g"] else None,
-                      "water_ml": watersvc.goal_for(db, user), "steps": STEPS_GOAL, "sleep_min": 420}}
+                      "water_ml": watersvc.water_goal_ml(weight), "steps": STEPS_GOAL, "sleep_min": 420}}
 
 
 # ------------------------------------------------------------------ CSV

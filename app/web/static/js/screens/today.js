@@ -1,5 +1,5 @@
 // Screen 1: "Сегодня"
-import { api } from '../api.js';
+import { api, cachedReport, readReport, watchReports } from '../api.js';
 import { kcalRing } from '../charts.js';
 import { weekGoalBlock } from './weekgoal.js';
 import { mealIcon, mealPic } from '../pics.js';
@@ -37,19 +37,22 @@ export default async function render(root, ctx) {
   view.append(sw.el, body);
 
   async function load({ quiet = false, dir = 0 } = {}) {
-    // скелетон только на первом показе; при смене дня старое содержимое остаётся (страница не схлопывается)
-    let release = null;
-    if (!quiet) { if (body.hasChildNodes()) release = holdHeight(body); else body.replaceChildren(skeletonCards(3, 120)); }
     const date = curDate;
+    const query = { date };
     sw.set(date);
+    const cached = quiet ? null : cachedReport('/day', query);
+    if (cached) draw(cached);
+    let release = null;
+    if (!quiet && !cached) {
+      if (body.hasChildNodes()) release = holdHeight(body); else body.replaceChildren(skeletonCards(3, 120));
+    }
     try {
-      const day = await api.get('/day', { date });
+      const day = await readReport('/day', query);
       if (!ctx.alive() || date !== curDate) return;
-      draw(day, { dir, fresh: !quiet });
-      if (release) release();
+      if (day !== cached) draw(day, { dir: cached ? 0 : dir, fresh: !quiet && !cached });
     } catch (e) {
-      if (!ctx.alive() || date !== curDate) return;
-      errorState(body, e, load);
+      if (ctx.alive() && date === curDate && (!cached || e.status === 401)) errorState(body, e, load);
+    } finally {
       if (release) release();
     }
   }
@@ -250,7 +253,7 @@ export default async function render(root, ctx) {
     };
     paint(oftenCache || []);                          // last known list first: no jump on reload
     const settle = () => { if (row._ph) { row._ph.remove(); row._ph = null; } };
-    api.get('/frequent').then(({ items }) => {
+    readReport('/frequent').then(({ items }) => {
       oftenCache = items;
       settle();
       if (ctx.alive() && row.isConnected) paint(items);
@@ -356,5 +359,10 @@ export default async function render(root, ctx) {
   }
 
   await load();
-  return () => window.removeEventListener('app:data', onData);
+  if (!ctx.alive()) {
+    window.removeEventListener('app:data', onData);
+    return;
+  }
+  const stopReports = watchReports(() => { if (ctx.alive()) load({ quiet: true }); });
+  return () => { window.removeEventListener('app:data', onData); stopReports(); };
 }

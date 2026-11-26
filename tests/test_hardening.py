@@ -29,11 +29,11 @@ from app.domain import craving as cravingdom
 from app.llm import client as llm
 from app.middleware import AccessMiddleware
 from app.routers import onboarding as onb
-from app.services import charts
+from app.services import charts, insights
 from app.services import food as foodsvc
 from app.services import profile as profilesvc
 from app.storage import repo
-from app.web import server
+from app.web import queries, server
 from app.web.auth import InitDataError, validate_init_data
 from tests.test_advice_facts import _save
 from tests.test_routers_smoke import build, message, onboard, send  # noqa: F401
@@ -294,7 +294,7 @@ async def test_handler_crash_inside_dispatcher_does_not_propagate(smoke_db, monk
     def boom(*a, **k):  # noqa: ANN002, ANN003
         raise RuntimeError("упало")
 
-    monkeypatch.setattr(repo, "day_meals", boom)
+    monkeypatch.setattr(insights, "day_facts", boom)
     session.texts.clear()
     await send(dp, bot, "/today")                             # не должно бросить
     assert bot_mod.ERROR_TEXT in session.texts
@@ -306,7 +306,7 @@ async def test_web_error_middleware_rolls_back_unfinished_writes(client, db, use
                    "VALUES (?,?,?,?,?)", (user_id, "2026-05-20", "10:00", 250, "text"))
         raise RuntimeError("после записи, до commit")
 
-    monkeypatch.setattr(repo, "day_water_ml", broken_day)
+    monkeypatch.setattr(queries, "day_snapshot", broken_day)
     resp = await client.get("/api/day", headers=H)
     assert resp.status == 500
     assert db.execute("SELECT COUNT(*) FROM water_log").fetchone()[0] == 0

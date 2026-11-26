@@ -10,6 +10,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+from app.db import read_batch
 from app.domain import analytics
 from app.services import rhythm
 from app.services import water as watersvc
@@ -61,23 +62,25 @@ def _minutes(hhmm: str) -> int:
     return int(hhmm[:2]) * 60 + int(hhmm[3:5])
 
 
-def _cravings_of_day(db: sqlite3.Connection, uid: int, day: str) -> list[dict]:
-    """Эпизоды тяги «дня»: ночные после полуночи (до 04:00) относятся к прожитому дню."""
-    nxt = (date.fromisoformat(day) + timedelta(days=1)).isoformat()
-    rows = db.execute(
-        """SELECT * FROM craving_events WHERE user_id=? AND mode='craving'
-           AND (local_date=? OR (local_date=? AND local_time < '04:00')) ORDER BY id""",
-        (uid, day, nxt)).fetchall()
+CRAVINGS_OF_DAY_SQL = """SELECT local_time, category, outcome, kcal_so_far, kcal_target
+FROM craving_events WHERE user_id=? AND mode='craving'
+AND (local_date=? OR (local_date=? AND local_time < '04:00')) ORDER BY id"""
+
+
+def _cravings_values(rows) -> list[dict]:
     return [{"time": r["local_time"], "category": r["category"], "outcome": r["outcome"],
              "kcal_so_far": r["kcal_so_far"], "kcal_target": r["kcal_target"]} for r in rows]
 
 
 def day_facts(db: sqlite3.Connection, user, day: str) -> dict:
     uid = user["id"]
-    totals = repo.day_totals(db, uid, day)
-    meals = repo.day_meals(db, uid, day)
-    metrics = db.execute(
-        """SELECT t.kcal_target, t.protein_g AS protein_target,
+    next_day = (date.fromisoformat(day) + timedelta(days=1)).isoformat()
+    totals_rows, meals, cravings, metrics_rows = read_batch(
+        db,
+        (repo.DAY_TOTALS_SQL, (uid, day)),
+        (repo.DAY_MEALS_SQL, (uid, day)),
+        (CRAVINGS_OF_DAY_SQL, (uid, day, next_day)),
+        ("""SELECT t.kcal_target, t.protein_g AS protein_target,
                   a.steps, a.active_kcal, a.active_minutes, a.avg_hr, a.resting_hr,
                   s.duration_min, s.score, s.awake_min, s.deep_min,
                   (SELECT COALESCE(SUM(ml), 0) FROM water_log
@@ -91,8 +94,9 @@ def day_facts(db: sqlite3.Connection, user, day: str) -> dict:
                       FROM activity_daily WHERE user_id=? AND local_date=? LIMIT 1) a ON TRUE
            LEFT JOIN (SELECT duration_min, score, awake_min, deep_min
                       FROM sleep_sessions WHERE user_id=? AND wake_date=? LIMIT 1) s ON TRUE""",
-        (uid, day, uid, uid, uid, day, uid, day),
-    ).fetchone()
+         (uid, day, uid, uid, uid, day, uid, day)),
+    )
+    totals, metrics = totals_rows[0], metrics_rows[0]
     late = sum(m["kcal_total"] for m in meals
                if analytics.is_late(m["local_time"], user["eating_cutoff"]))
     gap = rhythm.meal_gap(meals)
@@ -123,7 +127,7 @@ def day_facts(db: sqlite3.Connection, user, day: str) -> dict:
         "last_meal": eaten[-1]["local_time"] if eaten else None,
         "longest_gap_h": gap[0] if gap else None,
         "gap_from": gap[1] if gap else None, "gap_to": gap[2] if gap else None,
-        "cravings": _cravings_of_day(db, uid, day),
+        "cravings": _cravings_values(cravings),
         "care": bool(user["care_mode"]),
     }
 

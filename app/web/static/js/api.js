@@ -112,6 +112,7 @@ async function request(method, path, { query, body, timeout = 30000 } = {}) {
         enableMock();
         return requestMock(method, path, query, body);
       }
+      if (res.status === 401) invalidateReports();
       throw errorFrom(res.status, data);
     }
     realOk = true;
@@ -121,12 +122,76 @@ async function request(method, path, { query, body, timeout = 30000 } = {}) {
   }
 }
 
+// Reports stay in memory for this Mini App session. Writes clear them.
+// When returning to the app, retain the view while checking for bot updates.
+const reports = new Map();
+const reportRequests = new Map();
+let reportGeneration = 0;
+
+function invalidateReports() {
+  reports.clear();
+  reportGeneration += 1;
+}
+
+export function cachedReport(path, query) {
+  return reports.get(path + qs(query))?.data ?? null;
+}
+
+export function readReport(path, query) {
+  const key = path + qs(query);
+  const entry = reports.get(key);
+  if (entry?.generation === reportGeneration) return Promise.resolve(entry.data);
+  const pending = reportRequests.get(key);
+  if (pending?.generation === reportGeneration) return pending.promise;
+
+  const generation = reportGeneration;
+  const promise = api.get(path, query).then((data) => {
+    if (generation !== reportGeneration) return readReport(path, query);
+    const signature = JSON.stringify(data);
+    const current = entry?.signature === signature ? entry.data : data;
+    reports.delete(key);
+    reports.set(key, { data: current, signature, generation });
+    if (reports.size > 18) reports.delete(reports.keys().next().value);
+    return current;
+  }).finally(() => {
+    if (reportRequests.get(key)?.promise === promise) reportRequests.delete(key);
+  });
+  reportRequests.set(key, { promise, generation });
+  return promise;
+}
+
+let hiddenAt = null;
+globalThis.document?.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    hiddenAt = Date.now();
+  } else if (hiddenAt !== null) {
+    const elapsed = Date.now() - hiddenAt;
+    hiddenAt = null;
+    if (elapsed < 1_000 || !reports.size) return;
+    reportGeneration += 1;
+    window.dispatchEvent(new Event('app:reports-stale'));
+  }
+});
+
+export function watchReports(load) {
+  window.addEventListener('app:reports-stale', load);
+  return () => window.removeEventListener('app:reports-stale', load);
+}
+
+const REPORT_WRITE = /^\/(?:meals|items|water|drinks|weight|sleep|activity|profile|targets|onboarding|week-goal|favorites)(?:\/|$)|^\/screens\/\d+\/confirm$/;
+
+async function write(method, path, options) {
+  const result = await request(method, path, options);
+  if (REPORT_WRITE.test(path) || (path === '/me' && method === 'DELETE')) invalidateReports();
+  return result;
+}
+
 export const api = {
   get: (path, query, opts) => request('GET', path, { query, ...opts }),
-  post: (path, body, opts) => request('POST', path, { body: body === undefined ? {} : body, ...opts }),
-  put: (path, body) => request('PUT', path, { body }),
-  patch: (path, body) => request('PATCH', path, { body }),
-  del: (path, body) => request('DELETE', path, { body }),
+  post: (path, body, opts) => write('POST', path, { body: body === undefined ? {} : body, ...opts }),
+  put: (path, body) => write('PUT', path, { body }),
+  patch: (path, body) => write('PATCH', path, { body }),
+  del: (path, body) => write('DELETE', path, { body }),
   _me: null,
   async me(force) {
     if (!api._me || force) api._me = await api.get('/me');
@@ -186,6 +251,7 @@ export async function downloadCsv(kind) {
     const res = await fetch(BASE + '/export.csv' + qs({ kind }), { headers: authHeaders() });
     if (!res.ok) {
       const data = (res.headers.get('content-type') || '').includes('json') ? await res.json().catch(() => null) : null;
+      if (res.status === 401) invalidateReports();
       throw errorFrom(res.status, data);
     }
     const m = /filename="?([^";]+)"?/.exec(res.headers.get('content-disposition') || '');

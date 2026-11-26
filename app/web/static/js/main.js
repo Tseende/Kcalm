@@ -42,6 +42,7 @@ const view = $('#view');
 const tabbar = $('#tabbar');
 let rid = 0;
 let cleanup = null;
+const loadedReportTabs = new Set();
 // Прокрутка по маршрутам: при возврате «назад» восстанавливаем место, при переходе вперёд открываем с начала.
 const scrollMap = new Map();
 let curRaw = null;      // маршрут, который сейчас на экране (с query)
@@ -131,13 +132,14 @@ async function render() {
   setActiveTab(r.tab || null);
   if (r.tab) backButton.hide();
   else backButton.show(() => nav.back(r.parent || '/today'));
-  view.replaceChildren(h('div', { class: 'screen' }, skeletonCards(3, 100)));
+  if (!loadedReportTabs.has(r.tab)) view.replaceChildren(h('div', { class: 'screen' }, skeletonCards(3, 100)));
   window.scrollTo(0, 0);
   document.body.classList.remove('scrolled');
   const ctx = { params, query, alive: () => my === rid, parent: r.parent, prev };
   try {
     const mod = await r.load();
     if (my !== rid) return;
+    if (['today', 'stats', 'analysis'].includes(r.tab)) loadedReportTabs.add(r.tab);
     view.replaceChildren();
     const res = await mod.default(view, ctx);
     if (my !== rid) { if (typeof res === 'function') res(); return; }

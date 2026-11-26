@@ -1,5 +1,5 @@
 // Screen: "Анализ" — «тренер»: вердикт, что получилось, главное действие, советы
-import { api } from '../api.js';
+import { cachedReport, readReport, watchReports } from '../api.js';
 import { weekGoalBlock } from './weekgoal.js';
 import { ring, sparkline } from '../charts.js';
 import { onbImg } from '../onb/controls.js';
@@ -106,41 +106,25 @@ export default async function render(root, ctx) {
   sync();
 
   async function load() {
-    if (period !== 'day') return loadPeriodView();
-    sw.set(curDate);
-    const release = pending();
-    const date = curDate;
-    try {
-      const data = await api.get('/analysis', { date });
-      if (!ctx.alive() || date !== curDate || period !== 'day') return;
-      draw(data);
-      release();
-    } catch (e) {
-      if (!ctx.alive() || date !== curDate || period !== 'day') return;
-      errorState(body, e, load);
-      release();
-    }
-  }
-
-  // Первый показ: скелетон. Повторная загрузка (день/период): старое содержимое остаётся, высота зафиксирована.
-  function pending() {
-    if (body.hasChildNodes()) return holdHeight(body);
-    body.replaceChildren(skeletonCards(3, 110));
-    return () => {};
-  }
-
-  async function loadPeriodView() {
-    const release = pending();
     const asked = period;
+    const date = curDate;
+    const isDay = asked === 'day';
+    if (isDay) sw.set(date);
+    const query = isDay ? { date } : { period: asked };
+    const render = isDay ? draw : drawPeriod;
+    const cached = cachedReport('/analysis', query);
+    let release = null;
+    if (cached) render(cached);
+    else if (body.hasChildNodes()) release = holdHeight(body);
+    else body.replaceChildren(skeletonCards(3, 110));
+    const current = () => ctx.alive() && asked === period && (!isDay || date === curDate);
     try {
-      const data = await api.get('/analysis', { period: asked });
-      if (!ctx.alive() || asked !== period) return;
-      drawPeriod(data);
-      release();
+      const data = await readReport('/analysis', query);
+      if (current() && data !== cached) render(data);
     } catch (e) {
-      if (!ctx.alive() || asked !== period) return;
-      errorState(body, e, loadPeriodView);
-      release();
+      if (current() && (!cached || e.status === 401)) errorState(body, e, load);
+    } finally {
+      if (release) release();
     }
   }
 
@@ -234,5 +218,6 @@ export default async function render(root, ctx) {
     staggerIn(body, kids);
   }
 
-  load();
+  await load();
+  if (ctx.alive()) return watchReports(load);
 }

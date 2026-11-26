@@ -254,6 +254,12 @@ def connect_from_config(cfg):
     return connect(cfg.db_path, url=cfg.turso_database_url, token=cfg.turso_auth_token)
 
 
+def read_batch(conn, *statements):
+    if getattr(conn, "postgres", False):
+        return conn.read_batch(statements)
+    return [conn.execute(sql, params).fetchall() for sql, params in statements]
+
+
 @contextmanager
 def write_transaction(conn):
     """Закрепить право записи до первого чтения и откатить всю операцию при сбое."""

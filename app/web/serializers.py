@@ -59,21 +59,16 @@ def meal_json(db: sqlite3.Connection, meal: sqlite3.Row, *, item_rows=None, phot
             "comment": meal["transcript"] or None}
 
 
-def day_meals_json(db: sqlite3.Connection, user_id: int, day: str) -> list[dict]:
-    meals = repo.day_meals(db, user_id, day)
-    if not meals:
-        return []
+DAY_ITEM_SQL = """SELECT i.* FROM meal_items i JOIN meals m ON m.id=i.meal_id
+WHERE m.user_id=? AND m.local_date=? AND m.deleted_at IS NULL ORDER BY i.id"""
+DAY_PHOTO_SQL = """SELECT p.* FROM meal_photos p JOIN meals m ON m.id=p.meal_id
+WHERE m.user_id=? AND m.local_date=? AND m.deleted_at IS NULL ORDER BY p.position, p.id"""
+
+
+def day_meals_json(db: sqlite3.Connection, meals, item_rows, photo_rows) -> list[dict]:
     items, photos = {}, {}
-    for table, order, groups in (
-        ("meal_items", "r.id", items),
-        ("meal_photos", "r.position, r.id", photos),
-    ):
-        for row in db.execute(
-            f"""SELECT r.* FROM {table} r JOIN meals m ON m.id=r.meal_id
-                WHERE m.user_id=? AND m.local_date=? AND m.deleted_at IS NULL
-                ORDER BY {order}""",
-            (user_id, day),
-        ):
+    for rows, groups in ((item_rows, items), (photo_rows, photos)):
+        for row in rows:
             groups.setdefault(row["meal_id"], []).append(row)
     return [meal_json(db, m, item_rows=items.get(m["id"], ()), photo_rows=photos.get(m["id"], ()))
             for m in meals]
@@ -109,16 +104,19 @@ def product_json(product) -> dict:
             "times_used": int(_get(product, "times_used") or 0)}
 
 
-def targets_json(db: sqlite3.Connection, user: sqlite3.Row) -> dict:
+def target_values(user, target, water_goal: int) -> dict:
     if user["onboarding_skipped"]:
-        return {"kcal": None, "protein": None, "fat": None, "carbs": None,
-                "water_ml": watersvc.goal_for(db, user)}
-    tgt = repo.current_target(db, user["id"])
-    return {"kcal": int(tgt["kcal_target"]) if tgt else 0,
-            "protein": _int(tgt["protein_g"] or 0) if tgt else 0,
-            "fat": _int(tgt["fat_g"] or 0) if tgt else 0,
-            "carbs": _int(tgt["carbs_g"] or 0) if tgt else 0,
-            "water_ml": watersvc.goal_for(db, user)}
+        return {"kcal": None, "protein": None, "fat": None, "carbs": None, "water_ml": water_goal}
+    return {"kcal": int(target["kcal_target"]) if target else 0,
+            "protein": _int(target["protein_g"] or 0) if target else 0,
+            "fat": _int(target["fat_g"] or 0) if target else 0,
+            "carbs": _int(target["carbs_g"] or 0) if target else 0,
+            "water_ml": water_goal}
+
+
+def targets_json(db: sqlite3.Connection, user: sqlite3.Row) -> dict:
+    target = None if user["onboarding_skipped"] else repo.current_target(db, user["id"])
+    return target_values(user, target, watersvc.goal_for(db, user))
 
 
 def food_json(food: dict) -> dict:

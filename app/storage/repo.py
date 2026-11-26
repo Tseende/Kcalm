@@ -35,9 +35,12 @@ def update_user(conn: sqlite3.Connection, user_id: int, **fields) -> None:
     conn.commit()
 
 
+CURRENT_TARGET_SQL = "SELECT * FROM targets_history WHERE user_id = ? ORDER BY valid_from DESC LIMIT 1"
+
+
 def current_target(conn: sqlite3.Connection, user_id: int) -> sqlite3.Row | None:
     return conn.execute(
-        "SELECT * FROM targets_history WHERE user_id = ? ORDER BY valid_from DESC LIMIT 1",
+        CURRENT_TARGET_SQL,
         (user_id,),
     ).fetchone()
 
@@ -1108,35 +1111,44 @@ def _resum_meal(conn: sqlite3.Connection, meal_id: int) -> None:
     sync_meal_water(conn, meal_id)
 
 
+DAY_TOTALS_SQL = """SELECT COALESCE(SUM(kcal_total),0) AS kcal,
+          COALESCE(SUM(protein_g),0) AS protein,
+          COALESCE(SUM(fat_g),0) AS fat,
+          COALESCE(SUM(carbs_g),0) AS carbs,
+          COUNT(*) AS meals,
+          COALESCE(SUM((SELECT COUNT(*) FROM meal_items i
+                       WHERE i.meal_id=m.id AND i.source='unresolved')),0) AS unresolved_items
+   FROM meals m WHERE user_id=? AND local_date=? AND deleted_at IS NULL"""
+
+
 def day_totals(conn: sqlite3.Connection, user_id: int, local_date: str) -> sqlite3.Row:
     return conn.execute(
-        """SELECT COALESCE(SUM(kcal_total),0) AS kcal,
-                  COALESCE(SUM(protein_g),0) AS protein,
-                  COALESCE(SUM(fat_g),0) AS fat,
-                  COALESCE(SUM(carbs_g),0) AS carbs,
-                  COUNT(*) AS meals,
-                  COALESCE(SUM((SELECT COUNT(*) FROM meal_items i
-                               WHERE i.meal_id=m.id AND i.source='unresolved')),0) AS unresolved_items
-           FROM meals m WHERE user_id=? AND local_date=? AND deleted_at IS NULL""",
+        DAY_TOTALS_SQL,
         (user_id, local_date),
     ).fetchone()
 
 
+DAY_MEALS_SQL = """SELECT * FROM meals WHERE user_id=? AND local_date=? AND deleted_at IS NULL
+   ORDER BY local_time"""
+
+
 def day_meals(conn: sqlite3.Connection, user_id: int, local_date: str) -> list[sqlite3.Row]:
     return conn.execute(
-        """SELECT * FROM meals WHERE user_id=? AND local_date=? AND deleted_at IS NULL
-           ORDER BY local_time""",
+        DAY_MEALS_SQL,
         (user_id, local_date),
     ).fetchall()
+
+
+RANGE_MEALS_SQL = """SELECT m.*, EXISTS(SELECT 1 FROM meal_items i
+                      WHERE i.meal_id=m.id AND i.source='unresolved') AS incomplete
+   FROM meals m WHERE user_id=? AND local_date BETWEEN ? AND ?
+   AND deleted_at IS NULL ORDER BY local_date, local_time"""
 
 
 def range_meals(conn: sqlite3.Connection, user_id: int, from_date: str,
                 to_date: str) -> list[sqlite3.Row]:
     return conn.execute(
-        """SELECT m.*, EXISTS(SELECT 1 FROM meal_items i
-                              WHERE i.meal_id=m.id AND i.source='unresolved') AS incomplete
-           FROM meals m WHERE user_id=? AND local_date BETWEEN ? AND ?
-           AND deleted_at IS NULL ORDER BY local_date, local_time""",
+        RANGE_MEALS_SQL,
         (user_id, from_date, to_date),
     ).fetchall()
 
@@ -1237,15 +1249,18 @@ def weight_series(conn: sqlite3.Connection, user_id: int, from_date: str,
     ).fetchall()
 
 
+TREND_WEIGHT_SQL = """SELECT local_date, weight_kg, fasting FROM body_measurements
+   WHERE user_id=? AND local_date BETWEEN ? AND ? AND weight_kg IS NOT NULL
+   ORDER BY local_date"""
+
+
 def trend_weight_series(conn: sqlite3.Connection, user_id: int, from_date: str,
                         to_date: str) -> tuple[list[sqlite3.Row], bool]:
     """Замеры веса для тренда: без «не натощак», если утренних достаточно.
     Второе значение True, когда пришлось брать и такие (тренд менее точный)."""
     from app.domain.weighin import pick_trend_rows
     rows = conn.execute(
-        """SELECT local_date, weight_kg, fasting FROM body_measurements
-           WHERE user_id=? AND local_date BETWEEN ? AND ? AND weight_kg IS NOT NULL
-           ORDER BY local_date""",
+        TREND_WEIGHT_SQL,
         (user_id, from_date, to_date),
     ).fetchall()
     return pick_trend_rows(rows)
@@ -1263,7 +1278,7 @@ def first_meal_time(conn: sqlite3.Connection, user_id: int, local_date: str) -> 
 _SOURCE_RANK = {"screenshot": 0, "csv": 1, "manual": 2}
 
 
-def _dedupe_by_date(rows: list[sqlite3.Row], date_key: str) -> list[dict]:
+def merge_daily_sources(rows: list[sqlite3.Row], date_key: str) -> list[dict]:
     """Одна запись на дату: источники сливаются (скриншот важнее csv, csv важнее ручного),
     пустые поля берутся из менее приоритетного. Иначе сон/шаги за день считались бы дважды."""
     by_date: dict[str, list[sqlite3.Row]] = {}
@@ -1281,26 +1296,32 @@ def _dedupe_by_date(rows: list[sqlite3.Row], date_key: str) -> list[dict]:
     return out
 
 
+SLEEP_SERIES_SQL = """SELECT wake_date, duration_min, deep_min, light_min, rem_min, score, source
+   FROM sleep_sessions WHERE user_id=? AND wake_date BETWEEN ? AND ?
+   ORDER BY wake_date"""
+
+
 def sleep_series(conn: sqlite3.Connection, user_id: int, from_date: str,
                  to_date: str) -> list[dict]:
     rows = conn.execute(
-        """SELECT wake_date, duration_min, deep_min, light_min, rem_min, score, source
-           FROM sleep_sessions WHERE user_id=? AND wake_date BETWEEN ? AND ?
-           ORDER BY wake_date""",
+        SLEEP_SERIES_SQL,
         (user_id, from_date, to_date),
     ).fetchall()
-    return _dedupe_by_date(rows, "wake_date")
+    return merge_daily_sources(rows, "wake_date")
+
+
+ACTIVITY_SERIES_SQL = """SELECT local_date, steps, active_kcal, resting_hr, avg_hr, active_minutes, source
+   FROM activity_daily WHERE user_id=? AND local_date BETWEEN ? AND ?
+   ORDER BY local_date"""
 
 
 def activity_series(conn: sqlite3.Connection, user_id: int, from_date: str,
                     to_date: str) -> list[dict]:
     rows = conn.execute(
-        """SELECT local_date, steps, active_kcal, resting_hr, avg_hr, active_minutes, source
-           FROM activity_daily WHERE user_id=? AND local_date BETWEEN ? AND ?
-           ORDER BY local_date""",
+        ACTIVITY_SERIES_SQL,
         (user_id, from_date, to_date),
     ).fetchall()
-    return _dedupe_by_date(rows, "local_date")
+    return merge_daily_sources(rows, "local_date")
 
 
 # ------------------------------------------------------------ raw / llm / misc
@@ -1554,19 +1575,25 @@ def add_water(conn: sqlite3.Connection, user_id: int, local_date: str, local_tim
     return cur.lastrowid
 
 
+DAY_WATER_SQL = "SELECT COALESCE(SUM(ml), 0) AS ml FROM water_log WHERE user_id=? AND local_date=?"
+
+
 def day_water_ml(conn: sqlite3.Connection, user_id: int, local_date: str) -> int:
     row = conn.execute(
-        "SELECT COALESCE(SUM(ml), 0) AS ml FROM water_log WHERE user_id=? AND local_date=?",
+        DAY_WATER_SQL,
         (user_id, local_date),
     ).fetchone()
     return int(row["ml"])
 
 
+WATER_BY_DAY_SQL = """SELECT local_date, SUM(ml) AS ml FROM water_log
+   WHERE user_id=? AND local_date BETWEEN ? AND ? GROUP BY local_date"""
+
+
 def water_by_day(conn: sqlite3.Connection, user_id: int, from_date: str,
                  to_date: str) -> dict[str, int]:
     rows = conn.execute(
-        """SELECT local_date, SUM(ml) AS ml FROM water_log
-           WHERE user_id=? AND local_date BETWEEN ? AND ? GROUP BY local_date""",
+        WATER_BY_DAY_SQL,
         (user_id, from_date, to_date),
     ).fetchall()
     return {r["local_date"]: int(r["ml"]) for r in rows}
@@ -1631,10 +1658,13 @@ def delete_widget_message(conn: sqlite3.Connection, widget_id: int) -> None:
     conn.commit()
 
 
+LATEST_WEIGHT_SQL = """SELECT weight_kg FROM body_measurements
+   WHERE user_id=? AND weight_kg IS NOT NULL ORDER BY local_date DESC LIMIT 1"""
+
+
 def latest_weight_kg(conn: sqlite3.Connection, user_id: int) -> float | None:
     row = conn.execute(
-        """SELECT weight_kg FROM body_measurements
-           WHERE user_id=? AND weight_kg IS NOT NULL ORDER BY local_date DESC LIMIT 1""",
+        LATEST_WEIGHT_SQL,
         (user_id,),
     ).fetchone()
     if row:

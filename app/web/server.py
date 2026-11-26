@@ -47,7 +47,7 @@ from app.web import period as period_analysis
 from app.web import queries as q
 from app.web.static_assets import build_index, file_version
 from app.web.auth import InitDataError, validate_init_data
-from app.web.serializers import day_meals_json, dish_json, food_json, meal_json, product_json, targets_json
+from app.web.serializers import dish_json, food_json, meal_json, product_json, targets_json
 
 log = logging.getLogger(__name__)
 
@@ -712,23 +712,8 @@ async def api_day(request: web.Request) -> web.Response:
     db, user, _ = ctx(request)
     raw = request.query.get("date")
     day = parse_date(raw) if raw else now_local(user).date()
-    key, uid = day.isoformat(), user["id"]
-    targets = targets_json(db, user)
-    totals = q.day_totals(db, uid, key)
-    return ok({
-        "date": key, "targets": targets, "totals": totals,
-        "remaining_kcal": None if totals["unresolved_items"] or not targets["kcal"] else targets["kcal"] - totals["kcal"],
-        "water_ml": repo.day_water_ml(db, uid, key),
-        "meals": day_meals_json(db, uid, key),
-        "sleep": q.day_sleep(db, uid, key),
-        "activity": q.day_activity(db, uid, key),
-        "steps_goal": q.STEPS_GOAL,
-        # подсказка поправить уровень активности в профиле: только для сегодняшнего дня
-        "activity_hint": (q.activity_hint(db, uid, day, profilesvc.activity_level(user["activity_pa"]))
-                          if user["onboarded"] and day == now_local(user).date() else None),
-        "weight": q.day_weight(db, uid, key),
-        "weight_last": q.last_weight(db, uid, key),
-    })
+    level = profilesvc.activity_level(user["activity_pa"]) if user["onboarded"] and day == now_local(user).date() else None
+    return ok(q.day_snapshot(db, user, day, level))
 
 
 @routes.get("/api/stats")

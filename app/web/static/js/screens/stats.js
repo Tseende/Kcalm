@@ -1,5 +1,5 @@
 // Screen 2: "Статистика" — «как я иду»: герой «Вес», календарь дней в норме, показатели, динамика, ссылка на разбор
-import { api } from '../api.js';
+import { api, cachedReport, readReport, watchReports } from '../api.js';
 import { lineChart, barChart, stackedBars, makeTip } from '../charts.js';
 import { h, icon, tile, nav, segmented, sectionTitle, mealType, skeletonCards, holdHeight, errorState, emptyState, heroCard, progressBar, statTile, countUp, fmtN, fmtKcal, fmtDur, shortDate, longDate, parseISO, addDays, todayISO, reducedMotion, staggerIn, haptic } from '../ui.js';
 import { t, tn, locale } from '../i18n.js';
@@ -76,19 +76,22 @@ export default async function render(root, ctx) {
 
   async function load() {
     const req = range;
-    // скелетон только при первом показе; при смене периода старые графики остаются, пока едут новые
+    const query = { range: req };
+    const cached = cachedReport('/stats', query);
+    const profile = api._me;
     let release = null;
-    if (body.hasChildNodes()) release = holdHeight(body); else body.replaceChildren(skeletonCards(3, 110));
+    if (cached) draw(cached, profile, false);
+    else if (body.hasChildNodes()) release = holdHeight(body);
+    else body.replaceChildren(skeletonCards(3, 110));
     try {
-      const [data, me] = await Promise.all([api.get('/stats', { range: req }), api.me().catch(() => null)]);
-      if (!ctx.alive() || req !== range) return;      // ответ на уже сменённый период
-      const animate = !seenRanges.has(range) && !reducedMotion();
-      seenRanges.add(range);
-      draw(data, me, animate);
-      if (release) release();
-    } catch (e) {
+      const [data, me] = await Promise.all([readReport('/stats', query), api.me().catch(() => null)]);
       if (!ctx.alive() || req !== range) return;
-      errorState(body, e, load);
+      const animate = !cached && !seenRanges.has(range) && !reducedMotion();
+      seenRanges.add(range);
+      if (data !== cached || profile !== me) draw(data, me, animate);
+    } catch (e) {
+      if (ctx.alive() && req === range && (!cached || e.status === 401)) errorState(body, e, load);
+    } finally {
       if (release) release();
     }
   }
@@ -297,4 +300,5 @@ export default async function render(root, ctx) {
   }
 
   await load();
+  if (ctx.alive()) return watchReports(load);
 }

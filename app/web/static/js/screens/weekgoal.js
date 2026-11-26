@@ -1,5 +1,5 @@
 // Weekly mini-goal card: pick one habit for the week, progress is counted from the diary.
-import { api } from '../api.js';
+import { api, readReport } from '../api.js';
 import { h, icon, glyph, toast, haptic, nav, sectionTitle } from '../ui.js';
 import { t, tn } from '../i18n.js';
 
@@ -124,7 +124,7 @@ export function weekGoalBlock(ctx, { withRecap = false, compact = false } = {}) 
   } else {
     box.hidden = true;
   }
-  api.get('/week-goal').then((d) => {
+  readReport('/week-goal').then((d) => {
     lastData = d;
     rememberGoal(!!d.goal);
     if (!ctx.alive() || !box.isConnected) return;

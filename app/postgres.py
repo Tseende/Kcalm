@@ -31,6 +31,12 @@ def connection_options(url: str) -> dict:
     return {"sslmode": "verify-full", "sslrootcert": params.get("sslrootcert", default_ca)}
 
 
+def _bind(sql, params):
+    if params:
+        return _TOKEN.sub(lambda m: "%s" if m[0] == "?" else m[0], sql.replace("%", "%%"))
+    return sql
+
+
 class _FlagDumper(Dumper):
     # The shared schema stores flags as integers, including values from SQLite.
     def dump(self, value):
@@ -128,14 +134,28 @@ class PostgresConnection:
         sql = re.sub(r"\bMAX\(0,", "GREATEST(0,", sql)
         sql = re.sub(r"\binstr\(", "strpos(", sql)
         sql = sql.replace(" IS NOT ?", " IS DISTINCT FROM ?")
-        if params:
-            sql = _TOKEN.sub(lambda m: "%s" if m[0] == "?" else m[0], sql.replace("%", "%%"))
+        sql = _bind(sql, params)
         try:
             cursor = self._raw.execute(sql, tuple(params) if params else None)
         except psycopg.IntegrityError as exc:
             raise sqlite3.IntegrityError(str(exc)) from exc
         lastrowid = cursor.fetchone() if identity_insert else None
         return _Result(cursor, lastrowid[0] if lastrowid is not None else None)
+
+    def read_batch(self, statements):
+        """Send independent, parameterized SELECTs in one round trip."""
+        if self._raw.closed and not self._depth:
+            self._connect()
+        with self._raw.cursor() as cursor:
+            queries = [cursor.mogrify(_bind(sql, params), tuple(params) or None)
+                       for sql, params in statements]
+            cursor.execute(";\n".join(queries))
+            results = [cursor.fetchall()]
+            while cursor.nextset():
+                results.append(cursor.fetchall())
+        if len(results) != len(statements):
+            raise RuntimeError("Incorrect number of report result sets")
+        return results
 
     @contextmanager
     def transaction(self):
