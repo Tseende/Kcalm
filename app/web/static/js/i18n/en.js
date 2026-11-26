@@ -514,7 +514,7 @@ export default {
   "lbl.sub_one": "Usually 5–15 seconds",
   "lbl.v_empty": "Enter the barcode digits",
   "lbl.v_bad": "This barcode does not look valid: check the digits",
-  "lbl.searching": "Looking up the product…",
+  "lbl.searching": "Looking up the product in the database…",
   "lbl.off_note": "Data from Open Food Facts: check it against the packaging.",
   "lbl.not_in_db": "This barcode is not in the database. Photograph the label instead",
   "lbl.other": "Another way",

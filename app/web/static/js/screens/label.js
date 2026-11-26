@@ -107,7 +107,7 @@ export default async function render(root) {
     if (!code) { toast(t('lbl.v_empty'), 'error'); barcodeIn.focus(); return; }
     if (!validBarcode(code)) { toast(t('lbl.v_bad'), 'error'); return; }
     mainButton.hide();
-    const stop = busyOverlay(t('lbl.searching'), 'Open Food Facts');
+    const stop = busyOverlay(t('lbl.searching'));
     try {
       const r = await api.get('/products/barcode/' + code);
       stop();

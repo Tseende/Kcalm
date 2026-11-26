@@ -214,7 +214,7 @@ export default async function render(root, ctx) {
   async function quickByCode(raw) {
     const code = String(raw || '').replace(/\D/g, '');
     if (!validBarcode(code)) { toast(t('lbl.v_bad'), 'error'); return; }
-    const stop = busyOverlay(t('lbl.searching'), 'Open Food Facts');
+    const stop = busyOverlay(t('lbl.searching'));
     let d;
     try { d = (await api.get('/products/barcode/' + code)).draft; } catch (e) {
       stop();
@@ -259,7 +259,7 @@ export default async function render(root, ctx) {
     if (!g) return quickByCode(raw);
     const code = String(raw || '').replace(/\D/g, '');
     if (!validBarcode(code)) { toast(t('lbl.v_bad'), 'error'); return; }
-    const stop = busyOverlay(t('lbl.searching'), 'Open Food Facts');
+    const stop = busyOverlay(t('lbl.searching'));
     try {
       const r = await api.get('/products/barcode/' + code);
       stop();

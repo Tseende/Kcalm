@@ -320,7 +320,7 @@ export default async function render(root, ctx) {
     async function applyCode(raw) {
       const code = String(raw || '').replace(/\D/g, '');
       if (!validBarcode(code)) { toast(t('lbl.v_bad'), 'error'); return; }
-      const stop = busyOverlay(t('lbl.searching'), 'Open Food Facts');
+      const stop = busyOverlay(t('lbl.searching'));
       try {
         const m = await api.post('/items/' + it.id + '/barcode', { code });
         stop();
