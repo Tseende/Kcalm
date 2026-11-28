@@ -1493,9 +1493,26 @@ img.broken { display: none; }
 .meal-chev { flex: none; display: inline-flex; color: color-mix(in srgb, var(--c-hint) 70%, transparent); transition: transform .2s var(--ease, ease); }
 .meal-group.open .meal-chev { transform: rotate(90deg); }
 .meal-group-body[hidden] { display: none; }
-.meal-group-body { position: relative; background: color-mix(in srgb, var(--c-hint) 6%, transparent); }
+.meal-group-body { --meal-row-bg: color-mix(in srgb, var(--c-hint) 6%, var(--c-card)); position: relative; background: var(--meal-row-bg); }
 .meal-group-body::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: .5px; background: var(--c-sep); }
 .meal-group-body .meal-row { padding: 8px 16px; gap: 12px; }
+.meal-swipe { --meal-swipe-width: 92px; position: relative; display: grid; overflow: hidden; touch-action: pan-y pinch-zoom; }
+.meal-swipe .meal-row, .meal-swipe-delete { grid-area: 1 / 1; }
+.meal-swipe .meal-row { background: var(--meal-row-bg); transform: translateX(var(--meal-swipe-offset, 0px)); transition: transform .18s var(--ease); }
+.meal-swipe .meal-row:active { background: color-mix(in srgb, var(--c-hint) 15%, var(--meal-row-bg)); }
+.meal-swipe.is-revealed { --meal-swipe-offset: calc(-1 * var(--meal-swipe-width)); }
+.meal-swipe.is-dragging .meal-row { transition: none; }
+.meal-swipe-delete {
+  justify-self: end; width: var(--meal-swipe-width); border: 0; padding: 0 4px;
+  background: color-mix(in srgb, var(--c-danger) 66%, #650b13);
+  color: #fff; font-size: 14px; font-weight: 600;
+}
+.meal-swipe :focus-visible { outline-offset: -4px; }
+.meal-swipe-delete:focus-visible { outline-color: #fff; }
+.meal-swipe + .meal-swipe::before, .meal-swipe + .meal-add-row::before {
+  content: ""; position: absolute; z-index: 1; top: 0; left: var(--sep-l); right: 0;
+  height: .5px; background: var(--c-sep); pointer-events: none;
+}
 .today .meal-group-body .thumb { width: 40px; height: 40px; border-radius: 10px; }
 .meal-group-body .meal-row .row-title { font-size: 15px; }
 .meal-group-body .meal-kcal { font-size: 14px; font-weight: 500; }

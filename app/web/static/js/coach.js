@@ -30,7 +30,7 @@ export const TIPS = [
     title: t('coach.today.water.t'), text: t('coach.today.water.x') },
   { id: 'today.plus', route: 'today', target: '.tab-plus .plus-circle', round: true, pad: 7,
     title: t('coach.today.plus.t'), text: t('coach.today.plus.x') },
-  { id: 'today.meal', route: 'today', target: () => q('.today .meal-row'),
+  { id: 'today.meal', route: 'today', target: '.today .meal-group-head',
     title: t('coach.today.meal.t'), text: t('coach.today.meal.x') },
   { id: 'today.often', route: 'today', target: () => q('.today .often:not([hidden])'),
     title: t('coach.today.often.t'), text: t('coach.today.often.x') },

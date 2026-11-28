@@ -5,7 +5,7 @@ import { weekGoalBlock } from './weekgoal.js';
 import { mealIcon, mealPic } from '../pics.js';
 import { t, tn } from '../i18n.js';
 import {
-  h, icon, tile, toast, haptic, nav, skeletonCards, holdHeight, emptyState, errorState, sectionTitle,
+  h, icon, tile, toast, haptic, nav, skeletonCards, holdHeight, errorState, sectionTitle,
   todayISO, fmtN, fmtKcal, fmtDur, mealType, macroLine, countUp, staggerIn, dateSwitch, reducedMotion, dataChanged,
 } from '../ui.js';
 
@@ -19,7 +19,6 @@ let oftenCache = null; // last /frequent answer, painted instantly on re-render
 
 const GROUPS = ['breakfast', 'lunch', 'dinner', 'snack'];
 const openGroups = new Set();   // раскрытые группы приёмов: «дата:тип»
-const openInit = new Set();     // для каких дат уже выбрана группа по умолчанию
 
 export default async function render(root, ctx) {
   const qd = ctx.query.date || history.state?.diaryDate;
@@ -35,6 +34,11 @@ export default async function render(root, ctx) {
   const view = h('div', { class: 'screen today' });
   const body = h('div', { class: 'stack' });
   let dayTransition;
+  let openMealActions = null;
+  const deletingMeals = new Set();
+  view.addEventListener('click', (e) => {
+    if (openMealActions && !openMealActions.element.contains(e.target)) openMealActions.close();
+  }, { capture: true });
   root.append(view);
 
   const sw = dateSwitch(curDate, (d, dir) => { curDate = d; rememberDate(); firstPaint = true; load({ dir }); });
@@ -227,16 +231,14 @@ export default async function render(root, ctx) {
         icon('device-mobile', 18), t('today.import_screenshot'), icon('next', 16)));
 
     // meals
-    const mealsList = day.meals.length
-      ? h('div', { class: 'stack meal-groups' }, mealGroups(day))
-      : emptyState('tools-kitchen-2', t('today.empty_title'), t('today.empty_text'),
-        h('button', { class: 'btn btn-primary', type: 'button', onclick: addMeal }, t('today.add_meal')));
+    const mealsList = h('div', { class: 'stack meal-groups' }, mealGroups(day));
 
     const isToday = curDate === todayISO();
     const often = isToday ? oftenRow() : null;
     const kids = [kcalCard, waterCard, miniRow, ...(isToday ? [activityHint(day.activity_hint)].filter(Boolean) : []), ...(isToday && tgt.kcal ? [weekGoalBlock(ctx, { compact: true })] : []),
       sectionTitle(t('today.meals'), h('button', { class: 'btn-link section-add', type: 'button', onclick: addMeal }, icon('plus', 14), t('common.add'))), mealsList,
       ...(isToday ? [sectionTitle(t('today.repeat')), often, ...(often._ph ? [often._ph] : [])] : [])];
+    openMealActions?.close();
     body.replaceChildren(...kids);
     const oh = body.querySelector('.often');
     if (oh && oh.hidden && !oh._ph && oh.previousElementSibling) oh.previousElementSibling.hidden = true;
@@ -320,49 +322,42 @@ export default async function render(root, ctx) {
     return card;
   }
 
-  // Приёмы сгруппированы по типу: завтрак, обед, ужин, перекусы. Группа сворачивается; по умолчанию открыта та,
-  // где последняя запись за сегодня. Что открыто, помним до ухода с экрана (обновление данных не схлопывает).
+  // Все четыре группы видны каждый день. Сохраняем только раскрытия, сделанные пользователем.
   function mealGroups(day) {
-    const isToday = day.date === todayISO() || curDate === todayISO();
     const by = new Map(GROUPS.map((g) => [g, []]));
     day.meals.forEach((m) => by.get(GROUPS.includes(m.type) ? m.type : 'snack').push(m));
-    const key = (g) => curDate + ':' + g;
-    if (!openInit.has(curDate)) {
-      openInit.add(curDate);
-      const last = isToday ? [...day.meals].sort((x, y) => String(x.time).localeCompare(String(y.time))).pop() : null;
-      if (last) openGroups.add(key(GROUPS.includes(last.type) ? last.type : 'snack'));
-    }
-    return GROUPS.filter((g) => by.get(g).length).map((g) => {
+    return GROUPS.map((g) => {
+      const key = day.date + ':' + g;
       const list = by.get(g);
       const mt = mealType(g);
       const sum = list.reduce((a, m) => ({ kcal: a.kcal + (m.kcal || 0), protein: a.protein + (m.protein || 0), fat: a.fat + (m.fat || 0), carbs: a.carbs + (m.carbs || 0) }), { kcal: 0, protein: 0, fat: 0, carbs: 0 });
       ['protein', 'fat', 'carbs'].forEach((k) => { sum[k] = Math.round(sum[k] * 10) / 10; });
-      const names = list.flatMap((m) => (m.items || []).map((i) => i.name));
       const times = list.map((m) => m.time).filter(Boolean).sort();
       const when = times.length > 1 && times[0] !== times[times.length - 1] ? `${times[0]}–${times[times.length - 1]}` : (times[0] || '');
-      const body = h('div', { class: 'meal-group-body' },
+      const bodyId = 'meal-group-' + g;
+      const body = h('div', { class: 'meal-group-body', id: bodyId },
         list.map(mealRow),
         h('button', { class: 'row meal-add-row', type: 'button', onclick: () => { sessionStorage.setItem('meal-type', g); addMeal(); } },
           icon('plus', 18), h('span', null, t('today.add_to', { n: mt.label.toLowerCase() }))));
       const title = g === 'snack' ? t('meal.snacks') : mt.label;
-      const head = h('button', { class: 'row meal-group-head', type: 'button', 'aria-label': `${title}, ${fmtKcal(sum.kcal)} ${t('unit.kcal')}`,
-        onclick: () => { haptic('light'); setOpen(!openGroups.has(key(g))); } },
+      const summary = list.length ? `${fmtKcal(sum.kcal)} ${t('unit.kcal')}` : t('today.no_meals');
+      const head = h('button', { class: 'row meal-group-head', type: 'button', 'aria-label': `${title}, ${summary}`, 'aria-controls': bodyId,
+        onclick: () => { haptic('light'); setOpen(!openGroups.has(key)); } },
         h('div', { class: 'thumb' }, mealPic(g, 44) || tile(mt.icon, mt.color, 44)),
         h('span', { class: 'grow' },
           h('span', { class: 'row-title' }, title, when ? h('span', { class: 'meal-when' }, when) : null),
-          h('span', { class: 'row-sub clamp' }, names.join(', ') || t('today.no_items')),
-          h('span', { class: 'row-sub' }, macroLine(sum))),
+          h('span', { class: 'row-sub' }, list.length ? macroLine(sum) : t('today.no_meals'))),
         h('span', { class: 'meal-kcal' }, (list.some((m) => m.unresolved_items) ? t('nutrition.counted') + ' ' : '') +
           fmtKcal(sum.kcal), h('small', null, ' ' + t('unit.kcal'))),
         h('span', { class: 'meal-chev' }, icon('chevron-right', 18)));
       const card = h('div', { class: 'list meal-group' }, head, body);
       function setOpen(on) {
-        if (on) openGroups.add(key(g)); else openGroups.delete(key(g));
+        if (on) openGroups.add(key); else openGroups.delete(key);
         card.classList.toggle('open', on);
         head.setAttribute('aria-expanded', String(on));
         body.hidden = !on;
       }
-      setOpen(openGroups.has(key(g)));
+      setOpen(openGroups.has(key));
       return card;
     });
   }
@@ -375,12 +370,99 @@ export default async function render(root, ctx) {
     const thumb = h('div', { class: 'thumb' }, fallback(),
       n ? h('span', { class: 'thumb-count' }, icon('photo', 10), String(n)) : null);
     const names = (m.items || []).map((i) => i.name).slice(0, 3).join(', ');
-    return h('button', { class: 'row meal-row', type: 'button', onclick: () => nav.go('/meal/' + m.id), 'aria-label': `${mt.label} ${m.time}, ${m.kcal} ${t('unit.kcal')}` },
+    const label = `${mt.label} ${m.time}, ${m.kcal} ${t('unit.kcal')}`;
+    const remove = h('button', {
+      class: 'meal-swipe-delete', type: 'button', tabindex: '-1', 'aria-hidden': 'true',
+      'aria-label': `${t('meal.del_meal')}: ${names || label}`,
+      onclick: async () => {
+        if (openMealActions !== actions || deletingMeals.has(m.id)) return;
+        deletingMeals.add(m.id);
+        remove.disabled = true;
+        try {
+          await api.del('/meals/' + m.id);
+          if (ctx.alive()) { haptic('success'); toast(t('meal.deleted')); }
+          dataChanged();
+        } catch (e) {
+          if (ctx.alive()) toast(e, 'error');
+        } finally {
+          deletingMeals.delete(m.id);
+          remove.disabled = false;
+        }
+      },
+    }, t('common.delete'));
+    const row = h('button', {
+      class: 'row meal-row', type: 'button', 'aria-label': label,
+      onclick: () => {
+        if (openMealActions === actions) setRevealed(false);
+        else nav.go('/meal/' + m.id);
+      },
+    },
       thumb,
       h('span', { class: 'grow' },
         h('span', { class: 'row-title clamp1' }, names || t('today.no_items')),
         h('span', { class: 'row-sub' }, `${m.time} · ${macroLine(m)}`)),
       h('span', { class: 'meal-kcal' }, m.unresolved_items ? t('nutrition.counted') + ' ' + fmtKcal(m.kcal) : fmtKcal(m.kcal), h('small', null, ' ' + t('unit.kcal'))));
+    const element = h('div', { class: 'meal-swipe' }, remove, row);
+    const actions = { element, close: () => setRevealed(false) };
+
+    function setRevealed(open) {
+      if (open && openMealActions !== actions) openMealActions?.close();
+      if (open) openMealActions = actions;
+      else if (openMealActions === actions) openMealActions = null;
+      element.classList.toggle('is-revealed', open);
+      remove.tabIndex = open ? 0 : -1;
+      if (open) remove.removeAttribute('aria-hidden');
+      else remove.setAttribute('aria-hidden', 'true');
+    }
+
+    let start = null;
+    let dragging = false;
+    row.addEventListener('touchstart', (e) => {
+      start = e.touches.length === 1 ? e.touches[0] : null;
+    }, { passive: true });
+    row.addEventListener('touchmove', (e) => {
+      if (!start || e.touches.length !== 1) return;
+      const touch = e.touches[0];
+      const dx = touch.clientX - start.clientX;
+      const dy = touch.clientY - start.clientY;
+      if (!dragging) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
+        if (Math.abs(dx) <= Math.abs(dy) * 1.5 || (dx > 0 && openMealActions !== actions)) { start = null; return; }
+        dragging = true;
+        element.classList.add('is-dragging');
+        if (openMealActions !== actions) openMealActions?.close();
+      }
+      if (e.cancelable) e.preventDefault();
+      const width = remove.offsetWidth;
+      const offset = (openMealActions === actions ? -width : 0) + dx;
+      row.style.setProperty('--meal-swipe-offset', `${Math.max(-width, Math.min(0, offset))}px`);
+    }, { passive: false });
+
+    function finishSwipe(e) {
+      const touch = e.changedTouches[0];
+      if (start && dragging && e.type === 'touchend' && touch.identifier === start.identifier) {
+        if (e.cancelable) e.preventDefault();
+        const dx = touch.clientX - start.clientX;
+        if (Math.abs(dx) >= 28) setRevealed(dx < 0);
+      }
+      start = null;
+      dragging = false;
+      element.classList.remove('is-dragging');
+      row.style.removeProperty('--meal-swipe-offset');
+    }
+    row.addEventListener('touchend', finishSwipe, { passive: false });
+    row.addEventListener('touchcancel', finishSwipe, { passive: true });
+    element.addEventListener('keydown', (e) => {
+      if (e.key === 'Delete' && e.target === row) {
+        e.preventDefault();
+        setRevealed(true);
+        remove.focus();
+      } else if (e.key === 'Escape' && openMealActions === actions) {
+        setRevealed(false);
+        row.focus();
+      }
+    });
+    return element;
   }
 
   await load();
