@@ -342,7 +342,11 @@ async def test_failure_of_one_reminder_does_not_block_others(db):
     assert db.execute("SELECT last_sent_at FROM user_reminders WHERE id=?", (a["id"],)).fetchone()[0] is None
 
 
-def test_has_due_work_sees_custom_reminders(db):
+def test_has_due_work_sees_custom_reminders(db, monkeypatch):
+    if getattr(db, "postgres", False):
+        # The integration fixture rolls back test writes. Read those uncommitted
+        # rows here instead of opening the scheduler's normal worker connection.
+        monkeypatch.setattr(db, "spawn", lambda: db)
     uid, user = _user(db)
     assert scheduler._has_due_work(db, _now(10, 0)) is False
     _add(db, user, title="X", text="x", time="10:00", every_min=60, until_time="12:00")

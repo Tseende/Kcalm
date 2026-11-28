@@ -53,7 +53,7 @@ def skip(db: sqlite3.Connection, tg_id: int, tz: str) -> None:
             """INSERT INTO users (tg_id, tz, target_rate_kg_week, onboarding_skipped)
                VALUES (?, ?, 0, 1)
                ON CONFLICT(tg_id) DO UPDATE SET onboarding_skipped=1, tz=excluded.tz,
-                   target_rate_kg_week=0 WHERE onboarded=0 AND onboarding_skipped=0""",
+                   target_rate_kg_week=0 WHERE users.onboarded=0 AND users.onboarding_skipped=0""",
             (tg_id, tz),
         )
 
