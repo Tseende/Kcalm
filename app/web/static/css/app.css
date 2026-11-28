@@ -757,7 +757,9 @@ button.frow > .ico:last-child { flex: none; color: color-mix(in srgb, var(--c-hi
 .star-on { color: var(--c-warn); }
 .often-star { color: var(--c-warn); display: inline-flex; }
 .often-star .ico svg { fill: currentColor; }
-.quick-list { display: flex; flex-direction: column; }
+.meal-catalog .quick-list { --sep-l: 69px; display: flex; flex-direction: column; }
+.quick-list .row { min-height: 64px; padding-block: 10px; padding-inline-start: 15px; }
+.quick-list button.row { gap: 14px; padding-inline-end: 14px; }
 .quick-star { flex: none; width: 44px; height: 44px; display: grid; place-items: center; color: var(--c-hint); }
 .quick-star.on { color: var(--c-warn); }
 .quick-star.on .ico svg { fill: currentColor; }
@@ -765,7 +767,8 @@ button.frow > .ico:last-child { flex: none; color: color-mix(in srgb, var(--c-hi
 .barcode-row input { flex: 1; min-width: 0; }
 .quick-list .fav-row { padding-right: 6px; }
 .quick-list .fav-open { font: inherit; color: inherit; cursor: pointer; }
-.quick-list .row-title { font-weight: 400; }
+.quick-list .row-title { font-weight: 400; line-height: 1.25; }
+.quick-list .row-title, .quick-list .row-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .quick-list .quick-thumb { width: 40px; height: 40px; border-radius: 10px; }
 .quick-list .row.is-pending { opacity: .5; pointer-events: none; }
 .quick-star { appearance: none; background: none; border: 0; padding: 0; cursor: pointer; }
@@ -929,7 +932,6 @@ input.time-in[type="time"] { width: 104px; flex: none; min-height: 36px; padding
 .meal-catalog .chips { gap: 6px; }
 .meal-catalog .chip { padding-inline: 10px; font-size: 13px; }
 .meal-catalog-results { min-height: 144px; touch-action: pan-y pinch-zoom; }
-.meal-catalog-row { gap: 10px; min-height: 52px; }
 .meal-catalog-plus { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 50%; color: var(--c-btn); background: var(--c-tonal); }
 .quick-more { width: 100%; text-align: center; align-self: stretch; }
 .cap-main .cap-ico { flex: none; width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.22); color: #fff; }

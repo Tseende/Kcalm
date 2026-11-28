@@ -81,7 +81,7 @@ export function mealCatalog({ alive, canRepeat, repeatRow, addFood, addDrink, ad
   }, { passive: false });
 
   function entry(name, subtitle, picture, onClick) {
-    return h('button', { type: 'button', class: 'row row-btn meal-catalog-row', onclick: () => {
+    return h('button', { type: 'button', class: 'row row-btn', onclick: () => {
       query.blur();
       onClick();
     } }, picture, h('span', { class: 'grow' }, h('span', { class: 'row-title' }, name),
@@ -89,16 +89,16 @@ export function mealCatalog({ alive, canRepeat, repeatRow, addFood, addDrink, ad
     h('span', { class: 'meal-catalog-plus', 'aria-hidden': 'true' }, icon('plus', 18)));
   }
 
-  const productRow = (food) => entry(food.name, foodLine(food), foodPic(food.name, 36) || tile('package', 'orange', 36), () => addFood(food));
+  const productRow = (food) => entry(food.name, foodLine(food), foodPic(food.name, 40) || tile('package', 'orange', 40), () => addFood(food));
   const drinkRow = (drink) => entry(drinkLabel(drink),
     drink.last_ml ? t('add.last_volume', { n: drink.last_ml })
       : drink.kcal_100 > 0 ? `${drink.kcal_100} ${t('unit.kcal')} ${t('drink.per100ml')}` : t('drink.no_kcal'),
-    drinkPic(drink.id, 36) || tile('cup', drink.color, 36), () => addDrink(drink));
+    drinkPic(drink.id, 40) || tile('cup', drink.color, 40), () => addDrink(drink));
   const list = (rows) => h('div', { class: 'list tiles prod-list quick-list' }, rows);
   const link = (text, onclick) => h('button', { class: 'an-more quick-more', type: 'button', onclick }, text);
   const hint = (text) => h('div', { class: 'hint small pad' }, text);
 
-  function catalogRows(groups) {
+  function catalogRows(groups, { showFirstHeading = false } = {}) {
     const nodes = [];
     let remaining = expanded ? Infinity : QUICK_SHOWN;
     let hidden = 0;
@@ -107,7 +107,7 @@ export function mealCatalog({ alive, canRepeat, repeatRow, addFood, addDrink, ad
       hidden += entries.length - visible.length;
       remaining -= visible.length;
       if (!visible.length) continue;
-      if (title) nodes.push(sectionTitle(title));
+      if (title && (showFirstHeading || nodes.length)) nodes.push(sectionTitle(title));
       nodes.push(list(visible.map(makeRow)));
     }
     if (hidden) nodes.push(link(t('add.show_more', { n: hidden }), () => {
@@ -140,7 +140,7 @@ export function mealCatalog({ alive, canRepeat, repeatRow, addFood, addDrink, ad
           [t('add.catalog_products'), foods, productRow],
           [t('add.drinks'), matchingDrinks, drinkRow],
           [t('fav.title'), matchingDishes, repeatRow],
-        ]),
+        ], { showFirstHeading: !!raw }),
         ...(status ? [hint(status)] : []),
         link(t('fp.manual'), () => { query.blur(); addManual(raw); }));
     } else if (tab === 'drinks') {
