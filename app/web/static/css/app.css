@@ -112,14 +112,14 @@ body.scrolled .page-head { background: color-mix(in srgb, var(--c-bg) 78%, trans
 .card { background: var(--c-card); border-radius: var(--r-card); padding: 14px 16px; }
 .card-title { font-weight: 600; }
 .row-between { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.section-title, .section-label, .drink-label, .add-label, .seg-label {
+.section-title, .section-label, .drink-label, .seg-label {
   margin: 4px 16px 8px; color: var(--c-hint); font-size: 13px; line-height: 1.35;
   font-weight: 400; text-transform: uppercase; letter-spacing: .02em;
 }
 .section-title { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 /* В вертикальных контейнерах gap уже учитывается между заголовком и блоком. */
-:is(.screen, .stack, .stack-sm, .photo-card, .capture.compact, .add-sheet, .fav-sheet)
-  > :is(.section-title, .section-label, .drink-label, .add-label, .seg-label) {
+:is(.screen, .stack, .stack-sm, .photo-card, .capture.compact, .fav-sheet)
+  > :is(.section-title, .section-label, .drink-label, .seg-label) {
   margin-block-end: calc(8px - var(--stack-gap));
 }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -543,17 +543,6 @@ html.fs .page-head:not(.chat-head) + * { margin-top: 0; }
 .drink-note { text-align: center; margin: 0 8px; }
 @media (max-width: 340px) { .drink-grid { grid-template-columns: repeat(2, 1fr); } }
 
-/* меню «Добавить» */
-.add-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.add-card { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 14px; text-align: left; border: 1px solid var(--card-edge); border-radius: var(--r-card); background: var(--c-card); box-shadow: var(--shadow-card); min-width: 0; transition: transform .12s; }
-.add-card:active { transform: scale(.97); }
-.add-card .row-title { font-size: 15px; font-weight: 600; display: block; }
-.add-card .row-sub { font-size: 12px; line-height: 1.25; display: block; margin-top: 2px; }
-.add-card.wide { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 14px; }
-.add-card.wide .row-title { font-size: 17px; }
-.add-card.wide .row-sub { font-size: 13px; }
-.add-card.wide .ico { margin-left: auto; color: var(--c-hint); }
-
 /* картинки продуктов и напитков: светлая плитка как у иконок iOS, в обеих темах одинаково */
 .pic { display: inline-flex; align-items: center; justify-content: center; flex: none; border-radius: 22.5%; background: var(--c-pic); box-shadow: inset 0 0 0 .5px var(--c-pic-edge); overflow: hidden; }
 .pic-sprite { width: 84%; height: 84%; background-repeat: no-repeat; filter: var(--pic-shadow); }
@@ -681,7 +670,14 @@ button.frow > .ico:last-child { flex: none; color: color-mix(in srgb, var(--c-hi
 .today .mini-group { display: grid; grid-template-columns: repeat(3, 1fr); padding: 0; overflow: hidden; }
 .today .mini { display: flex; flex-direction: column; align-items: flex-start; gap: 0; padding: 14px 14px 13px; border: 0; background: none; border-radius: 0; text-align: left; min-width: 0; position: relative; color: var(--c-text); }
 .today .mini + .mini::before { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: .5px; background: var(--edge); }
-.today .mini:active { background: color-mix(in srgb, var(--c-text) 6%, transparent); }
+.today .mini:active, .today .mini-import:active { background: color-mix(in srgb, var(--c-text) 6%, transparent); }
+.today .mini-import {
+  grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; min-height: 44px;
+  padding: 8px 14px; border: 0; border-top: 1px solid var(--edge); background: none;
+  color: var(--c-accent); text-align: left; font-size: 14px; font-weight: 500;
+}
+.today .mini-import .ico:last-child { margin-inline-start: auto; }
+.today .mini-import:focus-visible { outline-offset: -2px; }
 .today .mini-ico { display: block; margin-bottom: 10px; line-height: 0; }
 .today .mini-val { font-size: 20px; font-weight: 700; letter-spacing: -.025em; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .today .mini-val.is-empty { color: var(--c-hint); font-weight: 400; }
@@ -819,23 +815,6 @@ button.frow > .ico:last-child { flex: none; color: color-mix(in srgb, var(--c-hi
 .scan-bar { position: absolute; left: 0; right: 0; bottom: max(22px, env(safe-area-inset-bottom)); display: flex; justify-content: center; z-index: 2; }
 @media (prefers-reduced-motion: reduce) { .scan-line { animation: none; top: 50%; } }
 
-/* меню «Добавить» */
-.add-sheet { --stack-gap: 10px; display: flex; flex-direction: column; gap: var(--stack-gap); padding-bottom: 4px; }
-.add-label { font-weight: 600; margin-inline: 4px; }
-.add-hero { appearance: none; border: 0; width: 100%; position: relative; overflow: hidden; display: flex; align-items: stretch; justify-content: space-between; min-height: 132px; padding: 16px; border-radius: 24px; text-align: left; color: #fff; font: inherit; cursor: pointer; background: linear-gradient(135deg, #d9650b 0%, #ad3a08 100%); box-shadow: 0 10px 24px rgba(173, 58, 8, .32); transition: transform .12s; }
-.add-hero:active { transform: scale(.98); }
-.add-hero-text { display: flex; flex-direction: column; justify-content: space-between; gap: 6px; z-index: 1; max-width: 58%; }
-.add-hero-title { display: block; font-size: 22px; font-weight: 700; line-height: 1.1; }
-.add-hero-sub { display: block; font-size: 13px; opacity: .92; line-height: 1.3; }
-.add-hero-cta { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; margin-top: 6px; padding: 7px 14px; border-radius: 99px; background: rgba(255,255,255,.26); font-weight: 600; font-size: 14px; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
-.add-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.add-card { appearance: none; font: inherit; color: inherit; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 14px; min-height: 112px; text-align: left; border: 0; border-radius: var(--r-card-lg); background: var(--c-card); box-shadow: inset 0 0 0 .5px var(--edge, rgba(0,0,0,.08)), 0 2px 8px rgba(0,0,0,.04); min-width: 0; cursor: pointer; transition: transform .12s; }
-.add-card:active { transform: scale(.97); }
-.add-card .ticon { box-shadow: 0 5px 12px rgba(0,0,0,.14); background-image: linear-gradient(160deg, rgba(255,255,255,.3), rgba(255,255,255,0) 60%) !important; }
-.add-text { display: block; min-width: 0; }
-.add-card .row-title { font-size: 16px; font-weight: 600; display: block; }
-.add-card .row-sub { font-size: 12.5px; line-height: 1.25; display: block; margin-top: 2px; }
-
 /* анализ за период и статистика */
 .chip-delta { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; white-space: nowrap; background: color-mix(in srgb, var(--c-hint) 16%, transparent); color: var(--c-hint); }
 .chip-delta.good { background: color-mix(in srgb, var(--c-green) 16%, transparent); color: var(--c-green); }
@@ -949,6 +928,7 @@ input.time-in[type="time"] { width: 104px; flex: none; min-height: 36px; padding
 .meal-catalog-search input:focus-visible { outline: none; }
 .meal-catalog .chips { gap: 6px; }
 .meal-catalog .chip { padding-inline: 10px; font-size: 13px; }
+.meal-catalog-results { min-height: 144px; touch-action: pan-y pinch-zoom; }
 .meal-catalog-row { gap: 10px; min-height: 52px; }
 .meal-catalog-plus { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 50%; color: var(--c-btn); background: var(--c-tonal); }
 .quick-more { width: 100%; text-align: center; align-self: stretch; }
@@ -1191,7 +1171,7 @@ input.time-in[type="time"] { width: 104px; flex: none; min-height: 36px; padding
 .ch-draw { stroke-dasharray: 1; animation: ch-draw .6s var(--ease) both; }
 
 /* нажатия: карточки, строки, чипы */
-button.row, a.row, .often-chip, .wg-strip, .wg-opt, .add-card, .mini, .drink-card { transition: transform .12s var(--ease), background .15s; }
+button.row, a.row, .often-chip, .wg-strip, .wg-opt, .mini, .drink-card { transition: transform .12s var(--ease), background .15s; }
 button.row:active, a.row:active, .often-chip:active, .wg-strip:active, .wg-opt:active { transform: scale(.98); }
 
 /* ---------- polish: кольца ---------- */
@@ -1251,21 +1231,6 @@ button.row:active, a.row:active, .often-chip:active, .wg-strip:active, .wg-opt:a
 .profile .profile-sub { font-variant-numeric: tabular-nums; }
 
 
-/* ---------- polish: лист «Добавить» ---------- */
-.add-hero-text { max-width: 46%; }
-.add-hero-pics { position: absolute; right: 6px; top: 50%; width: 176px; height: 128px; transform: translateY(-50%); }
-.add-hero-pic { position: absolute; width: 92px; height: 92px; filter: drop-shadow(0 6px 8px rgba(120, 40, 0, .28)); }
-.add-hero-pic .pic, .add-hero-pic img { width: 100% !important; height: 100% !important; object-fit: contain; background: none !important; border-radius: 0 !important; box-shadow: none !important; overflow: visible !important; }
-.add-hero-pic.p0 { right: 0; top: 2px; }
-.add-hero-pic.p1 { right: 62px; bottom: 0; z-index: 2; width: 96px; height: 96px; }
-.add-hero-pic.p2 { right: 88px; top: 0; width: 78px; height: 78px; z-index: 0; }
-@media (max-width: 380px) {
-  .add-hero-pics { width: 150px; } .add-hero-pic { width: 78px; height: 78px; }
-  .add-hero-pic.p1 { right: 50px; width: 82px; height: 82px; } .add-hero-pic.p2 { right: 74px; width: 66px; height: 66px; }
-}
-.add-grid { grid-auto-rows: 1fr; }
-.add-card { height: 100%; justify-content: flex-start; align-self: stretch; gap: 10px; }
-.add-card .add-text { margin-top: 0; }
 .today .macro .bar { align-self: stretch; width: 100%; }
 
 .row-value { color: var(--c-hint); font-size: 17px; white-space: nowrap; }
@@ -1637,16 +1602,13 @@ html.scheme-cosmic :is(.plus-circle, .plus-circle .ico, .capture-ico, .capture-i
   .cap-main, .cap-main .cap-ico, .mchip.active, .avatar, .onb-check .ok, .onb-badge-kg) {
   color: var(--c-btn-text);
 }
-html.scheme-cosmic .add-card :is(.ticon, .ticon .ico) { color: var(--c-btn-text); }
-html.scheme-cosmic .add-card .ticon { background-image: none !important; }
 html.scheme-cosmic .avatar { background: var(--cosmic-pink); }
 html.scheme-cosmic .kr-track { stroke: color-mix(in srgb, var(--cosmic-cream) 23%, transparent); }
-html.scheme-cosmic :is(.add-hero, .an-focus) {
+html.scheme-cosmic .an-focus {
   color: var(--c-btn-text);
   background: var(--cosmic-gold);
   box-shadow: none;
 }
-html.scheme-cosmic .add-hero-cta { background: var(--cosmic-cream); }
 html.scheme-cosmic .an-focus-ico .stile { color: var(--c-btn-text); }
 html.scheme-cosmic .toast { background: #483053; color: var(--c-text); }
 html.scheme-cosmic .toast.error { background: #713345; }

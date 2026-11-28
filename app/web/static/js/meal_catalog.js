@@ -3,10 +3,14 @@ import { drinkLabel, loadDrinks } from './drink_picker.js';
 import { foodLine } from './food_picker.js';
 import { t } from './i18n.js';
 import { drinkPic, foodPic } from './pics.js';
-import { h, haptic, icon, sectionTitle, tile } from './ui.js';
+import { h, haptic, icon, reducedMotion, sectionTitle, tile } from './ui.js';
 
 const QUICK_SHOWN = 3;
 const FOLD = (value) => value.toLowerCase().replaceAll('ё', 'е');
+const TABS = [
+  ['freq', 'add.frequent'], ['mine', 'fav.title'],
+  ['drinks', 'add.drinks'], ['products', 'add.catalog_products'],
+];
 
 export function mealCatalog({ alive, canRepeat, repeatRow, addFood, addDrink, addManual, addCustomDrink }) {
   let items = [];
@@ -16,7 +20,7 @@ export function mealCatalog({ alive, canRepeat, repeatRow, addFood, addDrink, ad
   let tab = 'freq';
   try {
     const saved = localStorage.getItem('addmeal_quick_tab');
-    if (['freq', 'mine', 'drinks', 'products'].includes(saved)) tab = saved;
+    if (TABS.some(([key]) => key === saved)) tab = saved;
   } catch (e) { /* без хранилища */ }
   let expanded = false;
   let foods = [];
@@ -24,14 +28,57 @@ export function mealCatalog({ alive, canRepeat, repeatRow, addFood, addDrink, ad
   let loadingFoods = false;
   let request = 0;
   let timer = null;
+  let swipeStart = null;
+  let swipeAnimation = null;
   const query = h('input', {
     type: 'search', placeholder: t('add.catalog_search'), 'aria-label': t('add.catalog_search'),
     autocomplete: 'off', enterkeyhint: 'search', oninput: search,
   });
   const tabs = h('div', { class: 'chips scroll', role: 'tablist', 'aria-label': t('add.catalog') });
-  const result = h('div', { class: 'stack-sm', 'aria-live': 'polite' });
+  const result = h('div', { class: 'stack-sm meal-catalog-results', 'aria-live': 'polite' });
   const element = h('div', { class: 'stack-sm meal-catalog' },
     h('label', { class: 'meal-catalog-search' }, icon('search', 20), query), tabs, result);
+
+  const visibleTabs = () => repeat ? TABS : TABS.slice(2);
+
+  function selectTab(key) {
+    if (tab === key) return;
+    tab = key;
+    try { localStorage.setItem('addmeal_quick_tab', key); } catch (e) { /* без хранилища */ }
+    haptic('selection');
+    search();
+    const active = tabs.querySelector('.active');
+    const left = active.offsetLeft;
+    const right = left + active.offsetWidth;
+    if (left < tabs.scrollLeft) tabs.scrollLeft = left;
+    else if (right > tabs.scrollLeft + tabs.clientWidth) tabs.scrollLeft = right - tabs.clientWidth;
+  }
+
+  result.addEventListener('touchstart', (e) => {
+    swipeStart = !tabs.hidden && e.touches.length === 1 ? e.touches[0] : null;
+  }, { passive: true });
+  result.addEventListener('touchcancel', () => { swipeStart = null; }, { passive: true });
+  result.addEventListener('touchend', (e) => {
+    const start = swipeStart;
+    swipeStart = null;
+    if (!start || tabs.hidden || e.touches.length) return;
+    const end = e.changedTouches[0];
+    if (start.identifier !== end.identifier) return;
+    const dx = end.clientX - start.clientX;
+    const dy = end.clientY - start.clientY;
+    if (Math.abs(dx) <= 60 || Math.abs(dx) <= Math.abs(dy) * 1.5) return;
+    if (e.cancelable) e.preventDefault();
+    const options = visibleTabs();
+    const dir = dx < 0 ? 1 : -1;
+    const next = options[options.findIndex(([key]) => key === tab) + dir];
+    if (!next) return;
+    selectTab(next[0]);
+    swipeAnimation?.cancel();
+    if (!reducedMotion()) swipeAnimation = result.animate?.([
+      { opacity: 0.6, transform: `translateX(${dir * 12}px)` },
+      { opacity: 1, transform: 'none' },
+    ], { duration: 180, easing: 'ease-out' });
+  }, { passive: false });
 
   function entry(name, subtitle, picture, onClick) {
     return h('button', { type: 'button', class: 'row row-btn meal-catalog-row', onclick: () => {
@@ -71,24 +118,15 @@ export function mealCatalog({ alive, canRepeat, repeatRow, addFood, addDrink, ad
   }
 
   function paint() {
-    const options = [
-      ...(repeat ? [['freq', t('add.frequent')], ['mine', t('fav.title')]] : []),
-      ['drinks', t('add.drinks')], ['products', t('add.catalog_products')],
-    ];
+    const options = visibleTabs();
     if (!options.some(([key]) => key === tab)) tab = 'products';
     const raw = query.value.trim();
     const needle = FOLD(raw);
     tabs.hidden = !!raw;
     if (!tabs.hidden) tabs.replaceChildren(...options.map(([key, title]) => h('button', {
       type: 'button', role: 'tab', class: 'chip' + (key === tab ? ' active' : ''), 'aria-selected': String(key === tab),
-      onclick: () => {
-        if (tab === key) return;
-        tab = key;
-        try { localStorage.setItem('addmeal_quick_tab', key); } catch (e) { /* без хранилища */ }
-        haptic('selection');
-        search();
-      },
-    }, title)));
+      onclick: () => selectTab(key),
+    }, t(title))));
 
     if (raw || tab === 'products') {
       const matchingDrinks = raw ? drinks.filter((drink) => [drink.name, drinkLabel(drink)].some((name) => FOLD(name).includes(needle))) : [];

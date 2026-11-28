@@ -1,8 +1,7 @@
 // Router + tab bar + Telegram bootstrap.
 import { api, isMock, onMockEnabled, tg, inTelegram } from './api.js';
 import { initKeyboard } from './keyboard.js';
-import { h, $, icon, tile, sheet, nav, mainButton, backButton, emptyState, errorState, sessionExpiredButton, haptic, closeAllSheets, getThemePref, THEMES, staggerIn, skeletonCards } from './ui.js';
-import { mealPic } from './pics.js';
+import { h, $, icon, nav, mainButton, backButton, emptyState, errorState, sessionExpiredButton, haptic, closeAllSheets, getThemePref, THEMES, skeletonCards } from './ui.js';
 import { t } from './i18n.js';
 
 const R = (re, load, opts = {}) => ({ re: new RegExp('^' + re + '$'), load, ...opts });
@@ -33,7 +32,7 @@ const routes = [
 const TABS = [
   ['today', t('tab.today'), 'today', '/today'],
   ['stats', t('tab.stats'), 'stats', '/stats'],
-  ['add', t('common.add'), 'plus', null],
+  ['add', t('today.add_meal'), 'plus', '/add/meal'],
   ['analysis', t('tab.analysis'), 'analysis', '/analysis'],
   ['menu', t('tab.menu'), 'menu', '/menu'],
 ];
@@ -52,7 +51,11 @@ function buildTabbar() {
   tabbar.setAttribute('aria-label', t('tab.sections'));
   tabbar.replaceChildren(...TABS.map(([id, label, ic, path]) => {
     if (id === 'add') {
-      return h('button', { class: 'tab tab-plus', type: 'button', 'aria-label': t('common.add'), 'aria-haspopup': 'dialog', onclick: openAddSheet }, h('span', { class: 'plus-circle' }, icon('plus', 20)));
+      return h('button', { class: 'tab tab-plus', type: 'button', 'aria-label': label, onclick: () => {
+        haptic('light');
+        const date = curPath === '/today' ? history.state?.diaryDate : null;
+        nav.go(date ? path + '?date=' + date : path);
+      } }, h('span', { class: 'plus-circle' }, icon(ic, 20)));
     }
     return h('a', { class: 'tab', href: '#' + path, dataset: { tab: id }, 'aria-label': label, onclick: () => haptic('selection') }, icon(ic, 24), h('span', null, label));
   }));
@@ -66,37 +69,6 @@ function setActiveTab(tab) {
     a.classList.toggle('active', on);
     if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
-}
-
-function openAddSheet() {
-  haptic('light');
-  const date = curPath === '/today' ? history.state?.diaryDate : null;
-  const dated = (path) => date ? path + '?date=' + date : path;
-  const go = (path) => { s.close(); nav.go(path); };
-  const card = (ic, col, title, sub, path) => h('button', { class: 'add-card', type: 'button', onclick: () => go(path) },
-    tile(ic, col, 42),
-    h('span', { class: 'add-text' }, h('span', { class: 'row-title' }, title), h('span', { class: 'row-sub muted' }, sub)));
-  const hero = h('button', { class: 'add-hero', type: 'button', onclick: () => go(dated('/add/meal')) },
-    h('span', { class: 'add-hero-text' },
-      h('span', { class: 'add-hero-title' }, t('add.meal')),
-      h('span', { class: 'add-hero-sub' }, t('add.meal_sub')),
-      h('span', { class: 'add-hero-cta' }, icon('camera', 16), t('common.add'))),
-    h('span', { class: 'add-hero-pics', 'aria-hidden': 'true' },
-      ['dinner', 'lunch', 'breakfast'].map((t, i) => h('span', { class: 'add-hero-pic p' + i }, mealPic(t, 64)))));
-  const content = h('div', { class: 'add-sheet' },
-    hero,
-    h('div', { class: 'add-label' }, t('add.food')),
-    h('div', { class: 'add-grid' },
-      card('cup', 'var(--c-water)', t('add.drinks'), t('add.drinks_sub'), dated('/add/drink')),
-      card('barcode', 'red', t('add.product'), t('add.product_sub'), '/add/label')),
-    h('div', { class: 'add-label' }, t('add.health')),
-    h('div', { class: 'add-grid' },
-      card('scale', 'purple', t('add.weight'), t('add.weight_sub'), dated('/add/weight')),
-      card('bed', 'indigo', t('add.sleep'), t('add.sleep_sub'), dated('/add/sleep')),
-      card('run', 'green', t('add.activity'), t('add.activity_sub'), dated('/add/activity')),
-      card('device-mobile', 'blue', t('add.screen'), t('add.screen_sub'), '/add/screen')));
-  const s = sheet({ title: t('common.add'), content });
-  staggerIn(content, [...content.querySelectorAll('.add-card')]);   // карточки сетки въезжают по очереди
 }
 
 function match(path) {

@@ -222,7 +222,9 @@ export default async function render(root, ctx) {
       mini('walk', t('today.steps'), stepsOk ? fmtKcal(day.activity.steps) : null,
         stepsOk ? (day.activity.steps >= stepsGoal ? t('today.steps_done') : t('today.steps_of', { n: fmtKcal(stepsGoal) })) : t('today.steps_sub'),
         '/add/activity', stepsOk ? day.activity.steps / stepsGoal : null),
-      mini('scale', t('add.weight'), wl ? fmtN(wl.kg) + ' ' + t('unit.kg') : null, wl ? ago(wl.date) : t('today.weight_sub'), '/add/weight'));
+      mini('scale', t('add.weight'), wl ? fmtN(wl.kg) + ' ' + t('unit.kg') : null, wl ? ago(wl.date) : t('today.weight_sub'), '/add/weight'),
+      h('button', { class: 'mini-import', type: 'button', onclick: () => nav.go('/add/screen') },
+        icon('device-mobile', 18), t('today.import_screenshot'), icon('next', 16)));
 
     // meals
     const mealsList = day.meals.length
