@@ -1,6 +1,6 @@
 // Upload a screenshot (sleep / steps / scales) -> parsed metrics -> optional confirm
 import { api } from '../api.js';
-import { h, icon, toast, haptic, nav, pageHead, compressImage, busyOverlay, fmtN, fmtDur, shortDate, parseISO, todayISO } from '../ui.js';
+import { h, icon, toast, haptic, nav, pageHead, compressImage, busyOverlay, fmtN, fmtDur, shortDate, todayISO } from '../ui.js';
 import { t } from '../i18n.js';
 
 // Keys follow app/services/screens.py METRIC_RANGES (the backend's flat metrics).
@@ -38,29 +38,40 @@ const METRICS = {
 export default async function render(root, ctx) {
   const view = h('div', { class: 'screen' });
   const out = h('div', { class: 'stack' });
+  let previewUrl;
+  let stop;
   const input = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: onPick });
+  const pick = h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: () => input.click() }, icon('image', 20), t('shot.pick'));
   view.append(pageHead(t('shot.title'), { parent: '/today' }), h('div', { class: 'stack' },
     h('div', { class: 'muted' }, t('shot.hint')),
-    h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: () => input.click() }, icon('image', 20), t('shot.pick')),
+    pick,
     out, input));
   root.append(view);
 
   async function onPick() {
     const f = input.files[0];
     input.value = '';
-    if (!f) return;
-    let file;
-    try { file = await compressImage(f, 2000, 0.9); } catch (e) { toast(e.message, 'error'); return; }
-    const url = URL.createObjectURL(file);
-    out.replaceChildren(h('img', { class: 'preview', src: url, alt: t('shot.alt') }));
-    const fd = new FormData();
-    fd.append('photo', file, file.name || 'screen.jpg');
-    const stop = busyOverlay(t('shot.reading'), t('lbl.sub_one'));
+    if (!f || pick.disabled) return;
+    pick.disabled = true;
     try {
+      const file = await compressImage(f, 2000, 0.9);
+      if (!ctx.alive()) return;
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      previewUrl = URL.createObjectURL(file);
+      out.replaceChildren(h('img', { class: 'preview', src: previewUrl, alt: t('shot.alt') }));
+      const fd = new FormData();
+      fd.append('photo', file, file.name || 'screen.jpg');
+      stop = busyOverlay(t('shot.reading'), t('lbl.sub_one'));
       const r = await api.post('/screens', fd, { timeout: 90000 });
-      stop();
-      result(r, url);
-    } catch (e) { stop(); toast(e.message, 'error'); }
+      if (r.applied) api._me = null;
+      if (ctx.alive()) result(r, previewUrl);
+    } catch (e) {
+      if (ctx.alive()) toast(e, 'error');
+    } finally {
+      stop?.();
+      stop = null;
+      pick.disabled = false;
+    }
   }
 
   function result(r, url) {
@@ -77,14 +88,13 @@ export default async function render(root, ctx) {
       status, actions);
 
     if (r.applied) {
-      api._me = null;                                   // скриншот мог записать вес
       haptic('success');
       status.replaceChildren(icon('check', 20), t('shot.saved'));
       status.classList.add('ok');
       actions.append(h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: () => nav.replace('/today') }, t('common.done')));
     } else if (r.needs_confirm) {
-      status.replaceChildren(t('shot.confirm_text'),
-        reasons.length ? h('ul', { class: 'notes' }, reasons.map((x) => h('li', null, x))) : null);
+      status.textContent = t('shot.confirm_text');
+      if (reasons.length) status.append(h('ul', { class: 'notes' }, reasons.map((x) => h('li', null, x))));
       let sending = false;
       const confirm = async (apply) => {
         if (sending) return;                          // двойной тап: один запрос
@@ -92,11 +102,16 @@ export default async function render(root, ctx) {
         btnOk.disabled = btnNo.disabled = true;
         try {
           await api.post('/screens/' + r.id + '/confirm', { apply });
-          api._me = null;
+          if (apply) api._me = null;
+          if (!ctx.alive()) return;
           haptic('success');
           toast(apply ? t('shot.saved') : t('shot.cancelled'), 'ok');
           nav.replace('/today');
-        } catch (e) { toast(e.message, 'error'); sending = false; btnOk.disabled = btnNo.disabled = false; }
+        } catch (e) {
+          if (ctx.alive()) toast(e, 'error');
+          sending = false;
+          btnOk.disabled = btnNo.disabled = false;
+        }
       };
       const btnOk = h('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: () => confirm(true) }, icon('check', 20), t('common.confirm'));
       const btnNo = h('button', { class: 'btn btn-secondary btn-block', type: 'button', onclick: () => confirm(false) }, t('common.cancel'));
@@ -105,6 +120,9 @@ export default async function render(root, ctx) {
       status.textContent = r.screen === 'unknown' ? t('shot.unknown') : t('shot.not_applied');
     }
   }
-  void parseISO;
-  void ctx;
+  return () => {
+    stop?.();
+    stop = null;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+  };
 }

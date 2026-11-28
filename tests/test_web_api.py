@@ -3,6 +3,7 @@ docs/V2_API.md. Сети нет: распознавание и ассистен�
 aiohttp.test_utils.TestServer."""
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import importlib.util
 import json
@@ -460,6 +461,19 @@ async def test_meal_no_food_and_llm_errors(client, monkeypatch):
     assert resp.status == 502 and (await resp.json())["error"] == "llm_unavailable"
 
 
+async def test_meal_deadline_leaves_diary_unchanged(client, monkeypatch):
+    async def hang(*args, **kwargs):
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(server, "MEAL_RECOGNITION_TIMEOUT_S", 0.02)
+    monkeypatch.setattr(foodsvc, "parse_text", hang)
+    resp = await asyncio.wait_for(post_meal(client, text="гречка"), timeout=1)
+    assert resp.status == 504
+    assert (await resp.json())["error"] == "llm_timeout"
+    day = await (await client.get("/api/day", headers=H)).json()
+    assert day["meals"] == []
+
+
 async def test_meal_patch_delete(client, fake_food):
     meal = await (await post_meal(client, jpeg())).json()
     url = f"/api/meals/{meal['id']}"
@@ -851,6 +865,22 @@ async def test_versioned_assets_are_immutable_on_entire_module_tree(client):
     assert response.status == 404
     cached = await client.get("/app/", headers={"If-None-Match": page.headers["ETag"]})
     assert cached.status == 304 and cached.headers["Cache-Control"] == "no-cache"
+
+
+async def test_dev_index_updates_version_after_edit(make_client, cfg, tmp_path, monkeypatch):
+    (tmp_path / "index.html").write_text("<head><script src='main.js'></script></head>", encoding="utf-8")
+    script = tmp_path / "main.js"
+    script.write_text("export const value = 1;", encoding="utf-8")
+    monkeypatch.setattr(server, "STATIC_DIR", tmp_path)
+    client = await make_client(cfg.model_copy(update={"web_dev_tg_id": 1001}))
+    first = await client.get("/app/")
+
+    script.write_text("export const value = 22;", encoding="utf-8")
+    second = await client.get("/app/", headers={"If-None-Match": first.headers["ETag"]})
+    assert second.status == 200
+    version = file_version(script)
+    assert f"/app/main.js?v={version}" in await second.text()
+    assert (await client.get(f"/app/main.js?v={version}")).status == 200
 
 
 def test_static_html_versions_any_local_tag_and_unchanged_files_keep_versions(tmp_path):

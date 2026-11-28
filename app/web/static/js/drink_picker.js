@@ -2,7 +2,7 @@
 // Выбор — это { drink, ml, sugar } (drink.id: 'water', id каталога или 'custom').
 // drinkEntry() превращает выбор в позицию приёма (как у food_picker: name, grams = мл, per100).
 import { api } from './api.js';
-import { t } from './i18n.js';
+import { lang, t } from './i18n.js';
 import {
   h, icon, tile, sheet, toast, haptic, fmtN, numInput, numVal, numSet, numCheck, frow, group, sectionTitle, TILE, macroLine,
 } from './ui.js';
@@ -16,6 +16,14 @@ const SUGAR_KCAL = 20;   // чайная ложка, около 5 г
 const SUGAR_G = 5;
 const MAX_SUGAR = 6;
 const r1 = (v) => Math.round(v * 10) / 10;
+const EN_NAMES = {
+  cola_zero: 'Cola Zero', cola: 'Cola', fanta: 'Fanta', tea: 'Tea', americano: 'Americano',
+  cappuccino: 'Cappuccino', flat_white: 'Flat white', latte: 'Latte', juice: 'Juice',
+  smoothie: 'Smoothie', shake: 'Protein shake', energy: 'Energy drink',
+  beer: 'Beer', beer0: 'Non-alcoholic beer', wine: 'Wine',
+};
+
+export const drinkLabel = (d) => lang() === 'en' ? EN_NAMES[d.id] ?? d.name : d.name;
 
 export async function loadDrinks({ ranked = false } = {}) {
   const { drinks = [], history = [] } = await api.get('/drinks', ranked ? { history: 1 } : {});
@@ -32,14 +40,14 @@ const kcalLabel = (d) => (d.id === 'water' ? t('drink.no_kcal') : `${d.kcal_100 
 const pic = (d, size = 48) => drinkPic(d.id, size) || h('span', { class: 'drink-emo', style: { background: TILE[d.color] || TILE.blue, width: size + 'px', height: size + 'px' } }, d.emoji || '🥤');
 
 export const drinkKcal = (c) => Math.round(c.drink.kcal_100 * c.ml / 100 + (c.drink.sugar ? c.sugar * SUGAR_KCAL : 0));
-export const drinkName = (c) => (c.sugar ? c.drink.name + t('drink.plus_sugar', { n: c.sugar }) : c.drink.name);
+export const drinkName = (c) => drinkLabel(c.drink) + (c.sugar ? t('drink.plus_sugar', { n: c.sugar }) : '');
 
 /** Выбор напитка → позиция приёма. Сахар раскладывается в значения на 100 мл. */
 export function drinkEntry(c) {
   const d = c.drink;
   const extra = d.sugar && c.sugar ? c.sugar * 100 / c.ml : 0;
   return {
-    name: drinkName(c), brand: null, grams: c.ml, unit: 'ml', water: d.id === 'water', save: !!c.save,
+    name: d.name + (c.sugar ? t('drink.plus_sugar', { n: c.sugar }) : ''), brand: null, grams: c.ml, unit: 'ml', water: d.id === 'water', save: !!c.save,
     per100: { kcal: r1(d.kcal_100 + extra * SUGAR_KCAL), protein: r1(d.protein || 0), fat: r1(d.fat || 0), carbs: r1((d.carbs || 0) + extra * SUGAR_G) },
   };
 }
@@ -47,7 +55,7 @@ export function drinkEntry(c) {
 /** Сетка каталога: без калорий, с калориями, алкоголь; внизу строка «Свой напиток». */
 export function drinkGrid(catalog, onPick, onCustom) {
   const card = (d) => h('button', { type: 'button', class: 'drink-card', onclick: () => { haptic('light'); onPick(d); } },
-    pic(d), h('span', { class: 'drink-name' }, d.name), h('span', { class: 'drink-sub' }, kcalLabel(d)));
+    pic(d), h('span', { class: 'drink-name' }, drinkLabel(d)), h('span', { class: 'drink-sub' }, kcalLabel(d)));
   const sect = (title, list) => (list.length ? [sectionTitle(title), h('div', { class: 'drink-grid' }, list.map(card))] : []);
   return h('div', { class: 'stack drink-pick' },
     ...sect(t('drink.g_zero'), catalog.filter((d) => !d.alcohol && d.kcal_100 < 1)),
@@ -97,7 +105,7 @@ export function portionSheet(d, { cta, start } = {}) {
     };
     ml.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
     const sh = sheet({
-      title: d.name,
+      title: drinkLabel(d),
       onClose: () => { if (!done) resolve(null); },
       content: h('div', { class: 'stack drink-sheet' },
         h('div', { class: 'drink-hero' }, pic(d, 64), h('div', { class: 'muted small' }, d.id === 'water' ? t('drink.no_kcal') : `${kcalLabel(d)} ${t('drink.per100ml')}`)),

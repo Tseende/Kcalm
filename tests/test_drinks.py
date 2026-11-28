@@ -95,6 +95,24 @@ async def test_coffee_and_tea_count_as_water_and_undo_removes_it(client):
 
 
 @pytest.mark.asyncio
+async def test_drink_can_be_logged_on_the_selected_diary_date(client):
+    yesterday = "2026-05-19"
+    resp = await client.post("/api/drinks", json={
+        "drink": "tea", "ml": 200, "sugar_tsp": 1, "date": yesterday,
+    }, headers=H)
+    assert resp.status == 201
+    drink = await resp.json()
+    assert drink["water_ml"] == 200
+
+    day = await (await client.get(f"/api/day?date={yesterday}", headers=H)).json()
+    assert day["meals"][0]["id"] == drink["id"]
+    assert day["totals"]["kcal"] == 20
+    assert day["water_ml"] == 200
+    today = await (await client.get("/api/day", headers=H)).json()
+    assert today["meals"] == [] and today["water_ml"] == 0
+
+
+@pytest.mark.asyncio
 async def test_add_drink_validation(client):
     for payload in ({"drink": "nope", "ml": 200}, {"drink": "tea"}, {"drink": "tea", "ml": 5},
                     {"drink": "tea", "ml": 200, "sugar_tsp": 50}, {"drink": "tea", "ml": "много"}):

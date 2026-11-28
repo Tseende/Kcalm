@@ -10,7 +10,14 @@ function s(tag, attrs, ...kids) {
 }
 
 const W = 360;
-const fmt = (v, d) => (Math.round(v * 10 ** d) / 10 ** d).toLocaleString(locale(), { maximumFractionDigits: d });
+const formatters = new Map();
+function fmt(value, decimals) {
+  if (!formatters.has(decimals)) {
+    formatters.set(decimals, new Intl.NumberFormat(locale(), { maximumFractionDigits: decimals }));
+  }
+  const scale = 10 ** decimals;
+  return formatters.get(decimals).format(Math.round(value * scale) / scale);
+}
 
 function empty(text = t('chart.empty')) {
   const d = document.createElement('div');

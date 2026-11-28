@@ -236,7 +236,7 @@ async def handle_draft_text(msg: Message, db: sqlite3.Connection, user, text: st
 # ------------------------------------------------------------------ этикетка
 
 async def from_label_photo(msg: Message, db: sqlite3.Connection, user, image_b64: str,
-                           status: Message, parsed=None) -> None:
+                           status: Message, parsed=None) -> bool:
     """Фото этикетки → карточка с распознанными числами (ничего не сохраняется само).
 
     parsed — уже запущенная задача parse_label (чтение шло параллельно с распознаванием еды)."""
@@ -247,14 +247,15 @@ async def from_label_photo(msg: Message, db: sqlite3.Connection, user, image_b64
         log.warning("этикетка не прочитана", exc_info=True)
         await status.edit_text("Не смог прочитать этикетку (LLM недоступен). Попробуй позже "
                                "или добавь текстом: «добавь продукт: ...».")
-        return
+        return False
     if all(draft.get(k) is None for k in ("kcal", "protein", "fat", "carbs")):
         await status.edit_text("Не вижу таблицу пищевой ценности. Сфотографируй этикетку "
                                "ближе и без бликов или добавь текстом: «добавь продукт: ...».")
-        return
+        return False
     if conf < 0.6:
         notes = [*notes, f"уверенность {conf:.0%}, проверь числа"]
     await show_draft(msg, db, user, draft, notes=notes, status=status)
+    return True
 
 
 # ------------------------------------------------------------------ колбэки

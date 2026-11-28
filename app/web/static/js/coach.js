@@ -394,9 +394,9 @@ async function showStep(i, first) {
   const b = a.bubble;
   b.classList.remove('in');
   b.replaceChildren(
-    n > 1 ? h('div', { class: 'coach-prog', 'aria-hidden': 'true' },
+    ...(n > 1 ? [h('div', { class: 'coach-prog', 'aria-hidden': 'true' },
       h('span', { class: 'coach-dots' }, a.steps.map((_, k) => h('i', { class: k === i ? 'on' : '' }))),
-      h('span', { class: 'coach-count' }, t('coach.count', { i: i + 1, n }))) : null,
+      h('span', { class: 'coach-count' }, t('coach.count', { i: i + 1, n })))] : []),
     h('div', { class: 'coach-title' }, tip.title),
     h('div', { class: 'coach-text' }, tip.text),
     h('div', { class: 'coach-foot' },

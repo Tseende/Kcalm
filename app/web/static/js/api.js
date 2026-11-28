@@ -35,7 +35,7 @@ export class ApiError extends Error {
 
 function errorFrom(status, data) {
   const code = (data && data.error) || 'http_' + status;
-  let msg = data && data.message;
+  let msg = code === 'llm_timeout' ? t('err.recognition_timeout') : data && data.message;
   if (!msg) {
     if (status === 401) msg = t('err.401');
     else if (status === 403) msg = t('err.403');
@@ -69,6 +69,9 @@ function authHeaders() {
   return inTelegram ? { Authorization: 'tma ' + tg.initData } : {};
 }
 
+const timedOut = () => new ApiError(0, 'timeout', t('err.timeout'));
+const networkError = () => new ApiError(0, 'network', t('err.network'));
+
 async function request(method, path, { query, body, timeout = 30000 } = {}) {
   if (mockMode) return requestMock(method, path, query, body);
   const headers = authHeaders();
@@ -81,7 +84,6 @@ async function request(method, path, { query, body, timeout = 30000 } = {}) {
   const ctrl = new AbortController();
   init.signal = ctrl.signal;
   const timer = setTimeout(() => ctrl.abort(), timeout);
-  const timedOut = () => new ApiError(0, 'timeout', t('err.timeout'));
   // Таймер снимается только после чтения тела: завис ответ посреди передачи — запрос всё равно оборвётся по таймауту.
   try {
     let res;
@@ -93,7 +95,7 @@ async function request(method, path, { query, body, timeout = 30000 } = {}) {
         return requestMock(method, path, query, body);
       }
       if (e && e.name === 'AbortError') throw timedOut();
-      throw new ApiError(0, 'network', t('err.network'));
+      throw networkError();
     }
     if (res.status === 204) {
       realOk = true;
@@ -115,6 +117,7 @@ async function request(method, path, { query, body, timeout = 30000 } = {}) {
       if (res.status === 401) invalidateReports();
       throw errorFrom(res.status, data);
     }
+    if (data === null) throw new ApiError(res.status, 'bad_response', t('err.generic'));
     realOk = true;
     return data;
   } finally {
@@ -182,7 +185,11 @@ const REPORT_WRITE = /^\/(?:meals|items|water|drinks|weight|sleep|activity|profi
 
 async function write(method, path, options) {
   const result = await request(method, path, options);
-  if (REPORT_WRITE.test(path) || (path === '/me' && method === 'DELETE')) invalidateReports();
+  if (REPORT_WRITE.test(path) || (path === '/screens' && result?.applied) || (path === '/me' && method === 'DELETE')) invalidateReports();
+  if (path === '/onboarding' || path === '/onboarding/skip') {
+    api._me = null;
+    api.onboardingSkipped = path === '/onboarding/skip';
+  }
   return result;
 }
 
@@ -193,8 +200,12 @@ export const api = {
   patch: (path, body) => write('PATCH', path, { body }),
   del: (path, body) => write('DELETE', path, { body }),
   _me: null,
+  onboardingSkipped: false,
   async me(force) {
-    if (!api._me || force) api._me = await api.get('/me');
+    if (!api._me || force) {
+      api._me = await api.get('/me');
+      api.onboardingSkipped = !!api._me?.onboarding_skipped;
+    }
     return api._me;
   },
 };
@@ -248,15 +259,25 @@ export async function downloadCsv(kind) {
     const { mockCsv } = await import('./mock.js');
     blob = new Blob([mockCsv(kind)], { type: 'text/csv;charset=utf-8' });
   } else {
-    const res = await fetch(BASE + '/export.csv' + qs({ kind }), { headers: authHeaders() });
-    if (!res.ok) {
-      const data = (res.headers.get('content-type') || '').includes('json') ? await res.json().catch(() => null) : null;
-      if (res.status === 401) invalidateReports();
-      throw errorFrom(res.status, data);
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 30000);
+    try {
+      const res = await fetch(BASE + '/export.csv' + qs({ kind }), { headers: authHeaders(), signal: ctrl.signal });
+      if (!res.ok) {
+        const data = (res.headers.get('content-type') || '').includes('json') ? await res.json().catch(() => null) : null;
+        if (res.status === 401) invalidateReports();
+        throw errorFrom(res.status, data);
+      }
+      const m = /filename="?([^";]+)"?/.exec(res.headers.get('content-disposition') || '');
+      if (m) name = m[1];
+      blob = new Blob([await res.blob()], { type: 'text/csv;charset=utf-8' });
+    } catch (e) {
+      if (ctrl.signal.aborted) throw timedOut();
+      if (e instanceof ApiError) throw e;
+      throw networkError();
+    } finally {
+      clearTimeout(timer);
     }
-    const m = /filename="?([^";]+)"?/.exec(res.headers.get('content-disposition') || '');
-    if (m) name = m[1];
-    blob = new Blob([await res.blob()], { type: 'text/csv;charset=utf-8' });
   }
   // Telegram's in-app webview often ignores <a download>: offer the system share sheet first.
   if (inTelegram && navigator.canShare && navigator.share) {

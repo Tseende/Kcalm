@@ -96,8 +96,7 @@ class _Index(HTMLParser):
         self.parts.append(f"&#{name};")
 
 
-@lru_cache(maxsize=4)
-def build_index(root: Path) -> tuple[str, bytes]:
+def _render_index(root: Path) -> tuple[str, bytes]:
     versions = {}
     resolved = root.resolve()
     for path in sorted(root.rglob("*")):
@@ -110,3 +109,10 @@ def build_index(root: Path) -> tuple[str, bytes]:
     parser.close()
     body = "".join(parser.parts).encode()
     return hashlib.sha256(body).hexdigest()[:20], body
+
+
+_cached_index = lru_cache(maxsize=4)(_render_index)
+
+
+def build_index(root: Path, *, dev: bool = False) -> tuple[str, bytes]:
+    return _render_index(root) if dev else _cached_index(root)

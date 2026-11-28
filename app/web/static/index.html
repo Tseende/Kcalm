@@ -9,12 +9,35 @@
   <script>
     // Применяем сохранённую тему до первой отрисовки. В режиме «Как в системе» слушаем Telegram или браузер.
     window.telegramReady = new Promise(function (resolve) {
+      if (new URLSearchParams(location.search).get('mock') === '1') {
+        resolve();
+        return;
+      }
       var script = document.createElement('script');
       script.src = 'https://telegram.org/js/telegram-web-app.js';
       script.async = true;
-      script.onload = script.onerror = resolve;
+      function done() {
+        clearTimeout(timer);
+        script.onload = script.onerror = null;
+        resolve();
+      }
+      var timer = setTimeout(function () { script.remove(); done(); }, 4000);
+      script.onload = script.onerror = done;
       document.head.appendChild(script);
     });
+    document.addEventListener('error', function (event) {
+      if (event.target.id !== 'app-entry') return;
+      var loader = document.getElementById('boot');
+      if (!loader) return;
+      var retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'btn btn-secondary';
+      var lang = new URLSearchParams(location.search).get('lang');
+      retry.textContent = (lang || document.documentElement.lang) === 'en'
+        ? 'Reload the app' : 'Перезагрузить приложение';
+      retry.onclick = function () { location.reload(); };
+      loader.replaceChildren(retry);
+    }, true);
     function applyTheme() {
       var d = document.documentElement, scheme = 'light';
       try {
@@ -44,6 +67,6 @@
   <div id="overlay"></div>
   <div id="toasts" aria-live="polite"></div>
   <noscript>Для работы приложения нужен JavaScript. / JavaScript is required.</noscript>
-  <script type="module" src="js/main.js"></script>
+  <script type="module" id="app-entry" src="js/main.js"></script>
 </body>
 </html>

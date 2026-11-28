@@ -159,6 +159,7 @@ export default {
   "block.setup": "Setup needed",
   "block.noaccess": "No access",
   "block.offline": "No connection",
+  "block.telegram_unavailable": "The app could not connect to Telegram. Reload the page or open the app again from the bot.",
   // busy
   "busy.waiting": "Processing is still in progress. Please wait for the result; there is no need to submit again.",
   "busy.sec": "{n} s",
@@ -350,6 +351,7 @@ export default {
   "err.generic": "Couldn't complete the request.",
   "err.expired": "Your session has expired. Close the app and open it again from the chat.",
   "err.timeout": "The server is taking too long to respond. Please try again.",
+  "err.recognition_timeout": "Recognition took too long. Try again or enter the record manually.",
   "err.network": "No connection to the server. Check your internet and try again.",
   "err.something": "Something went wrong. Please try again.",
   // fav
@@ -414,6 +416,7 @@ export default {
   "forms.score": "Score, 0–100",
   "forms.score_note": "From your watch or app, if you have one.",
   "forms.v_sleep": "Enter the sleep duration: from 10 minutes to 24 hours",
+  "forms.v_date": "Choose today or a date within the past 30 days.",
   "forms.v_time": "Enter the time",
   "forms.sleep_saved": "Sleep saved",
   "forms.ph_workout": "Running, strength…",

@@ -27,6 +27,7 @@ export default async function render(root, ctx) {
   const allPhotos = () => groups.flatMap((g) => g.photos);
   let target = groups[0];
   let busy = false;
+  let stopSubmission;
   let choosingWhen = false;
   const initialDate = ctx.query?.date;
   let when = /^\d{4}-\d{2}-\d{2}$/.test(initialDate || '') ? { date: initialDate } : {};
@@ -132,7 +133,12 @@ export default async function render(root, ctx) {
       for (const f of files) {
         if (allPhotos().length >= MAX) { toast(t('lbl.max', { n: MAX })); break; }
         let file;
-        try { file = await compressImage(f); } catch (e) { toast(e.message, 'error'); continue; }
+        try { file = await compressImage(f); } catch (e) {
+          if (!ctx.alive()) return;
+          toast(e.message, 'error');
+          continue;
+        }
+        if (!ctx.alive() || !groups.includes(g)) return;
         g.photos.push({ file, url: URL.createObjectURL(file) });
       }
     } finally {
@@ -514,13 +520,14 @@ export default async function render(root, ctx) {
     const waterMl = prods.filter((e) => e.water).reduce((sum, e) => sum + e.grams, 0);
     const items = prods.filter((e) => !e.water);
     const stop = withAI ? busyOverlay(t('add.recognizing'), t('add.recognizing_sub')) : busyOverlay(t('add.processing'));
+    stopSubmission = stop;
     try {
       let meal = null;
       if (!withAI && !items.length) {
         // одна вода: приёма нет, только норма воды
       } else if (!withAI) {
         // только продукты и напитки: без модели, один запрос
-        meal = await api.post('/meals/manual', { items: items.map(toPayload), ...when });
+        meal = await api.post('/meals/manual', { items: items.map(toPayload), ...when, type: wantType || undefined });
       } else {
         const fd = new FormData();
         for (const [key, value] of Object.entries(when)) fd.append(key, value);
@@ -538,28 +545,38 @@ export default async function render(root, ctx) {
         } else {
           fd.append('text', textTa.value.trim());
         }
-        meal = await api.post('/meals', fd, { timeout: 150000 });
+        meal = await api.post('/meals', fd, { timeout: 95000 });
         // продукты добавляются в созданный приём по одному; сбой одного не теряет сам приём
         let failed = 0;
         for (const e of items) {
           try { await api.post('/meals/' + meal.id + '/items', toPayload(e)); } catch (er) { failed++; }
         }
-        if (failed) toast(t('fp.add_failed', { n: failed }), 'error');
+        if (failed && ctx.alive()) toast(t('fp.add_failed', { n: failed }), 'error');
       }
       // вода пишется после приёма: сбой здесь не должен терять сам приём
-      if (waterMl) { try { await api.post('/water', { ml: Math.min(3000, Math.round(waterMl)), ...when }); } catch (er) { toast(er.message, 'error'); } }
-      if (meal) await fixType(meal.id);
+      if (waterMl) {
+        try {
+          await api.post('/water', { ml: Math.min(3000, Math.round(waterMl)), ...when });
+        } catch (e) {
+          if (!meal) throw e;
+          if (ctx.alive()) toast(e.message, 'error');
+        }
+      }
+      if (meal && meal.type !== wantType) await fixType(meal.id);
+      if (!ctx.alive()) return;
       haptic('success');
-      stop();
       clearDraft();
       mainButton.hide();
       nav.replace(meal ? '/meal/' + meal.id : when.date ? '/today?date=' + when.date : '/today');
     } catch (e) {
-      stop();
+      if (!ctx.alive()) return;
       busy = false;
       mainButton.setLoading(false);
       sync();
       toast(e.message, 'error');
+    } finally {
+      stop();
+      stopSubmission = null;
     }
   }
 
@@ -595,6 +612,7 @@ export default async function render(root, ctx) {
   paint();
   loadDishes();
   return () => {
+    stopSubmission?.();
     catalog.destroy();
     allPhotos().forEach((p) => URL.revokeObjectURL(p.url));
   };

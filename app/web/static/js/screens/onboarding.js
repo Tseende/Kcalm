@@ -401,7 +401,7 @@ export default async function render(root, ctx) {
   if (!ctx.alive()) return;
   if (me.onboarded) { nav.replace('/menu/profile'); return; }
   document.body.dataset.route = 'onb';
-  return onboarding(root, { me, onDone: (skipped) => { if (!skipped) api._me = null; nav.replace('/today'); } });
+  return onboarding(root, { me, onDone: () => nav.replace('/today') });
 }
 
 /** Подсказка над «+» переехала в тур на «Сегодня» (js/coach.js, шаг today.plus, флаги onb_hint_* те же). Заглушка для совместимости. */

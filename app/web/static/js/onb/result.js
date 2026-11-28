@@ -10,10 +10,7 @@ const svgEl = (tag, attrs = {}) => {
   Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
   return el;
 };
-const MIN_CALC_MS = 1800;
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-
-/** Экран «Считаю вашу норму». run() — запрос; экран держится не меньше 1,8 с. Возвращает {el, done: Promise}. */
+/** Экран «Считаю вашу норму» показывается, пока выполняется запрос. */
 export function calcView(run) {
   const rows = [t('onb.calc1'), t('onb.calc2'), t('onb.calc3')];
   const checks = rows.map((x) => h('div', { class: 'onb-check' }, h('span', { class: 'ok' }, icon('check', 14)), x));
@@ -21,8 +18,8 @@ export function calcView(run) {
     h('div', { class: 'onb-spinwrap' }, h('div', { class: 'onb-spinring' }), onbImg('scale', 64)),
     h('h1', { class: 'onb-title' }, t('onb.calc_title')),
     h('div', { class: 'onb-checks' }, checks));
-  checks.forEach((c, i) => setTimeout(() => c.classList.add('on'), REDUCED ? 0 : 250 + i * 520));
-  const done = Promise.all([run(), wait(REDUCED ? 0 : MIN_CALC_MS)]).then(([r]) => r);
+  const timers = checks.map((c, i) => setTimeout(() => c.classList.add('on'), REDUCED ? 0 : 250 + i * 520));
+  const done = run().finally(() => timers.forEach(clearTimeout));
   return { el, done };
 }
 

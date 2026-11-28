@@ -9,21 +9,33 @@ export default async function render(root, ctx) {
   root.append(view);
   const page = ctx.params.page;
   if (page === 'goals') { nav.replace('/menu/profile'); return undefined; }
-  if (page === 'export') return exportPage(view);
+  if (page === 'export') return exportPage(view, ctx);
   if (page === 'appearance') { nav.replace('/menu'); return undefined; }   // тема теперь переключателем в меню
   if (page === 'help') return help(view);
   return help(view);
 }
 
-async function exportKind(kind) {
-  toast(t('info.preparing'));
-  try {
-    const r = await downloadCsv(kind);
-    if (r === 'downloaded') toast(t('info.saved'), 'ok');
-  } catch (e) { toast(e.message || t('info.export_fail'), 'error'); }
-}
+function exportPage(view, ctx) {
+  const exportStatus = h('span', { class: 'row-sub', role: 'status' }, t('info.export_hint'));
+  const exportButton = h('button', { class: 'row', type: 'button', onclick: chooseExport },
+    tile('file-export', 'blue'), h('span', { class: 'grow' }, h('span', { class: 'row-title' }, t('info.save_records')),
+      exportStatus), icon('next', 18));
 
-function exportPage(view) {
+  async function exportKind(kind) {
+    if (exportButton.disabled) return;
+    exportButton.disabled = true;
+    exportStatus.textContent = t('info.preparing');
+    try {
+      const result = await downloadCsv(kind);
+      if (ctx.alive() && result === 'downloaded') toast(t('info.saved'), 'ok');
+    } catch (e) {
+      if (ctx.alive()) toast(e.message || t('info.export_fail'), 'error');
+    } finally {
+      exportButton.disabled = false;
+      exportStatus.textContent = t('info.export_hint');
+    }
+  }
+
   function chooseExport() {
     const options = [['meals', t('today.meals')], ['body', t('info.body')], ['water', t('water.title')],
       ['sleep', t('add.sleep')], ['activity', t('add.activity')]];
@@ -37,9 +49,7 @@ function exportPage(view) {
       h('div', { class: 'footnote' }, inTelegram ? t('info.share_tg') : t('info.share_web')), save) });
   }
   view.append(pageHead(t('menu.data'), { parent: '/menu' }),
-    h('div', { class: 'list tiles' }, h('button', { class: 'row', type: 'button', onclick: chooseExport },
-      tile('file-export', 'blue'), h('span', { class: 'grow' }, h('span', { class: 'row-title' }, t('info.save_records')),
-        h('span', { class: 'row-sub' }, t('info.export_hint'))), icon('next', 18))),
+    h('div', { class: 'list tiles' }, exportButton),
     h('div', { class: 'section-label' }, t('info.delete')),
     h('div', { class: 'list tiles' }, h('button', { class: 'row', type: 'button', onclick: confirmDelete },
       tile('trash', 'red'), h('span', { class: 'grow' }, h('span', { class: 'row-title danger' }, t('info.delete_row')), h('span', { class: 'row-sub' }, t('info.delete_sub'))))),

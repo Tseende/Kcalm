@@ -6,11 +6,14 @@ import { mealIcon, mealPic } from '../pics.js';
 import { t, tn } from '../i18n.js';
 import {
   h, icon, tile, toast, haptic, nav, skeletonCards, holdHeight, emptyState, errorState, sectionTitle,
-  todayISO, fmtN, fmtKcal, fmtDur, mealType, macroLine, countUp, staggerIn, dateSwitch, reducedMotion,
+  todayISO, fmtN, fmtKcal, fmtDur, mealType, macroLine, countUp, staggerIn, dateSwitch, reducedMotion, dataChanged,
 } from '../ui.js';
 
 let curDate = todayISO();
-const waterUndo = []; // water entries added in this session: {ml, id, p}
+const waterUndo = new Map(); // date -> water entries added in this session
+let waterQueue = Promise.resolve();
+let waterPending = 0;
+let waterNeedsRefresh = false;
 let firstPaint = true; // animate the ring once per visit (and on day switch), not on every refresh
 let oftenCache = null; // last /frequent answer, painted instantly on re-render
 
@@ -31,6 +34,7 @@ export default async function render(root, ctx) {
   const addMeal = () => nav.go(curDate === todayISO() ? '/add/meal' : '/add/meal?date=' + curDate);
   const view = h('div', { class: 'screen today' });
   const body = h('div', { class: 'stack' });
+  let dayTransition;
   root.append(view);
 
   const sw = dateSwitch(curDate, (d, dir) => { curDate = d; rememberDate(); firstPaint = true; load({ dir }); });
@@ -41,7 +45,7 @@ export default async function render(root, ctx) {
     const query = { date };
     sw.set(date);
     const cached = quiet ? null : cachedReport('/day', query);
-    if (cached) draw(cached);
+    if (cached) draw(cached, { dir });
     let release = null;
     if (!quiet && !cached) {
       if (body.hasChildNodes()) release = holdHeight(body); else body.replaceChildren(skeletonCards(3, 120));
@@ -127,6 +131,7 @@ export default async function render(root, ctx) {
 
     // water
     let waterMl = day.water_ml;
+    const undoEntries = waterUndo.get(day.date) || [];
     const waterNum = h('div', { class: 'water-num' });
     const waterSub = h('div', { class: 'water-sub' });
     const waterBar = h('div', { class: 'bar bar-w', role: 'progressbar', 'aria-label': t('water.title'), 'aria-valuemax': tgt.water_ml }, h('i'));
@@ -138,40 +143,55 @@ export default async function render(root, ctx) {
       waterSub.classList.toggle('done', left <= 0);
       waterBar.firstChild.style.transform = `scaleX(${Math.min(1, waterMl / tgt.water_ml)})`;
       waterBar.setAttribute('aria-valuenow', waterMl);
-      undoBtn.disabled = !waterUndo.length || curDate !== todayISO();
+      undoBtn.disabled = !undoEntries.length || curDate !== todayISO();
     }
-    // Оптимистично: цифра и полоска меняются сразу, сервер догоняет в фоне (облачная БД отвечает не мгновенно).
-    let waterPending = 0;
-    function addWater(ml) {
-      if (curDate !== todayISO()) { toast(t('today.water_only_today')); return; }
-      const entry = { ml, id: null, p: null };
-      waterMl += ml;
-      waterUndo.push(entry);
-      haptic('light');
-      paintWater();
+    // Быстрые нажатия видны сразу. Записи и отмены выполняются по порядку, включая смену вкладки.
+    function queueWater(write, rollback) {
       waterPending++;
-      entry.p = api.post('/water', { ml }).then((r) => {
-        entry.id = r.id;
-        if (--waterPending === 0) { waterMl = r.water_ml; paintWater(); }   // сверка с сервером, когда нет других в пути
-      }).catch((e) => {
-        waterPending--;
-        const i = waterUndo.indexOf(entry);
-        if (i >= 0) { waterUndo.splice(i, 1); waterMl -= ml; }
-        paintWater();
-        toast(e.message, 'error');
+      waterQueue = waterQueue.then(async () => {
+        try {
+          const result = await write();
+          if (result && waterPending === 1) waterMl = result.water_ml;
+        } catch (e) {
+          rollback();
+          toast(e, 'error');
+        } finally {
+          waterPending--;
+          if (!waterCard.isConnected) waterNeedsRefresh = true;
+          if (waterPending === 0 && waterNeedsRefresh) {
+            waterNeedsRefresh = false;
+            dataChanged();
+          } else if (waterCard.isConnected) paintWater();
+        }
       });
     }
-    async function undoWater() {
-      const entry = waterUndo.pop();
+    function addWater(ml) {
+      if (day.date !== curDate || curDate !== todayISO()) { toast(t('today.water_only_today')); return; }
+      const entry = { ml, id: null };
+      waterMl += ml;
+      undoEntries.push(entry);
+      waterUndo.set(day.date, undoEntries);
+      haptic('light');
+      paintWater();
+      queueWater(async () => {
+        const result = await api.post('/water', { ml, date: day.date });
+        entry.id = result.id;
+        return result;
+      }, () => {
+        const i = undoEntries.indexOf(entry);
+        if (i >= 0) { undoEntries.splice(i, 1); waterMl -= ml; }
+      });
+    }
+    function undoWater() {
+      if (day.date !== curDate || curDate !== todayISO()) return;
+      const entry = undoEntries.pop();
       if (!entry) return;
       waterMl -= entry.ml;
       paintWater();
-      await entry.p;                                  // id приходит с ответом на добавление
-      if (entry.id == null) return;                   // добавление не удалось: уже откатили
-      try {
-        const r = await api.del('/water/' + entry.id);
-        if (!waterPending) { waterMl = r.water_ml; paintWater(); }
-      } catch (e) { waterMl += entry.ml; waterUndo.push(entry); paintWater(); toast(e.message, 'error'); }
+      queueWater(() => entry.id == null ? null : api.del('/water/' + entry.id), () => {
+        waterMl += entry.ml;
+        undoEntries.push(entry);
+      });
     }
     const waterCard = h('section', { class: 'card stack-sm water-card', 'aria-label': t('water.title') },
       h('div', { class: 'row-between' }, h('div', { class: 'water-head' }, h('span', { class: 'water-ico', 'aria-hidden': 'true' }, icon('droplet', 20)), h('div', null, h('div', { class: 'water-title' }, t('water.title')), waterSub)), waterNum),
@@ -219,8 +239,11 @@ export default async function render(root, ctx) {
     const oh = body.querySelector('.often');
     if (oh && oh.hidden && !oh._ph && oh.previousElementSibling) oh.previousElementSibling.hidden = true;
     if (dir && !reducedMotion()) {
-      body.style.setProperty('--dx', (dir > 0 ? 12 : -12) + 'px');
-      body.classList.remove('day-in'); void body.offsetWidth; body.classList.add('day-in');
+      dayTransition?.cancel();
+      dayTransition = body.animate?.([
+        { opacity: 0, transform: `translateX(${dir > 0 ? 12 : -12}px)` },
+        { opacity: 1, transform: 'none' },
+      ], { duration: 260, easing: 'cubic-bezier(.4, 0, .2, 1)' });
     } else if (fresh) staggerIn(body, kids);
   }
 

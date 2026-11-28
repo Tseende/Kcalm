@@ -22,6 +22,10 @@ class LLMError(Exception):
     pass
 
 
+class LLMTimeoutError(LLMError):
+    """Модель не ответила за общее время, выделенное на запрос."""
+
+
 class LLMLimitError(LLMError):
     """Дневной лимит обращений к модели у этого человека исчерпан (подкласс LLMError: места,
     где умеют жить без модели, по-прежнему уходят на запасной путь)."""
@@ -364,16 +368,23 @@ async def chat_json(purpose: str, messages: list[dict], model: str | None = None
         return False
 
     model_used = model
-    ok = await _request(body)
-    if ok and finish == "length" and response_json and max_tokens:
-        # ответ оборван по длине: JSON, подчинённый молча, потерял бы позиции. Повторяем один раз с запасом
-        bigger = int(max_tokens * LENGTH_RETRY_FACTOR)
-        log.warning("LLM %s: ответ оборван по длине (max_tokens=%s), повтор с %s",
-                    purpose, max_tokens, bigger)
-        first_ok = (last_content, finish)
-        if not await _request({**body, "max_tokens": bigger}):
-            last_content, finish = first_ok             # повтор не удался: остаётся оборванный первый ответ
-            error = None
+    try:
+        # Один предел на очередь, сеть и повторы, включая потоковый ответ.
+        async with asyncio.timeout(cfg.llm_timeout_s):
+            ok = await _request(body)
+            if ok and finish == "length" and response_json and max_tokens:
+                # ответ оборван по длине: JSON, подчинённый молча, потерял бы позиции. Повторяем один раз с запасом
+                bigger = int(max_tokens * LENGTH_RETRY_FACTOR)
+                log.warning("LLM %s: ответ оборван по длине (max_tokens=%s), повтор с %s",
+                            purpose, max_tokens, bigger)
+                first_ok = (last_content, finish)
+                if not await _request({**body, "max_tokens": bigger}):
+                    last_content, finish = first_ok             # повтор не удался: остаётся оборванный первый ответ
+                    error = None
+    except TimeoutError as e:
+        await _log_call(cfg, user_id, purpose, model_used, usage, start, False,
+                        "превышено время ожидания ответа модели", db)
+        raise LLMTimeoutError("LLM не ответил вовремя") from e
     if not ok:
         await _log_call(cfg, user_id, purpose, model, usage, start, ok, error, db)
         raise LLMError("LLM недоступен после повтора")
@@ -429,18 +440,27 @@ async def transcribe_audio(data: bytes, filename: str, mime: str,
     (кроме лимита) → один запрос к запасной MODEL_ASR_FALLBACK."""
     cfg = get_config()
     check_limit(db, user_id, "asr")
+    started = time.monotonic()
+    active_model = model
     try:
-        return await _transcribe_once(cfg, data, filename, mime, model, language_hint,
-                                      user_id, db, purpose)
-    except LLMLimitError:
-        raise
-    except LLMError:
-        fallback = (cfg.model_asr_fallback or "").strip()
-        if not fallback or fallback == model:
-            raise
-        log.warning("ASR: %s не сработала, пробую %s", model, fallback)
-        return await _transcribe_once(cfg, data, filename, mime, fallback, language_hint,
-                                      user_id, db, purpose)
+        async with asyncio.timeout(cfg.llm_timeout_s):
+            try:
+                return await _transcribe_once(cfg, data, filename, mime, model, language_hint,
+                                              user_id, db, purpose)
+            except LLMLimitError:
+                raise
+            except LLMError:
+                fallback = (cfg.model_asr_fallback or "").strip()
+                if not fallback or fallback == model:
+                    raise
+                log.warning("ASR: %s не сработала, пробую %s", model, fallback)
+                active_model = fallback
+                return await _transcribe_once(cfg, data, filename, mime, fallback, language_hint,
+                                              user_id, db, purpose)
+    except TimeoutError as e:
+        await _log_call(cfg, user_id, purpose, active_model, {}, started, False,
+                        "превышено время ожидания распознавания речи", db)
+        raise LLMTimeoutError("распознавание голоса не удалось вовремя") from e
 
 
 async def transcribe_ogg(ogg_bytes: bytes, filename: str = "voice.ogg",

@@ -425,8 +425,7 @@ async def _ingest_image(msg: Message, db: sqlite3.Connection, file_id: str,
 
     if caption and proddom.caption_says_label(caption):
         status = await msg.answer("🥫 читаю этикетку…")
-        await products_router.from_label_photo(msg, db, user, base64.b64encode(image.data).decode(),
-                                               status)
+        await _read_label(msg, db, user, [image], status)
         return
 
     if not topics.logging_enabled(msg, photo=True):
@@ -561,7 +560,7 @@ async def _process_album(group: str, album: _Album, images: list[_Image], captio
         await _add_photos_to_meal(msg, db, user, images, pending, caption or None, status)
     elif caption and proddom.caption_says_label(caption):
         status = await msg.answer("🥫 читаю этикетку…")
-        await products_router.from_label_photo(msg, db, user, base64.b64encode(images[0].data).decode(), status)
+        await _read_label(msg, db, user, images, status)
     elif not topics.logging_enabled(msg, photo=True):
         for image in images:
             status = await msg.answer("📷 смотрю…")
@@ -632,6 +631,14 @@ def _drop_label_task(task) -> None:
         task.exception() if not task.cancelled() else None
 
 
+async def _read_label(msg: Message, db: sqlite3.Connection, user, images: list[_Image],
+                      status: Message, parsed=None) -> None:
+    if not await products_router.from_label_photo(
+            msg, db, user, base64.b64encode(images[0].data).decode(), status, parsed=parsed):
+        for image in images:
+            repo.forget_file(db, user["id"], image.file_hash)
+
+
 async def _recognize_images(msg: Message, db: sqlite3.Connection, user, images: list[_Image],
                             caption: str | None, status: Message, source: str, *,
                             telegram_album: str | None = None) -> None:
@@ -661,16 +668,16 @@ async def _recognize_images(msg: Message, db: sqlite3.Connection, user, images: 
     if len(images) == 1 and u.photo_kind == "label" and not u.items:
         # на фото упаковка с таблицей КБЖУ, а не блюдо: этикетка уже читается, показываем карточку
         await status.edit_text("🥫 это этикетка, дочитываю…")
-        await products_router.from_label_photo(
-            msg, db, user, base64.b64encode(images[0].data).decode(), status, parsed=label_task)
+        await _read_label(msg, db, user, images, status, parsed=label_task)
         return
     _drop_label_task(label_task)
     if not u.items:
-        if len(images) == 1:
-            await _process_screenshot(msg, db, user, images[0].data, images[0].file_hash,
-                                      images[0].photo_path, status)
-        else:
-            await status.edit_text("Не увидел еды на этих фото. Опиши текстом, что было съедено.")
+        if len(images) == 1 and await _process_screenshot(
+                msg, db, user, images[0].data, images[0].file_hash, images[0].photo_path, status):
+            return
+        for image in images:
+            repo.forget_file(db, uid, image.file_hash)
+        await status.edit_text("Не увидел еды. Пришли другое фото или опиши текстом, что было съедено.")
         return
     taken = next((im.taken_at for im in images if im.taken_at), None)
     try:

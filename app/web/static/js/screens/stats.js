@@ -97,7 +97,7 @@ export default async function render(root, ctx) {
   }
 
   function draw({ days, summary: s, prev_summary: ps, goals, sources }, me, animate) {
-    if (!days.length || (!s.days_logged && s.avg_sleep_min == null && s.avg_steps == null && s.weight_change == null)) {
+    if (!days.some((d) => [d.kcal, d.water_ml, d.sleep_min, d.steps, d.weight, d.weight_trend].some((v) => v != null))) {
       body.replaceChildren(emptyState('chart-bar', t('stats.empty_title'), t('stats.empty_text')));
       return;
     }
@@ -116,9 +116,8 @@ export default async function render(root, ctx) {
     const startW = me && me.weight && me.weight.start != null ? me.weight.start : null;
     const wc = s.weight_change;
     if (lastW != null) {
-      const num = h('span', { class: 'st-hero-num' });
       const f1 = (v) => v.toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-      if (animate) countUp(num, lastW, { fmt: f1, ms: 800 }); else num.textContent = f1(lastW);
+      const num = h('span', { class: 'st-hero-num' }, f1(lastW));
       const wantDown = goalW != null ? goalW < lastW : null;
       const chipCls = wc != null && wc < 0 && wantDown ? 'good' : 'flat';
       const chart = lineChart({ points: days.map((d) => ({ label: lbl(d), y: d.weight, t: d.weight_trend })), decimals: 1, unit: t('unit.kg'), color: 'var(--c-accent)', animate, goal: goalW });

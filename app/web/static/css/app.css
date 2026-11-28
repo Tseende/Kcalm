@@ -87,7 +87,7 @@ img { max-width: 100%; }
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
   .bar i { transition: none !important; }
-  .stg, .ch-grow, .ch-draw, .ch-fade, .ch-halo, .hm-in, .xfade, .day-in, .bar-scale i { animation: none !important; }
+  .stg, .ch-grow, .ch-draw, .ch-fade, .ch-halo, .hm-in, .xfade, .bar-scale i { animation: none !important; }
 }
 
 /* ---------- layout ---------- */
@@ -342,10 +342,12 @@ html.scheme-dark .toast.ok { background: color-mix(in srgb, var(--c-green) 60%, 
 @media (min-width: 600px) { .screen { padding-top: 20px; } }
 
 /* ---------- motion ---------- */
-@keyframes push { from { opacity: 0; transform: translateX(26px); } to { opacity: 1; transform: none; } }
+@keyframes push { from { opacity: 0; transform: translateX(var(--route-slide, 26px)); } to { opacity: 1; transform: none; } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 .screen { animation: fade .18s ease-out; }
 body[data-route="sub"] .screen { animation: push .24s cubic-bezier(.2, .8, .2, 1); }
+#view[data-navigation="back"] { --route-slide: -26px; }
+#view .route-placeholder, #view[data-navigation="same"] .screen { animation: none; }
 .btn:active, .chip:active, .step:active, .mini:active { transform: scale(.98); }
 .btn-secondary { color: var(--c-btn); }
 @media (prefers-reduced-motion: reduce) { .screen, body[data-route="sub"] .screen { animation: none !important; } }
@@ -911,7 +913,7 @@ input.time-in[type="time"] { width: 104px; flex: none; min-height: 36px; padding
 .today .water-card .water-num { white-space: nowrap; }
 .today .water-card .bar-w { height: 10px; -webkit-mask: none; mask: none; border-radius: 99px; background: color-mix(in srgb, var(--c-text) 9%, transparent); }
 .today .water-card .bar-w i { border-radius: 99px; background: linear-gradient(90deg, color-mix(in srgb, var(--c-water) 70%, #fff), var(--c-water)); transition: transform .35s cubic-bezier(.2,.8,.2,1); }
-.today .water-card .quick .btn-tonal { flex-direction: row; gap: 4px; min-height: 36px; border-radius: 99px; background: color-mix(in srgb, var(--c-text) 7%, transparent); }
+.today .water-card .quick .btn-tonal { flex: 1 1 0; min-width: 0; padding-inline: 4px; flex-direction: row; gap: 4px; min-height: 36px; border-radius: 99px; background: color-mix(in srgb, var(--c-text) 7%, transparent); }
 .today .water-card .quick .btn-tonal b { font-size: 15px; font-weight: 600; }
 .today .water-card .quick .btn-tonal small { font-size: 12px; color: var(--c-hint); }
 .today .water-card .quick .btn-tonal:active { background: color-mix(in srgb, var(--c-water) 20%, transparent); }
@@ -1181,8 +1183,6 @@ input.time-in[type="time"] { width: 104px; flex: none; min-height: 36px; padding
 /* ---------- polish: motion (только transform/opacity) ---------- */
 @keyframes stg-in { from { opacity: 0; transform: translateY(8px); } }
 .stg { animation: stg-in .4s var(--ease) both; animation-delay: calc(var(--i, 0) * 40ms); }
-@keyframes day-in { from { opacity: 0; transform: translateX(var(--dx, 12px)); } }
-.day-in { animation: day-in .26s var(--ease) both; }
 @keyframes bar-scale { from { transform: scaleX(0); } }
 .bar-scale i { transform-origin: left center; animation: bar-scale .6s var(--ease) both; animation-delay: calc(var(--i, 0) * 70ms + 150ms); }
 @keyframes ch-grow { from { transform: scaleY(0); } }
@@ -1446,13 +1446,13 @@ img.broken { display: none; }
 .bigfield-cap { font-size: 13px; color: var(--c-hint); }
 .bigfield-unit { font-size: 20px; font-weight: 600; color: var(--c-hint); }
 .bigfield .bigfield-input, input.bigfield-input { width: 100%; min-width: 0; min-height: 56px; padding: 0 4px; border: 0; background: none; box-shadow: none; text-align: center; font-size: 44px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--c-text); }
-.bigfield.time .bigfield-input { font-size: 30px; }
+.bigfield.time .bigfield-input { font-size: clamp(16px, 5vw, 26px); }
 .bigfield .bigfield-input::placeholder { color: color-mix(in srgb, var(--c-hint) 55%, transparent); opacity: 1; }
 .bigfield .bigfield-input:focus-visible { outline: 2px solid var(--c-btn); outline-offset: -2px; }
 .wform-row .bigfield { max-width: 170px; }
 .frow > .ticon { flex: none; }
 .wform-pair .bigfield:not(.time) .bigfield-input { width: 2.5ch; flex: none; }
-.wform-row .bigfield .bigfield-input { width: 4.6ch; flex: none; }
+.wform-row .bigfield .bigfield-input { width: 4.6ch; min-width: 0; flex: 0 1 auto; font-size: clamp(30px, 10vw, 44px); }
 .chip .pic { background: transparent; box-shadow: none; }
 @media (max-width: 340px) { .mini-sub { font-size: 11px; letter-spacing: -.01em; } }
 

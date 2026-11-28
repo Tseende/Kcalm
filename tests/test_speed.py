@@ -1,6 +1,7 @@
 """Оптимизации скорости: ужатие фото для vision, общий LLM-клиент, повторы."""
 from __future__ import annotations
 
+import asyncio
 import base64
 import io
 
@@ -8,6 +9,7 @@ import httpx
 import pytest
 from PIL import Image
 
+from app import config
 from app.llm import client as llm
 from app.services import food as foodsvc
 
@@ -89,6 +91,30 @@ async def test_llm_does_not_retry_4xx(monkeypatch, fast_llm):
     with pytest.raises(llm.LLMError):
         await _call()
     assert len(calls) == 1
+
+
+async def test_llm_deadline_includes_waiting_in_queue(monkeypatch):
+    cfg = config.get_config().model_copy(update={"llm_timeout_s": 0.02})
+    monkeypatch.setattr(config, "_config", cfg)
+    monkeypatch.setattr(llm, "_get_sem", lambda: asyncio.Semaphore(0))
+    with pytest.raises(llm.LLMTimeoutError):
+        await asyncio.wait_for(_call(), timeout=1)
+
+
+async def test_asr_deadline_cancels_hanging_provider_without_starting_fallback(monkeypatch):
+    cfg = config.get_config().model_copy(update={"llm_timeout_s": 0.02, "model_asr_fallback": "fallback"})
+    monkeypatch.setattr(config, "_config", cfg)
+    calls = []
+
+    async def hang(_cfg, _data, _name, _mime, model, *_):
+        calls.append(model)
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(llm, "_transcribe_once", hang)
+    with pytest.raises(llm.LLMTimeoutError):
+        await asyncio.wait_for(llm.transcribe_audio(b"recording", "voice.ogg", "audio/ogg",
+                                                   model="primary"), timeout=1)
+    assert calls == ["primary"]
 
 
 @pytest.mark.asyncio

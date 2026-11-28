@@ -101,8 +101,9 @@ export function statTile({ icon: ic, color = 'blue', title, value, bar = null, s
 
 // --------------------------------------------------------------- formatters
 const nf = new Intl.NumberFormat(locale(), { maximumFractionDigits: 1 });
+const wholeNumber = new Intl.NumberFormat(locale(), { maximumFractionDigits: 0 });
 export const fmtN = (n) => (n === null || n === undefined || isNaN(n) ? '—' : nf.format(Math.round(n * 10) / 10));
-export const fmtKcal = (n) => (n === null || n === undefined || isNaN(n) ? '—' : Math.round(n).toLocaleString(locale()));
+export const fmtKcal = (n) => (n === null || n === undefined || isNaN(n) ? '—' : wholeNumber.format(Math.round(n)));
 export function fmtDur(min) {
   if (min === null || min === undefined || isNaN(min)) return '—';
   const m = Math.round(min);
@@ -167,15 +168,23 @@ export function addDays(iso, n) {
   d.setDate(d.getDate() + n);
   return isoDate(d);
 }
+let weekdayDateFormat, longDateFormat, shortDateFormat;
 export function dateLabel(iso) {
   const td = todayISO();
   if (iso === td) return t('date.today');
   if (iso === addDays(td, -1)) return t('date.yesterday');
   if (iso === addDays(td, 1)) return t('date.tomorrow');
-  return new Intl.DateTimeFormat(locale(), { weekday: 'short', day: 'numeric', month: 'long' }).format(parseISO(iso));
+  weekdayDateFormat ??= new Intl.DateTimeFormat(locale(), { weekday: 'short', day: 'numeric', month: 'long' });
+  return weekdayDateFormat.format(parseISO(iso));
 }
-export const longDate = (iso) => new Intl.DateTimeFormat(locale(), { day: 'numeric', month: 'long' }).format(parseISO(iso));
-export const shortDate = (iso) => new Intl.DateTimeFormat(locale(), { day: 'numeric', month: 'short' }).format(parseISO(iso));
+export function longDate(iso) {
+  longDateFormat ??= new Intl.DateTimeFormat(locale(), { day: 'numeric', month: 'long' });
+  return longDateFormat.format(parseISO(iso));
+}
+export function shortDate(iso) {
+  shortDateFormat ??= new Intl.DateTimeFormat(locale(), { day: 'numeric', month: 'short' });
+  return shortDateFormat.format(parseISO(iso));
+}
 
 export const MEAL_TYPES = {
   breakfast: { label: t('meal.breakfast'), icon: 'egg-fried', color: 'orange' },
@@ -315,16 +324,16 @@ function showKbBar() {
     kbBar = h('div', { id: 'kbbar', class: 'kbbar' });
     document.body.append(kbBar);
   }
-  // pointerdown не даёт полю потерять фокус и клавиатуре закрыться раньше, чем сработает нажатие.
+  // Сохраняем фокус до click. В WebKit отмена pointerdown подавляет click после касания.
   kbBtn = h('button', {
     class: 'btn btn-primary btn-block', type: 'button',
-    onpointerdown: (e) => e.preventDefault(),
+    onmousedown: (e) => e.preventDefault(),
     onclick: () => { if (mbCb && !mbState.disabled) { document.activeElement?.blur?.(); mbCb(); } },
   });
   // Слева «Свернуть»: убрать клавиатуру, введённый текст остаётся.
   const kbHide = h('button', {
     class: 'btn btn-secondary kbbar-hide', type: 'button',
-    onpointerdown: (e) => e.preventDefault(),
+    onmousedown: (e) => e.preventDefault(),
     onclick: () => document.activeElement?.blur?.(),
   }, t('kb.hide'));
   kbBar.replaceChildren(kbHide, kbBtn);
@@ -513,10 +522,13 @@ export function sheet({ title, content, onClose, initialFocus } = {}) {
   const prevFocus = document.activeElement;
   const prevBack = bbCb;
   let closed = false;
+  let openingFrame = 0;
   const api_ = { close, el: panel };
   function close() {
     if (closed) return;
     closed = true;
+    cancelAnimationFrame(openingFrame);
+    const wasOpen = wrap.classList.contains('open');
     openSheets.delete(api_);
     document.removeEventListener('keydown', onKey);
     if (!openSheets.size) document.body.classList.remove('sheet-open');
@@ -525,7 +537,8 @@ export function sheet({ title, content, onClose, initialFocus } = {}) {
     wrap.style.pointerEvents = 'none';
     wrap.classList.remove('open');
     panel.style.transform = '';
-    setTimeout(() => wrap.remove(), 220);
+    if (wasOpen && !reducedMotion()) setTimeout(() => wrap.remove(), 220);
+    else wrap.remove();
     if (prevFocus && prevFocus.isConnected && prevFocus.focus) { try { prevFocus.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
     if (onClose) onClose();
   }
@@ -546,26 +559,29 @@ export function sheet({ title, content, onClose, initialFocus } = {}) {
   wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
 
   // Свайп вниз закрывает шторку: тянем с любого места, если содержимое прокручено к началу.
-  let y0 = 0, dy = 0, t0 = 0, drag = false;
+  let x0 = 0, y0 = 0, dy = 0, t0 = 0, drag = false;
   panel.addEventListener('touchstart', (e) => {
     drag = false; dy = 0;
     if (e.touches.length !== 1) return;
-    y0 = e.touches[0].clientY; t0 = Date.now();
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now();
   }, { passive: true });
   panel.addEventListener('touchmove', (e) => {
     if (e.touches.length !== 1 || document.body.classList.contains('kb-focus')) return;
     const d = e.touches[0].clientY - y0;
-    if (!drag && d > 8 && panel.scrollTop <= 0) { drag = true; panel.style.transition = 'none'; }
+    if (!drag && d > 8 && d > Math.abs(e.touches[0].clientX - x0) && panel.scrollTop <= 0) {
+      drag = true;
+      panel.style.transition = 'none';
+    }
     if (!drag) return;
     dy = Math.max(0, d);
     panel.style.transform = `translateY(${dy}px)`;
     if (e.cancelable) e.preventDefault();
   }, { passive: false });
-  const release = () => {
+  const release = (e) => {
     if (!drag) return;
     drag = false;
     panel.style.transition = '';
-    if (dy > 110 || (dy > 40 && Date.now() - t0 < 250)) close();
+    if (e.type === 'touchend' && (dy > 110 || (dy > 40 && Date.now() - t0 < 250))) close();
     else panel.style.transform = '';
   };
   panel.addEventListener('touchend', release);
@@ -577,8 +593,9 @@ export function sheet({ title, content, onClose, initialFocus } = {}) {
   if (inTelegram && tg.BackButton) backButton.show(close);   // «Назад» Telegram сначала закрывает шторку
   wrap.append(panel);
   $('#overlay').append(wrap);
-  requestAnimationFrame(() => wrap.classList.add('open'));
-  setTimeout(() => wrap.classList.add('open'), 60);
+  // Применяем исходную позицию до начала перехода, даже если шторку добавили между кадрами.
+  panel.getBoundingClientRect();
+  openingFrame = requestAnimationFrame(() => { if (!closed) wrap.classList.add('open'); });
   try { panel.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
   if (initialFocus) setTimeout(() => {
     if (!closed && document.activeElement === panel) initialFocus.focus({ preventScroll: true });

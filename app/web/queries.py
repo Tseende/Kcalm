@@ -8,6 +8,7 @@ import csv
 import io
 import sqlite3
 from datetime import date, timedelta
+from itertools import groupby
 
 from app.db import read_batch
 from app.domain import analytics
@@ -319,9 +320,19 @@ def export_csv(db: sqlite3.Connection, user_id: int, kind: str) -> str:
     if kind == "meals":
         w.writerow(["id", "date", "time", "type", "kcal", "protein", "fat", "carbs",
                     "source", "method", "items"])
-        for m in db.execute("SELECT * FROM meals WHERE user_id=? AND deleted_at IS NULL "
-                            "ORDER BY local_date, local_time", (user_id,)):
-            items = "; ".join(f"{i['name_ru']} {i['grams']:g} г" for i in repo.get_meal_items(db, m["id"]))
+        rows = db.execute("""
+            SELECT m.id, m.local_date, m.local_time, m.meal_type, m.kcal_total,
+                   m.protein_g, m.fat_g, m.carbs_g, m.source, m.method,
+                   i.name_ru AS item_name, i.grams AS item_grams
+            FROM meals AS m LEFT JOIN meal_items AS i ON i.meal_id = m.id
+            WHERE m.user_id = ? AND m.deleted_at IS NULL
+            ORDER BY m.local_date, m.local_time, m.id, i.id
+            """, (user_id,))
+        for _, group in groupby(rows, key=lambda row: row["id"]):
+            meal_rows = list(group)
+            m = meal_rows[0]
+            items = "; ".join(f"{i['item_name']} {i['item_grams']:g} г"
+                              for i in meal_rows if i["item_name"] is not None)
             w.writerow([m["id"], m["local_date"], m["local_time"], m["meal_type"], m["kcal_total"],
                         m["protein_g"], m["fat_g"], m["carbs_g"], m["source"], m["method"], items])
     elif kind == "body":

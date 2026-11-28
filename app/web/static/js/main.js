@@ -71,12 +71,12 @@ function setActiveTab(tab) {
 function openAddSheet() {
   haptic('light');
   const date = curPath === '/today' ? history.state?.diaryDate : null;
-  const mealPath = date ? '/add/meal?date=' + date : '/add/meal';
+  const dated = (path) => date ? path + '?date=' + date : path;
   const go = (path) => { s.close(); nav.go(path); };
   const card = (ic, col, title, sub, path) => h('button', { class: 'add-card', type: 'button', onclick: () => go(path) },
     tile(ic, col, 42),
     h('span', { class: 'add-text' }, h('span', { class: 'row-title' }, title), h('span', { class: 'row-sub muted' }, sub)));
-  const hero = h('button', { class: 'add-hero', type: 'button', onclick: () => go(mealPath) },
+  const hero = h('button', { class: 'add-hero', type: 'button', onclick: () => go(dated('/add/meal')) },
     h('span', { class: 'add-hero-text' },
       h('span', { class: 'add-hero-title' }, t('add.meal')),
       h('span', { class: 'add-hero-sub' }, t('add.meal_sub')),
@@ -87,13 +87,13 @@ function openAddSheet() {
     hero,
     h('div', { class: 'add-label' }, t('add.food')),
     h('div', { class: 'add-grid' },
-      card('cup', 'var(--c-water)', t('add.drinks'), t('add.drinks_sub'), '/add/drink'),
+      card('cup', 'var(--c-water)', t('add.drinks'), t('add.drinks_sub'), dated('/add/drink')),
       card('barcode', 'red', t('add.product'), t('add.product_sub'), '/add/label')),
     h('div', { class: 'add-label' }, t('add.health')),
     h('div', { class: 'add-grid' },
-      card('scale', 'purple', t('add.weight'), t('add.weight_sub'), '/add/weight'),
-      card('bed', 'indigo', t('add.sleep'), t('add.sleep_sub'), '/add/sleep'),
-      card('run', 'green', t('add.activity'), t('add.activity_sub'), '/add/activity'),
+      card('scale', 'purple', t('add.weight'), t('add.weight_sub'), dated('/add/weight')),
+      card('bed', 'indigo', t('add.sleep'), t('add.sleep_sub'), dated('/add/sleep')),
+      card('run', 'green', t('add.activity'), t('add.activity_sub'), dated('/add/activity')),
       card('device-mobile', 'blue', t('add.screen'), t('add.screen_sub'), '/add/screen')));
   const s = sheet({ title: t('common.add'), content });
   staggerIn(content, [...content.querySelectorAll('.add-card')]);   // карточки сетки въезжают по очереди
@@ -118,7 +118,8 @@ async function render() {
   const my = ++rid;
   if (curRaw !== null) scrollMap.set(curRaw, window.scrollY);   // до очистки экрана и закрытия шторок
   const prev = curPath;
-  const restoreY = nav.dir === 'back' && curRaw !== raw ? scrollMap.get(raw) : undefined;
+  const direction = nav.dir;
+  const restoreY = direction === 'back' && curRaw !== raw ? scrollMap.get(raw) : undefined;
   nav.dir = 'fwd';
   curRaw = raw;
   curPath = path;
@@ -129,15 +130,18 @@ async function render() {
   if (!found) { nav.replace('/today'); return; }
   const { r, params } = found;
   document.body.dataset.route = r.tab || 'sub';
+  view.dataset.navigation = direction;
   setActiveTab(r.tab || null);
   if (r.tab) backButton.hide();
   else backButton.show(() => nav.back(r.parent || '/today'));
-  if (!loadedReportTabs.has(r.tab)) view.replaceChildren(h('div', { class: 'screen' }, skeletonCards(3, 100)));
+  if (!loadedReportTabs.has(r.tab)) view.replaceChildren(h('div', { class: 'screen route-placeholder', 'aria-hidden': 'true' }, skeletonCards(3, 100)));
   window.scrollTo(0, 0);
   document.body.classList.remove('scrolled');
   const ctx = { params, query, alive: () => my === rid, parent: r.parent, prev };
+  let moduleLoaded = false;
   try {
     const mod = await r.load();
+    moduleLoaded = true;
     if (my !== rid) return;
     if (['today', 'stats', 'analysis'].includes(r.tab)) loadedReportTabs.add(r.tab);
     view.replaceChildren();
@@ -154,12 +158,12 @@ async function render() {
       setTimeout(step, 0);
     }
     // одноразовые подсказки по экрану (js/coach.js); сбой подсказок не должен ломать экран
-    if (!api._me?.onboarding_skipped) {
+    if (!api.onboardingSkipped) {
       import('./coach.js').then((m) => { if (my === rid) m.maybeShow({ path, tab: r.tab, params }); }).catch(() => {});
     }
   } catch (e) {
     console.error(e);
-    if (my === rid) errorState(view, e, render);
+    if (my === rid) errorState(view, e, moduleLoaded ? render : () => location.reload());
   }
 }
 
@@ -167,7 +171,7 @@ function showBlocking(err) {
   $('#boot')?.remove();
   tabbar.hidden = true;
   view.replaceChildren(h('div', { class: 'screen' }, emptyState(err.status === 409 ? 'mood-smile' : 'lock',
-    err.status === 409 ? t('block.setup') : err.expired ? t('state.expired') : err.status === 401 ? t('block.noaccess') : t('block.offline'),
+    err.status === 409 ? t('block.setup') : err.expired ? t('state.expired') : [401, 403].includes(err.status) ? t('block.noaccess') : t('block.offline'),
     err.message, err.expired ? sessionExpiredButton() : h('button', { class: 'btn btn-secondary', type: 'button', onclick: () => location.reload() }, t('common.refresh')))));
 }
 
@@ -245,12 +249,14 @@ async function boot() {
   buildTabbar();
   initKeyboard();
   nav._init();
-  let me = null;
+  let me;
   try {
     me = await api.me();
   } catch (e) {
-    if (e.status === 401 || e.status === 409 || e.code === 'network' || e.code === 'timeout') return showBlocking(e);
-    console.error(e);
+    if (e.status === 401 && !inTelegram && /[?#&]tgWebApp(?:Data|Version|Platform)=/.test(location.search + location.hash)) {
+      return showBlocking({ message: t('block.telegram_unavailable') });
+    }
+    return showBlocking(e);
   }
   if (isMock()) mockBadge();
   await fsWait;                                     // полноэкранный режим уже применён: первая отрисовка без сдвига шапки
@@ -268,9 +274,8 @@ async function startOnboarding(me) {
     let stop = null;
     stop = mod.onboarding(view, {
       me,
-      onDone: async () => {
+      onDone: () => {
         if (stop) stop();
-        try { await api.me(true); } catch (e) { console.warn(e); }
         view.replaceChildren();
         startApp();
       },
@@ -305,4 +310,4 @@ function startApp() {
   // подсказка над «+» теперь последний шаг тура на «Сегодня» (coach.js, id today.plus; флаги onb_hint_* совместимы)
 }
 
-boot();
+boot().catch((e) => { console.error(e); showBlocking(e); });

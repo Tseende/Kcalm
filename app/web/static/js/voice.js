@@ -112,7 +112,7 @@ export function voiceButton(target, { onText, label, inline = false } = {}) {
       const fd = new FormData();
       fd.append('audio', blob, fileFor(type));
       fd.append('mime', type.split(';')[0]);
-      const res = await api.post('/transcribe', fd, { timeout: 60000 });
+      const res = await api.post('/transcribe', fd, { timeout: 75000 });
       const text = ((res && res.text) || '').trim();
       if (!text) toast(t('voice.empty'));
       else {

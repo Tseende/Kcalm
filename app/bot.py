@@ -123,14 +123,21 @@ async def main() -> None:
     bot.session.middleware(TopicRequestMiddleware(dp["topics"]))
     bot.session.middleware(DraftRequestMiddleware())
     bot.session.middleware(rich.RichMiddleware())
-    await dp["topics"].setup(bot)
+    try:
+        async with asyncio.timeout(8):
+            await dp["topics"].setup(bot)
+    except TimeoutError:
+        logging.warning("Настройка тем Telegram заняла слишком много времени, оставляю обычный чат")
     widgets_runtime.setup(bot, db, cfg)       # карточка дня и пауза; выключатель WIDGETS_ENABLED
     referral.install(referral.bot_notifier(bot, asyncio.get_running_loop()))   # награды и заморозки серии
 
-    try:                                   # сбой Telegram при старте не должен ронять бота
-        await bot.set_my_commands(BOT_COMMANDS)
-    except Exception:  # noqa: BLE001
-        logging.warning("не удалось обновить список команд", exc_info=True)
+    async def configure_commands() -> None:
+        try:
+            async with asyncio.timeout(8):
+                await bot.set_my_commands(BOT_COMMANDS)
+        except Exception:  # noqa: BLE001
+            logging.warning("не удалось обновить список команд", exc_info=True)
+
     sched = build_scheduler(db, bot)
     sched.start()
 
@@ -155,25 +162,27 @@ async def main() -> None:
                 await asyncio.sleep(3 * (attempt + 1))
 
     webhook_task: asyncio.Task | None = None
-    if webhook:
-        # Порт открываем сразу (Render ждёт его при старте), webhook регистрируем фоном с теми же повторами.
-        web_runner = await start_web_safely(db, bot, cfg, dp)
-        webhook_task = asyncio.create_task(configure_webhook())
-    else:
-        await configure_webhook()          # polling: webhook снят до начала опроса
-        web_runner = await start_web_safely(db, bot, cfg, dp)
+    web_runner = None
+    commands_task = asyncio.create_task(configure_commands())
     try:
+        # HTTP-порт доступен, пока Telegram регистрирует webhook или отключает его для polling.
+        web_runner = await start_web_safely(db, bot, cfg, dp)
         if webhook:
             if web_runner is None:
                 raise SystemExit("webhook включён, но веб-сервер не запустился")
+            webhook_task = asyncio.create_task(configure_webhook())
             await webhook_task             # исчерпаны повторы set_webhook: падаем, как раньше, Render перезапустит
             logging.info("режим webhook: %s%s", cfg.webhook_base_url, WEBHOOK_PATH)
             await asyncio.Event().wait()   # апдейты приходят в aiohttp-обработчик
         else:
+            await configure_webhook()
             await dp.start_polling(bot)
     finally:
-        if webhook_task and not webhook_task.done():
-            webhook_task.cancel()
+        pending = [task for task in (commands_task, webhook_task) if task is not None and not task.done()]
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
         if web_runner:
             await web_runner.cleanup()
         widgets_runtime.teardown()

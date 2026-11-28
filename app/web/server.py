@@ -53,6 +53,7 @@ log = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 MAX_PHOTOS = 6
+MEAL_RECOGNITION_TIMEOUT_S = 75
 MAX_FIELD_BYTES = 64 * 1024
 MEAL_TYPES = ("breakfast", "lunch", "dinner", "snack")
 LOCAL_HOSTS = ("127.0.0.1", "::1")
@@ -64,6 +65,7 @@ DB = web.AppKey("db", sqlite3.Connection)
 CONFIG = web.AppKey("config", Config)
 BOT = web.AppKey("bot", object)
 MAX_BODY = web.AppKey("max_body", int)
+PROFILE_NOTIFICATIONS = web.AppKey("profile_notifications", set)
 # aiohttp 3.9–3.13 поддерживает строковые ключи запроса.
 request_key = getattr(web, "RequestKey", str)
 REQUEST_USER = request_key("user")
@@ -235,9 +237,11 @@ def llm_gate(db, user) -> None:
 
 
 def llm_failure(exc: Exception, message: str) -> ApiError:
-    """Сбой модели в ответ API: лимит остаётся лимитом (429), остальное 502."""
+    """Сбой модели в ответ API с отдельными кодами для лимита и таймаута."""
     if isinstance(exc, llm.LLMLimitError):
         return ApiError(429, "llm_limit", llm.LIMIT_TEXT)
+    if isinstance(exc, (llm.LLMTimeoutError, TimeoutError)):
+        return ApiError(504, "llm_timeout", "Распознавание заняло слишком много времени. Попробуйте ещё раз или внесите запись вручную.")
     return ApiError(502, "llm_unavailable", message)
 
 
@@ -668,22 +672,26 @@ async def api_onboarding(request: web.Request) -> web.Response:
         result = onboardingsvc.complete(db, request[REQUEST_TG_ID], clean)
     except onboardingsvc.OnboardingError as exc:
         raise bad(str(exc), exc.code) from None
-    await _announce_profile_ready(request, result, care)
+    bot = request.app[BOT]
+    if bot is not None:
+        notifications = request.app[PROFILE_NOTIFICATIONS]
+        task = asyncio.create_task(_announce_profile_ready(
+            bot, request[REQUEST_TG_ID], result["kcal"], care, request.app[CONFIG].chat_logs_food))
+        notifications.add(task)
+        task.add_done_callback(notifications.discard)
     return ok({k: result[k] for k in ("profile", "targets", "notes", "goal_date")})
 
 
-async def _announce_profile_ready(request: web.Request, result: dict, care: bool) -> None:
+async def _announce_profile_ready(bot, tg_id: int, kcal: int, care: bool, chat_logs_food: bool) -> None:
     """Короткое сообщение в чат после настройки в приложении. Сбой отправки онбординг не ломает."""
-    bot, config = request.app[BOT], request.app[CONFIG]
-    if bot is None:
-        return
     head = "Профиль готов. Норму посчитал, цифры буду показывать бережно." if care \
-        else f"Профиль готов, норма ≈{result['kcal']} ккал."
-    tail = ("Кидайте еду сюда текстом, фото или голосом." if config.chat_logs_food
+        else f"Профиль готов, норма ≈{kcal} ккал."
+    tail = ("Кидайте еду сюда текстом, фото или голосом." if chat_logs_food
             else "Еду добавляйте в приложении кнопкой «+», а здесь можно поговорить, если вечером потянет к холодильнику.")
     try:
         from app.routers import menu
-        await bot.send_message(request[REQUEST_TG_ID], f"{head} {tail}", reply_markup=menu.main_kb())
+        async with asyncio.timeout(8):
+            await bot.send_message(tg_id, f"{head} {tail}", reply_markup=menu.main_kb())
     except Exception:                                        # noqa: BLE001
         log.warning("не удалось отправить сообщение о готовности профиля", exc_info=True)
 
@@ -936,40 +944,41 @@ async def api_meal_create(request: web.Request) -> web.Response:
     explicit_at = local_dt if date_s else None
     llm_gate(db, user)
     try:
-        if photos:
-            dish_ids = None
-            if "dish_id" in form.fields:
-                dish_ids = []
-                for raw in form.fields["dish_id"]:
-                    raw = raw.strip()
+        async with asyncio.timeout(MEAL_RECOGNITION_TIMEOUT_S):
+            if photos:
+                dish_ids = None
+                if "dish_id" in form.fields:
+                    dish_ids = []
+                    for raw in form.fields["dish_id"]:
+                        raw = raw.strip()
+                        try:
+                            dish_ids.append(bounded_int(raw, "dish_id") if raw else None)
+                        except ApiError:
+                            raise bad("dish_id должен быть числом или пустым.", "bad_field") from None
+                groups = None
+                raw_groups = form.value("groups")
+                if raw_groups:
                     try:
-                        dish_ids.append(bounded_int(raw, "dish_id") if raw else None)
-                    except ApiError:
-                        raise bad("dish_id должен быть числом или пустым.", "bad_field") from None
-            groups = None
-            raw_groups = form.value("groups")
-            if raw_groups:
-                try:
-                    groups = [int(x) for x in raw_groups.split(",")]
-                except ValueError:
-                    raise bad("groups: список номеров блюд через запятую.", "bad_field") from None
-                if len(groups) != len(photos):
-                    raise bad("groups должен быть по одному номеру на каждое фото.", "bad_field")
-            paths = [save_upload(config, data) for data in photos]
-            meal_id = await meals_svc.recognize_and_save(
-                db, user, paths, dish_ids, comment or text, groups=groups,
-                local_dt=taken_at, explicit_at=explicit_at)
-        else:
-            u = await foodsvc.parse_text(text, user["id"], db)
-            if not u.items:
-                raise meals_svc.NoFood()
-            meal_id = (await meals_svc.save_understanding(
-                db, user, u, text=text, source="text", taken_at=taken_at, explicit_at=explicit_at)).meal_id
+                        groups = [int(x) for x in raw_groups.split(",")]
+                    except ValueError:
+                        raise bad("groups: список номеров блюд через запятую.", "bad_field") from None
+                    if len(groups) != len(photos):
+                        raise bad("groups должен быть по одному номеру на каждое фото.", "bad_field")
+                paths = [save_upload(config, data) for data in photos]
+                meal_id = await meals_svc.recognize_and_save(
+                    db, user, paths, dish_ids, comment or text, groups=groups,
+                    local_dt=taken_at, explicit_at=explicit_at)
+            else:
+                u = await foodsvc.parse_text(text, user["id"], db)
+                if not u.items:
+                    raise meals_svc.NoFood()
+                meal_id = (await meals_svc.save_understanding(
+                    db, user, u, text=text, source="text", taken_at=taken_at, explicit_at=explicit_at)).meal_id
     except meals_svc.NoFood:
         raise ApiError(422, "no_food", "Не увидел еды. Опишите приём словами или пришлите другое фото.") from None
     except meals_svc.NoPhotos:
         raise ApiError(422, "no_photos", "Фото не прочитались. Попробуйте ещё раз.") from None
-    except llm.LLMError as e:
+    except (llm.LLMError, TimeoutError) as e:
         log.warning("web: распознавание не удалось", exc_info=True)
         raise llm_failure(e, "Нет связи с моделью. Попробуйте ещё раз чуть позже.") from None
     return _meal_response(db, user, meal_id, 201)
@@ -1694,13 +1703,14 @@ async def api_drink_add(request: web.Request) -> web.Response:
     ml = number(data, "ml", drinksdom.MIN_ML, drinksdom.MAX_ML, required=True)
     sugar = number(data, "sugar_tsp", 0, drinksdom.MAX_SUGAR_TSP) or 0
     calc = drinksdom.calculate(drink, round(ml), int(round(sugar)))
-    now = now_local(user)
-    local_date, local_time = now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
+    when = read_when(user, data) or now_local(user)
+    local_date, local_time = when.strftime("%Y-%m-%d"), when.strftime("%H:%M")
     meal_id = repo.save_meal(
         db, user["id"], meals_svc.utc_of(user["tz"], local_date, local_time),
         local_date, local_time, "snack", "manual", calc)
     return ok({"id": meal_id, "kcal": calc.kcal_total,
-               "water_ml": _water_total(db, user), "goal_ml": watersvc.goal_for(db, user)}, 201)
+               "water_ml": repo.day_water_ml(db, user["id"], local_date),
+               "goal_ml": watersvc.goal_for(db, user)}, 201)
 
 
 @routes.post("/api/weight")
@@ -1948,7 +1958,7 @@ async def app_index(request: web.Request) -> web.StreamResponse:
     index = STATIC_DIR / "index.html"
     if not index.is_file():
         raise web.HTTPNotFound()
-    build = await asyncio.to_thread(build_index, STATIC_DIR)
+    build = await asyncio.to_thread(build_index, STATIC_DIR, dev=bool(request.app[CONFIG].web_dev_tg_id))
     return await _static_response(request, index, cache=NO_CACHE, index=build)
 
 
@@ -1980,12 +1990,22 @@ MAX_TEXT = 2000                                    # длина текста и 
 WEBHOOK_PATH = "/tg/webhook"
 
 
+async def _finish_profile_notifications(app: web.Application) -> None:
+    tasks = list(app[PROFILE_NOTIFICATIONS])
+    for task in tasks:
+        task.cancel()
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
 def build_app(db, bot, config: Config | None = None, dp=None) -> web.Application:
     config = config or get_config()
     max_body = MAX_PHOTOS * config.max_media_bytes + 1024 * 1024
     app = web.Application(middlewares=[activity_middleware, error_middleware, auth_middleware],
                           client_max_size=max_body)
     app[DB], app[CONFIG], app[BOT], app[MAX_BODY] = db, config, bot, max_body
+    app[PROFILE_NOTIFICATIONS] = set()
+    app.on_cleanup.append(_finish_profile_notifications)
     app.add_routes(routes)
     if dp is not None and bot is not None and config.webhook_base_url:
         from aiogram.webhook.aiohttp_server import SimpleRequestHandler

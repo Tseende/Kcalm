@@ -45,13 +45,14 @@ export default async function render(root, ctx) {
     const kcal = meal.kcal + d.kcal;
     const k = meal.kcal > 0 ? kcal / meal.kcal : 1;
     const range = meal.kcal_low != null && meal.kcal_high != null ? t('meal.range', { a: fmtKcal(meal.kcal_low * k), b: fmtKcal(meal.kcal_high * k) }) : '';
-    totalsEl.replaceChildren(
+    totalsEl.replaceChildren(...[
       h('div', { class: 'totals-kcal' }, h('span', { class: 'big' }, fmtKcal(kcal)), ' ' + t('unit.kcal')),
       meal.unresolved_items ? h('div', { class: 'range-hint small' },
         t('nutrition.incomplete', { n: meal.unresolved_items })) :
         range ? h('div', { class: 'range-hint small' }, range) : null,
       macroChips({ p: meal.protein + d.protein, f: meal.fat + d.fat, c: meal.carbs + d.carbs }, { pills: true }),
-      meal.confidence != null ? h('div', { class: 'muted small' }, t('meal.conf', { p: Math.round(meal.confidence * 100) })) : null);
+      meal.confidence != null ? h('div', { class: 'muted small' }, t('meal.conf', { p: Math.round(meal.confidence * 100) })) : null,
+    ].filter(Boolean));
   }
 
   function onMeal(m, redraw) {

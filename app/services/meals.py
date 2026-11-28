@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from app.domain import mealtime
+from app.llm import client as llm
 from app.services import food as foodsvc
 from app.storage import photos, repo
 
@@ -110,6 +111,8 @@ async def parse_images(images_b64: list[str], caption: str | None, uid: int,
             return await foodsvc.parse_photos(
                 imgs, caption, uid, db, dishes=dsh if any(d is not None for d in dsh) else None,
                 groups=None if None in grs else grs)
+        except (llm.LLMTimeoutError, llm.LLMLimitError):
+            raise
         except Exception:                                    # noqa: BLE001
             log.warning("запрос по нескольким фото не удался, разбираю по одному", exc_info=True)
             return await _parse_each(imgs, caption, uid, db, dsh)

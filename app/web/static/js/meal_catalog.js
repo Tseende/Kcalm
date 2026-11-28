@@ -1,5 +1,5 @@
 import { api } from './api.js';
-import { loadDrinks } from './drink_picker.js';
+import { drinkLabel, loadDrinks } from './drink_picker.js';
 import { foodLine } from './food_picker.js';
 import { t } from './i18n.js';
 import { drinkPic, foodPic } from './pics.js';
@@ -43,7 +43,7 @@ export function mealCatalog({ alive, canRepeat, repeatRow, addFood, addDrink, ad
   }
 
   const productRow = (food) => entry(food.name, foodLine(food), foodPic(food.name, 36) || tile('package', 'orange', 36), () => addFood(food));
-  const drinkRow = (drink) => entry(drink.name,
+  const drinkRow = (drink) => entry(drinkLabel(drink),
     drink.last_ml ? t('add.last_volume', { n: drink.last_ml })
       : drink.kcal_100 > 0 ? `${drink.kcal_100} ${t('unit.kcal')} ${t('drink.per100ml')}` : t('drink.no_kcal'),
     drinkPic(drink.id, 36) || tile('cup', drink.color, 36), () => addDrink(drink));
@@ -91,7 +91,7 @@ export function mealCatalog({ alive, canRepeat, repeatRow, addFood, addDrink, ad
     }, title)));
 
     if (raw || tab === 'products') {
-      const matchingDrinks = raw ? drinks.filter((drink) => FOLD(drink.name).includes(needle)) : [];
+      const matchingDrinks = raw ? drinks.filter((drink) => [drink.name, drinkLabel(drink)].some((name) => FOLD(name).includes(needle))) : [];
       const matchingDishes = raw && repeat ? items.filter((item) => !item.is_drink &&
         [item.title, ...(item.names || [])].some((name) => FOLD(name).includes(needle))) : [];
       const status = foodError || (loadingFoods ? t('lbl.searching')

@@ -200,6 +200,29 @@ async def test_photo_recognized_immediately_without_waiting(db, monkeypatch):
     await _drain()
 
 
+async def test_unknown_photo_finishes_status_and_accepts_retry(db, monkeypatch):
+    bot, dp, session = build(db)
+    uid = await onboard(dp, bot)
+    calls = []
+
+    async def unknown_food(*args, **kwargs):
+        calls.append(1)
+        return foodsvc.understanding_from_json({"items": [], "photo_kind": "other"})
+
+    async def unknown_screen(*args):
+        return {"screen": "unknown", "metrics": {}}
+
+    monkeypatch.setattr(foodsvc, "parse_photo", unknown_food)
+    monkeypatch.setattr(intake.screens, "parse_screenshot", unknown_screen)
+    await _feed(dp, bot, _photo(bot, "p1"))
+    await _feed(dp, bot, _photo(bot, "p1"))
+
+    assert len(calls) == 2
+    assert sum("Не увидел еды" in text for text in session.texts) == 2
+    assert db.execute("SELECT COUNT(*) FROM meals WHERE user_id=?", (uid,)).fetchone()[0] == 0
+    await _drain()
+
+
 async def test_late_caption_edits_same_meal(db, monkeypatch):
     bot, dp, session = build(db)
     uid = await onboard(dp, bot)

@@ -137,6 +137,7 @@ function cleanRem(cur, b) {
 const meals = new Map();
 const water = new Map(); // date -> [{id, ml}]
 const body = new Map(); // date -> {weight, sleep_min, score, steps, active_kcal}
+const pendingScreens = new Map();
 let products = [];
 let dishes = [];
 
@@ -207,7 +208,8 @@ function init() {
 init();
 
 const dayMeals = (date) => [...meals.values()].filter((m) => m.date === date && !m.deleted).sort((a, b) => a.time.localeCompare(b.time));
-const waterOf = (date) => (water.get(date) || []).reduce((a, e) => a + e.ml, 0);
+const waterOf = (date, mealsForDay = dayMeals(date)) => (water.get(date) || []).reduce((a, e) => a + e.ml, 0) +
+  mealsForDay.flatMap((meal) => meal.items).reduce((total, item) => total + (item.hydrates ? item.grams : 0), 0);
 const todayISO = () => iso(new Date());
 
 function dayTotals(date) {
@@ -222,9 +224,9 @@ function getDay(date) {
     date, targets: onbSkipped ? { kcal: null, protein: null, fat: null, carbs: null, water_ml: TARGETS.water_ml } : TARGETS,
     totals: { kcal: Math.round(t.kcal), protein: r1(t.protein), fat: r1(t.fat), carbs: r1(t.carbs) },
     remaining_kcal: onbSkipped ? null : TARGETS.kcal - Math.round(t.kcal),
-    water_ml: waterOf(date), meals: ms,
+    water_ml: waterOf(date, ms), meals: ms,
     sleep: b.sleep_min ? { duration_min: b.sleep_min, score: b.score } : null,
-    activity: b.steps ? { steps: b.steps, active_kcal: b.active_kcal } : null,
+    activity: b.steps != null || b.workouts?.length ? { steps: b.steps, active_kcal: b.active_kcal, workouts: b.workouts || [] } : null,
     steps_goal: 8000,
     activity_hint: !onbSkipped && date === todayISO() && prof.activity < 3 ? { avg_steps: 11200, days: 16, current: prof.activity, suggested: 3 } : null,
     weight: b.weight ?? null,
@@ -243,7 +245,7 @@ function getStats(range) {
     const b = body.get(d) || {};
     days.push({
       date: d, kcal: ms.length ? Math.round(t.kcal) : null, protein: ms.length ? r1(t.protein) : null, fat: ms.length ? r1(t.fat) : null, carbs: ms.length ? r1(t.carbs) : null,
-      target_kcal: onbSkipped ? null : TARGETS.kcal, water_ml: waterOf(d) || null, weight: b.weight ?? null, weight_trend: b.trend ?? null, sleep_min: b.sleep_min ?? null, steps: b.steps ?? null,
+      target_kcal: onbSkipped ? null : TARGETS.kcal, water_ml: waterOf(d, ms) || null, weight: b.weight ?? null, weight_trend: b.trend ?? null, sleep_min: b.sleep_min ?? null, steps: b.steps ?? null,
     });
   }
   const avg = (key) => { const v = days.map((x) => x[key]).filter((x) => x !== null); return v.length ? v.reduce((a, c) => a + c, 0) / v.length : null; };
@@ -361,10 +363,11 @@ const WG_KINDS = {
 const mockFavs = { 1: 101, 2: 102, 3: 103, 4: 104 }; // meal_id -> favorite_id (в демо избранное уже есть)
 const favUse = {};       // favorite_id -> сколько раз записали (порядок в списке)
 const customFavs = [     // избранное, созданное с нуля
-  { id: 502, meal_id: 502, title: L('Тостовый хлеб +3', "Toast +3"), note: null, kcal: 380, protein: 24, fat: 16, carbs: 34, names: [L('Тостовый хлеб', "Toast"), L('Сыр', "Cheese"), L('Ветчина', "Ham"), L('Огурец', "Cucumber")], photo_url: '/api/favorites/502/photo' },   // фото нет: проверка запасной картинки
+  { id: 502, meal_id: 502, title: L('Тостовый хлеб +3', "Toast +3"), note: null, kcal: 380, protein: 24, fat: 16, carbs: 34, names: [L('Тостовый хлеб', "Toast"), L('Сыр', "Cheese"), L('Ветчина', "Ham"), L('Огурец', "Cucumber")], photo_url: null },
   { id: 501, meal_id: 501, title: L('Мой омлет', "My omelet"), note: L('на сливочном масле', "in butter"), kcal: 320, protein: 20, fat: 24, carbs: 3, names: [L('Омлет', "Omelet")], photo_url: null },
 ];
 const favEdits = {};     // правки полей избранного по id
+const savedMeals = new Map();
 const FREQ = [
   { meal_id: 1, title: L('Овсянка с бананом +1', "Oatmeal with banana +1"), names: [L('Овсянка с бананом', "Oatmeal with banana"), L('Кофе с молоком', "Coffee with milk")], kcal: 410, protein: 16, fat: 11, carbs: 62, count: 9 },
   { meal_id: 2, title: L('Гречка +1', "Buckwheat +1"), names: [L('Гречка', "Buckwheat"), L('Куриная грудка', "Chicken breast")], kcal: 520, protein: 41, fat: 12, carbs: 58, count: 6 },
@@ -382,7 +385,7 @@ const FREQ = [
 function favList() {
   const starred = FREQ.filter((f) => mockFavs[f.meal_id]).map((f) => ({ ...f, id: mockFavs[f.meal_id], note: null, photo_url: null }));
   const cats = { 1: 'breakfast', 2: 'lunch', 3: 'snack', 4: 'drink' };
-  return [...customFavs, ...starred].map((f) => ({ ...f, meal_type: f.meal_type || 'breakfast', category: f.category || cats[f.meal_id] || 'breakfast', use_count: favUse[f.id] || 0, ...(favEdits[f.id] || {}) }))
+  return [...customFavs, ...starred, ...savedMeals.values()].map((f) => ({ ...f, meal_type: f.meal_type || 'breakfast', category: f.category || cats[f.meal_id] || 'breakfast', use_count: favUse[f.id] || 0, ...(favEdits[f.id] || {}) }))
     .sort((a, b) => b.use_count - a.use_count);
 }
 let weekGoal = null;
@@ -426,12 +429,18 @@ function mockOnboarding(b) {
   return { profile: mockProfile(), targets: { kcal, protein, fat, carbs, water_ml: Math.round(b.weight_kg * 30 / 50) * 50 }, notes: [], goal_date: goalDate };
 }
 
+function applyMockScreen({ date, metrics }) {
+  const bd = body.get(date) || {};
+  Object.assign(bd, { sleep_min: metrics.sleep_duration_min, score: metrics.sleep_score });
+  body.set(date, bd);
+}
+
 const routes = [
   ['GET', /^\/referral$/, () => ({ link: 'https://t.me/example_bot?start=r_demo2345', invites_left: 2, freezes: 1, streak: 4, rewards_cap_left: 9, welcome: {status: 'onboarded', days: 1, target: 3, deadline: new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10)}, invited: [{name: L('Аня', 'Anna'), status: 'rewarded'}] })],
   ['GET', /^\/me$/, () => onbPending ? { onboarded: false, onboarding_skipped: onbSkipped, user: { first_name: L('Аня', "Anna") } } : ({
     onboarded: true,
     user: { tg_id: 1, first_name: L('Жан', "Jean"), sex: 'm', height_cm: 178, goal_weight_kg: 76, tz: 'Europe/Moscow', eating_cutoff: '21:00' },
-    targets: TARGETS, weight: { latest: 82.4, trend: body.get(todayISO()).trend, start: 88.0 },
+    targets: TARGETS, weight: { latest: body.get(todayISO())?.weight, trend: body.get(todayISO())?.trend, start: 88.0 },
   })],
   ['POST', /^\/onboarding\/skip$/, () => {
     onbSkipped = true;
@@ -471,7 +480,7 @@ const routes = [
   ['DELETE', /^\/me$/, (m, q, b) => { if (!b || b.confirm !== 'УДАЛИТЬ') throw Object.assign(new Error(L('Для удаления нужно подтверждение.', "Confirmation is required to delete.")), { status: 400 }); return { deleted: true }; }],
   ['GET', /^\/day$/, (m, q) => getDay(q.date || todayISO())],
   ['GET', /^\/stats$/, (m, q) => getStats(q.range || 'week')],
-  ['GET', /^\/meals\/(\d+)$/, (m) => { const x = meals.get(+m[1]); if (!x) throw notFound(); x.favorite_id = mockFavs[x.id] || null; return x; }],
+  ['GET', /^\/meals\/(\d+)$/, (m) => { const x = meals.get(+m[1]); if (!x || x.deleted) throw notFound(); x.favorite_id = mockFavs[x.id] || null; return x; }],
   ['POST', /^\/meals$/, async (m, q, b) => {
     await sleep(1800);
     const f = new FormLike(b);
@@ -602,12 +611,15 @@ const routes = [
     ...(q.history ? { history: [{ id: 'americano', count: 6, last_ml: 200 }, { id: 'water', count: 5, last_ml: 250 }, { id: 'tea', count: 2, last_ml: 300 }] } : {}),
   })],
   ['POST', /^\/drinks$/, (m, q, b) => {
-    const T = todayISO();
+    const T = b.date || todayISO();
     const d = MOCK_DRINKS.find((x) => x.id === b.drink);
     if (!d) throw Object.assign(new Error(L('Неизвестный напиток.', "Unknown drink.")), { status: 400 });
-    if (d.hydrates) water.set(T, [...(water.get(T) || []), { id: nid(), ml: b.ml }]);
-    const kcal = Math.round(d.kcal_100 * b.ml / 100 + (d.sugar ? (b.sugar_tsp || 0) * 20 : 0));
-    return { id: nid(), kcal, water_ml: waterOf(T), goal_ml: TARGETS.water_ml };
+    const sugar = d.sugar ? b.sugar_tsp || 0 : 0;
+    const item = mockManualItem({ name: d.name, grams: b.ml, kcal: d.kcal_100 * b.ml / 100 + sugar * 20,
+      protein: 0, fat: 0, carbs: d.kcal_100 * b.ml / 400 + sugar * 5, per: 'portion' });
+    item.hydrates = d.hydrates;
+    const meal = logMockMeal({ ...b, type: 'snack' }, [item]);
+    return { id: meal.id, kcal: meal.kcal, water_ml: waterOf(T), goal_ml: TARGETS.water_ml };
   }, 201],
   ['DELETE', /^\/water\/(\d+)$/, (m) => {
     for (const [d, list] of water) water.set(d, list.filter((e) => e.id !== +m[1]));
@@ -620,19 +632,37 @@ const routes = [
   ['POST', /^\/screens$/, async () => {
     await sleep(1400);
     const risky = rnd() > 0.5;
-    return { id: nid(), screen: 'mifitness_sleep', date: todayISO(), metrics: { sleep_duration_min: 431, sleep_deep_min: 96, sleep_rem_min: 88, sleep_score: 78, steps: 9800, active_kcal: 410 }, confidence: risky ? 0.72 : 0.93, needs_confirm: risky, reasons: risky ? [L('дата не распознана — ставлю сегодняшнюю', "date not recognized, using today"), L('уверенность 72%', "confidence 72%")] : [], applied: risky ? null : 'sleep' };
+    const shot = { id: nid(), screen: 'mifitness_sleep', date: todayISO(), metrics: { sleep_duration_min: 431, sleep_deep_min: 96, sleep_rem_min: 88, sleep_score: 78 }, confidence: risky ? 0.72 : 0.93, needs_confirm: risky, reasons: risky ? [L('дата не распознана — ставлю сегодняшнюю', "date not recognized, using today"), L('уверенность 72%', "confidence 72%")] : [], applied: !risky };
+    if (risky) pendingScreens.set(shot.id, shot);
+    else applyMockScreen(shot);
+    return shot;
   }],
-  ['POST', /^\/screens\/(\d+)\/confirm$/, (m, q, b) => ({ applied: !!(b && b.apply) })],
+  ['POST', /^\/screens\/(\d+)\/confirm$/, (m, q, b) => {
+    const id = Number(m[1]);
+    const shot = pendingScreens.get(id);
+    if (!shot) throw notFound();
+    pendingScreens.delete(id);
+    if (b.apply) applyMockScreen(shot);
+    return { applied: !!b.apply };
+  }],
   ['POST', /^\/sleep$/, (m, q, b) => {
     const bd = body.get(b.date || todayISO());
     if (bd) {
       if (b.duration_min) bd.sleep_min = b.duration_min;
       else if (b.start && b.end) { const [sh, sm] = b.start.split(':').map(Number); const [eh, em] = b.end.split(':').map(Number); let d = (eh * 60 + em) - (sh * 60 + sm); if (d <= 0) d += 1440; bd.sleep_min = d; }
-      if (b.score) bd.score = b.score;
+      if (b.score != null) bd.score = b.score;
     }
     return { ok: true };
   }],
-  ['POST', /^\/activity$/, (m, q, b) => { const bd = body.get(b.date || todayISO()); if (bd) { if (b.steps) bd.steps = b.steps; if (b.active_kcal) bd.active_kcal = b.active_kcal; } return { ok: true }; }],
+  ['POST', /^\/activity$/, (m, q, b) => {
+    const bd = body.get(b.date || todayISO());
+    if (bd) {
+      if (b.steps != null) bd.steps = b.steps;
+      if (b.active_kcal != null) bd.active_kcal = b.active_kcal;
+      if (b.workout) bd.workouts = [...(bd.workouts || []), b.workout];
+    }
+    return { ok: true };
+  }],
   ['GET', /^\/frequent$/, () => ({ items: [
     ...favList().map((f) => ({ meal_id: f.meal_id, favorite_id: f.id, title: f.title, names: f.names, kcal: f.kcal, count: 0, photo_url: f.photo_url || null, is_drink: !!f.is_drink })),
     ...FREQ.filter((f) => !mockFavs[f.meal_id]).map((f) => ({ meal_id: f.meal_id, favorite_id: null, title: f.title, names: f.names, kcal: f.kcal, count: f.count, is_drink: !!f.is_drink }))] })],
@@ -649,9 +679,26 @@ const routes = [
     favEdits[f.id] = { ...(favEdits[f.id] || {}), ...b };
     return favList().find((x) => x.id === +m[1]);
   }],
-  ['POST', /^\/favorites$/, (m, q, b) => { mockFavs[b.meal_id] = 100 + Number(b.meal_id); return { id: mockFavs[b.meal_id] }; }, 201],
+  ['POST', /^\/favorites$/, (m, q, b) => {
+    const mealId = Number(b.meal_id);
+    if (mockFavs[mealId]) return { id: mockFavs[mealId] };
+    const meal = meals.get(mealId);
+    if (meal && !meal.deleted) {
+      const id = nid();
+      const names = meal.items.map((item) => item.name);
+      savedMeals.set(id, { id, meal_id: mealId, title: names[0] || L('Приём пищи', 'Meal'),
+        names, meal_type: meal.type, category: meal.type, note: meal.comment,
+        kcal: meal.kcal, protein: meal.protein, fat: meal.fat, carbs: meal.carbs, photo_url: meal.photos[0]?.url });
+      mockFavs[mealId] = id;
+      return { id };
+    }
+    if (!FREQ.some((f) => f.meal_id === mealId)) throw notFound();
+    mockFavs[mealId] = 100 + mealId;
+    return { id: mockFavs[mealId] };
+  }, 201],
   ['DELETE', /^\/favorites\/(\d+)$/, (m) => {
     for (const k of Object.keys(mockFavs)) if (mockFavs[k] === Number(m[1])) delete mockFavs[k];
+    savedMeals.delete(Number(m[1]));
     const i = customFavs.findIndex((x) => x.id === Number(m[1])); if (i >= 0) customFavs.splice(i, 1);
     return null;
   }],

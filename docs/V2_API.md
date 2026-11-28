@@ -60,7 +60,7 @@ Single source of truth for the frontend (`app/web/static/`) and the backend
 | GET | /api/day?date= | date optional (today) | `{"date","targets":Targets,"totals":{"kcal","protein","fat","carbs"},"remaining_kcal","water_ml","meals":[Meal],"sleep":{"duration_min","score"}\|null,"activity":{"steps","active_kcal"}\|null,"weight":82.4\|null}` |
 | GET | /api/stats?range=week\|month\|90d | — | `{"range","days":[{"date","kcal","protein","fat","carbs","target_kcal","water_ml","weight","weight_trend","sleep_min","steps"}],"summary":{"avg_kcal","avg_protein","days_logged","days_on_target","weight_change","avg_sleep_min","avg_steps"}}` (nulls where no data) |
 | GET | /api/meals/{id} | — | `Meal` |
-| POST | /api/meals | multipart: `photo` (1–6 files, repeated), `dish_id` (repeated, same order as photos, empty string = none), `comment`, `time` (HH:MM optional), `date` optional, `text` (when no photos: text description) | `201 Meal` (recognition is synchronous, may take up to ~60 s) |
+| POST | /api/meals | multipart: `photo` (1–6 files, repeated), `dish_id` (repeated, same order as photos, empty string = none), `comment`, `time` (HH:MM optional), `date` optional, `text` (when no photos: text description) | `201 Meal`, or `504 llm_timeout` if recognition exceeds its deadline. Processing after upload has a 75 s deadline. |
 | PATCH | /api/meals/{id} | `{"time"?:"HH:MM","type"?:...}` | `Meal` |
 | DELETE | /api/meals/{id} | — | `204` (soft delete) |
 | POST | /api/meals/{id}/refine | `{"comment":"жарил на масле 1 ст.л."}` | `Meal`. Items edited by hand (`edited` and `source:"manual"`, or a database product with confidence 1) are not sent to the model for changes and come back unchanged; the model only sees them as `locked_items` context |

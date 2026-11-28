@@ -115,8 +115,9 @@ export default async function render(root, ctx) {
 
   paintChips();
   paint();
-  box.replaceChildren(
+  box.replaceChildren(...[
     items.length >= SEARCH_FROM ? h('div', { class: 'search' }, icon('search', 18), search) : null,
     counts.size > 1 ? chips : null,
-    listBox, count);
+    listBox, count,
+  ].filter(Boolean));
 }

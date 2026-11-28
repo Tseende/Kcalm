@@ -1,5 +1,6 @@
 // "Мои продукты" list
 import { api } from '../api.js';
+import { drinkLabel } from '../drink_picker.js';
 import { assetUrl, drinkPic, foodPic, foodPicKey, foodGroupOf, FOOD_GROUPS, groupLabel } from '../pics.js';
 import { h, icon, tile, nav, pageHead, sheet, skeletonCards, emptyState, errorState, debounce, fmtN, mainButton, macroChips } from '../ui.js';
 import { COLUMNS, TILES } from '../food_atlas.js';
@@ -136,7 +137,7 @@ export default async function render(root, ctx) {
     try {
       const { drinks } = await api.get('/drinks');
       if (!ctx.alive() || cat !== DRINKS || q !== search.value.trim().toLowerCase()) return;
-      const shown = drinks.filter((d) => !q || d.name.toLowerCase().includes(q));
+      const shown = drinks.filter((d) => !q || [d.name, drinkLabel(d)].some((name) => name.toLowerCase().includes(q)));
       if (!shown.length) { list.replaceChildren(emptyState('search', t('common.not_found'), t('common.try_other'))); return; }
       list.replaceChildren(h('div', { class: 'list tiles prod-list' }, shown.map((d) => h('button', {
         class: 'row prod-row', type: 'button',
@@ -144,7 +145,7 @@ export default async function render(root, ctx) {
       },
       drinkPic(d.id, 48) || h('span', { class: 'drink-emo', style: { width: '48px', height: '48px' } }, d.emoji),
       h('span', { class: 'grow' },
-        h('span', { class: 'row-title' }, d.name),
+        h('span', { class: 'row-title' }, drinkLabel(d)),
         h('span', { class: 'row-sub' }, d.sizes.join(' / ') + ' ' + t('unit.ml') + (d.sugar ? t('prod.sugar') : ''))),
       h('span', { class: 'prod-kcal' }, h('b', null, fmtN(Math.round(d.kcal_100))), h('span', null, t('unit.kcal') + ' / 100 ' + t('unit.ml')))))),
       h('div', { class: 'footnote' }, t('prod.approx')));

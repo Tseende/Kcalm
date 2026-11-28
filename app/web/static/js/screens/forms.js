@@ -2,19 +2,20 @@
 import { api } from '../api.js';
 import { t } from '../i18n.js';
 import {
-  h, icon, tile, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, numSet, numCheck, segmented, fmtN, todayISO, addDays, longDate,
+  h, icon, tile, toast, haptic, nav, mainButton, pageHead, frow, group, numInput, numVal, numSet, numCheck, segmented, fmtN, todayISO, addDays, longDate, parseISO, isoDate,
 } from '../ui.js';
-
-// ?date=ГГГГ-ММ-ДД: день, за который пишем (не в будущем, не старше 30 дней), иначе сегодня.
-function pickDate(q) {
-  const today = todayISO();
-  return /^\d{4}-\d{2}-\d{2}$/.test(q || '') && q <= today && q >= addDays(today, -30) ? q : today;
-}
 
 export default async function render(root, ctx) {
   const kind = ctx.params.kind;
   const builders = { weight, sleep, activity };
-  const date = pickDate(ctx.query && ctx.query.date);
+  const today = todayISO();
+  const date = ctx.query.date || today;
+  const dateValid = /^\d{4}-\d{2}-\d{2}$/.test(date) && date >= addDays(today, -30) && date <= today && isoDate(parseISO(date)) === date;
+  if (!dateValid) {
+    root.append(h('div', { class: 'screen' }, pageHead(t('add.' + kind)),
+      h('p', { class: 'card muted', role: 'alert' }, t('forms.v_date'))));
+    return;
+  }
   const isToday = date === todayISO();
   const when = isToday ? '' : date === addDays(todayISO(), -1) ? t('forms.yday') : longDate(date);
   const view = h('div', { class: 'screen' });
@@ -31,15 +32,17 @@ export default async function render(root, ctx) {
     mainButton.setLoading(true);
     try {
       const msg = await submit();
+      if (!ctx.alive()) return;
       if (msg === false) { busy = false; mainButton.setLoading(false); return; }
       haptic('success');
       toast(msg || t('common.saved'), 'ok');
       mainButton.hide();
       nav.replace('/today?date=' + date);
     } catch (e) {
+      if (!ctx.alive()) return;
       busy = false;
       mainButton.setLoading(false);
-      toast(e.message, 'error');
+      toast(e, 'error');
     }
   }
   mainButton.show(t('common.save'), go);
@@ -108,7 +111,8 @@ function sleep(date) {
     if (!start.value || !end.value) return null;
     const [a, b] = start.value.split(':').map(Number);
     const [c, d] = end.value.split(':').map(Number);
-    return (((c * 60 + d) - (a * 60 + b)) % 1440 + 1440) % 1440;
+    const diff = (c * 60 + d) - (a * 60 + b);
+    return diff > 0 ? diff : diff + 1440;
   };
   const paintRange = () => {
     const m = spanMin();

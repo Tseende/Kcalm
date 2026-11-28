@@ -1,6 +1,8 @@
 """Онбординг: общий сервис complete(), POST /api/onboarding, /api/me до настройки, вход через /start."""
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from app import config as config_mod
@@ -193,17 +195,25 @@ async def test_post_onboarding_notifies_chat(db, cfg, monkeypatch):
     from app.web import server
 
     sent = []
+    release_delivery = asyncio.Event()
+    delivered = asyncio.Event()
 
     class FakeBot:
         async def send_message(self, chat_id, text, **kw):
+            await release_delivery.wait()
             sent.append((chat_id, text))
+            delivered.set()
 
     monkeypatch.setattr(config_mod, "_config", cfg)
     c = TestClient(TestServer(server.build_app(db, FakeBot(), cfg)))
     await c.start_server()
     try:
-        r = await c.post("/api/onboarding", json=FEMALE, headers=auth(1002))
+        r = await asyncio.wait_for(c.post("/api/onboarding", json=FEMALE, headers=auth(1002)), 1)
         assert r.status == 200
+        assert not sent
+        assert repo.get_user_by_tg(db, 1002)["onboarded"]
+        release_delivery.set()
+        await asyncio.wait_for(delivered.wait(), 1)
         assert sent and sent[0][0] == 1002 and "Профиль готов" in sent[0][1] and "ккал" in sent[0][1]
     finally:
         await c.close()

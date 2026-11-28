@@ -66,7 +66,7 @@ class Config(BaseSettings):
     # голосом и по фото, вода, сон и шаги текстом (только в чате без включённых тем).
     chat_logs_food: bool = False
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    llm_timeout_s: float = 60.0
+    llm_timeout_s: float = Field(60.0, gt=0)
     max_media_bytes: int = 10 * 1024 * 1024
     daily_llm_limit: int = 200        # обращений к модели на человека в сутки (UTC); 0 = без лимита
 
