@@ -514,7 +514,6 @@ export default async function render(root, ctx) {
     if (busy || choosingWhen || !valid()) return;
     busy = true;
     sync();
-    mainButton.setLoading(true);
     const filled = groups.filter((g) => g.photos.length);
     const withAI = filled.length > 0 || !!textTa.value.trim();
     const waterMl = prods.filter((e) => e.water).reduce((sum, e) => sum + e.grams, 0);
@@ -571,7 +570,6 @@ export default async function render(root, ctx) {
     } catch (e) {
       if (!ctx.alive()) return;
       busy = false;
-      mainButton.setLoading(false);
       sync();
       toast(e.message, 'error');
     } finally {
